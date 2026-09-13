@@ -1,8 +1,8 @@
 import os, sys, time, requests
 
 BASE='https://openapi.blofin.com'
-TOP_N=10
 TIMEFRAME='1H'
+REPORT_N=10
 NTFY_TOPIC=os.getenv('NTFY_TOPIC','blofin-nhd0jt7wspfnhtitdlaowk1n').strip()
 
 def get_json(path, params=None):
@@ -54,26 +54,21 @@ def macd(values,fast=12,slow=26,signal=9):
             j+=1
     return hist
 
-def top10():
-    # Dokładnie rynek Futures -> USDT-M: aktywne liniowe perpetual SWAP rozliczane w USDT.
+def universe():
     live=set()
     for x in get_json('/api/v1/market/instruments'):
-        if (x.get('state')=='live' and x.get('instType')=='SWAP' and x.get('contractType')=='linear'
-                and x.get('settleCurrency')=='USDT'):
+        if (x.get('state')=='live' and x.get('instType')=='SWAP' and x.get('contractType')=='linear' and x.get('settleCurrency')=='USDT'):
             live.add(x.get('instId',''))
-
     rows=[]
     for t in get_json('/api/v1/market/tickers'):
         inst=t.get('instId','')
         if inst not in live: continue
         try:
             last=float(t.get('last') or 0); op=float(t.get('open24h') or 0)
-            if last>0 and op>0:
-                change=(last/op-1)*100
-                rows.append((change,inst))
+            if last>0 and op>0: rows.append(((last/op-1)*100,inst))
         except: pass
-    rows.sort(key=lambda x:x[0], reverse=True)
-    return [{'inst':inst,'change':change,'blofin_rank':n} for n,(change,inst) in enumerate(rows[:TOP_N],1)]
+    rows.sort(key=lambda x:x[0],reverse=True)
+    return [{'inst':inst,'change':change,'blofin_rank':n} for n,(change,inst) in enumerate(rows,1)]
 
 def candles(inst):
     data=get_json('/api/v1/market/candles',{'instId':inst,'bar':TIMEFRAME,'limit':'120'}); rows=[]
@@ -88,31 +83,31 @@ def analyze(inst):
     o=[x[1] for x in c]; h=[x[2] for x in c]; l=[x[3] for x in c]; cl=[x[4] for x in c]; v=[x[5] for x in c]
     hist=macd(cl); rs=rsi(cl); k,d=stochastic(h,l,cl); i=len(c)-1; p=i-1
     if any(a[x] is None for a in (hist,rs,k,d) for x in (p,i)): raise RuntimeError('brak danych wskaźników')
-    short=[hist[p]>0 and hist[i]<0, cl[i]<o[i], cl[p]>o[p], v[i]>v[p], rs[i]<rs[p], k[p]>=80 and k[i]<k[p], k[i]<d[i]]
-    long=[hist[p]<0 and hist[i]>0, cl[i]>o[i], cl[p]<o[p], v[i]>v[p], rs[i]>rs[p], k[p]<=20 and k[i]>k[p], k[i]>d[i]]
+    short=[hist[p]>0 and hist[i]<0,cl[i]<o[i],cl[p]>o[p],v[i]>v[p],rs[i]<rs[p],k[p]>=80 and k[i]<k[p],k[i]<d[i]]
+    long=[hist[p]<0 and hist[i]>0,cl[i]>o[i],cl[p]<o[p],v[i]>v[p],rs[i]>rs[p],k[p]<=20 and k[i]>k[p],k[i]>d[i]]
     ss=sum(short); ls=sum(long); side='SHORT' if ss>=ls else 'LONG'; score=max(ss,ls)
-    exact=score==7
-    return {'inst':inst,'side':side,'score':score,'exact':exact,'rsi':rs[i],'k':k[i],'d':d[i]}
+    return {'inst':inst,'side':side,'score':score,'exact':score==7,'rsi':rs[i],'k':k[i],'d':d[i]}
 
 def notify(text):
     r=requests.post(f'https://ntfy.sh/{NTFY_TOPIC}',data=text.encode(),headers={'Title':'BloFin 1H Scanner'},timeout=20); r.raise_for_status()
 
 def main():
     try:
-        top=top10()
-        if len(top)<TOP_N: raise RuntimeError(f'Pobrano tylko {len(top)} coinów')
+        coins=universe()
+        if not coins: raise RuntimeError('Nie znaleziono aktywnych USDT-M')
         results=[]; errors=[]
-        for coin in top:
+        for coin in coins:
             try:
                 x=analyze(coin['inst']); x.update(coin); results.append(x)
             except Exception as e: errors.append(f"{coin['inst']}: {e}")
-            time.sleep(.15)
-        results.sort(key=lambda x:(x['score'], -x['blofin_rank']),reverse=True)
+            time.sleep(.12)
+        results.sort(key=lambda x:(x['score'],-x['blofin_rank']),reverse=True)
         exact=[x for x in results if x['exact']]
-        head='PEŁNY SETUP:' if exact else 'Najbliżej pełnego setupu:'
-        lines=[f"{n}. {x['inst']} {x['side']} — {x['score']}/7 | BloFin #{x['blofin_rank']} {x['change']:+.2f}% | RSI {x['rsi']:.1f} | STOCH {x['k']:.1f}/{x['d']:.1f}" for n,x in enumerate(results,1)]
+        chosen=exact if exact else results[:REPORT_N]
+        head=f"Przeskanowano {len(coins)} USDT-M. " + (f"PEŁNY SETUP ({len(exact)}):" if exact else f"Brak 7/7. Najlepsze {min(REPORT_N,len(results))}:")
+        lines=[f"{n}. {x['inst']} {x['side']} — {x['score']}/7 | BloFin #{x['blofin_rank']} {x['change']:+.2f}% | RSI {x['rsi']:.1f} | STOCH {x['k']:.1f}/{x['d']:.1f}" for n,x in enumerate(chosen,1)]
         msg=head+'\n'+'\n'.join(lines)
-        if errors: msg+=f'\nBłędy dla {len(errors)} coinów.'
+        if errors: msg+=f'\nPominięto {len(errors)} (brak danych/błąd).'
         notify(msg); print(msg)
     except Exception as e:
         msg=f'BŁĄD SKANERA: {type(e).__name__}: {e}'; print(msg,file=sys.stderr)
