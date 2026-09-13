@@ -1,0 +1,24 @@
+name: BloFin 1H Scanner
+
+on:
+  push:
+    paths:
+      - 'blofin_scanner.py'
+      - '.github/workflows/blofin.yml'
+  schedule:
+    - cron: '1 * * * *'
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install requests
+        run: pip install requests==2.32.3
+      - name: Run BloFin scanner
+        run: python blofin_scanner.py
