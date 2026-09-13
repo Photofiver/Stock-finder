@@ -2,6 +2,7 @@ import os, sys, time, requests
 
 BASE='https://openapi.blofin.com'
 TIMEFRAME='1H'
+TOP_N=200
 REPORT_N=10
 NTFY_TOPIC=os.getenv('NTFY_TOPIC','blofin-nhd0jt7wspfnhtitdlaowk1n').strip()
 
@@ -68,6 +69,7 @@ def universe():
             if last>0 and op>0: rows.append(((last/op-1)*100,inst))
         except: pass
     rows.sort(key=lambda x:x[0],reverse=True)
+    rows=rows[:TOP_N]
     return [{'inst':inst,'change':change,'blofin_rank':n} for n,(change,inst) in enumerate(rows,1)]
 
 def candles(inst):
@@ -108,12 +110,11 @@ def main():
             except Exception as e: errors.append(f"{coin['inst']}: {e}")
             time.sleep(.12)
 
-        # Najpierw świeża zmiana koloru MACD, potem liczba spełnionych warunków, potem ranking BloFin.
         results.sort(key=lambda x:(x['macd_flip'],x['score'],-x['blofin_rank']),reverse=True)
         exact=[x for x in results if x['exact']]
         chosen=exact if exact else results[:REPORT_N]
         flips=sum(1 for x in results if x['macd_flip'])
-        head=f"Przeskanowano {len(coins)} USDT-M. Świeże zmiany MACD: {flips}. " + (f"PEŁNY SETUP ({len(exact)}):" if exact else f"Najlepsze {min(REPORT_N,len(results))}:")
+        head=f"Przeskanowano TOP {len(coins)} USDT-M na 1H. Świeże zmiany MACD: {flips}. " + (f"PEŁNY SETUP ({len(exact)}):" if exact else f"Najlepsze {min(REPORT_N,len(results))}:")
         lines=[f"{n}. {x['inst']} {x['side']} — {x['score']}/7 | {x['flip_label']} | BloFin #{x['blofin_rank']} {x['change']:+.2f}% | RSI {x['rsi']:.1f} | STOCH {x['k']:.1f}/{x['d']:.1f}" for n,x in enumerate(chosen,1)]
         msg=head+'\n'+'\n'.join(lines)
         if errors: msg+=f'\nPominięto {len(errors)} (brak danych/błąd).'
