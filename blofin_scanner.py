@@ -83,10 +83,16 @@ def analyze(inst):
     o=[x[1] for x in c]; h=[x[2] for x in c]; l=[x[3] for x in c]; cl=[x[4] for x in c]; v=[x[5] for x in c]
     hist=macd(cl); rs=rsi(cl); k,d=stochastic(h,l,cl); i=len(c)-1; p=i-1
     if any(a[x] is None for a in (hist,rs,k,d) for x in (p,i)): raise RuntimeError('brak danych wskaźników')
-    short=[hist[p]>0 and hist[i]<0,cl[i]<o[i],cl[p]>o[p],v[i]>v[p],rs[i]<rs[p],k[p]>=80 and k[i]<k[p],k[i]<d[i]]
-    long=[hist[p]<0 and hist[i]>0,cl[i]>o[i],cl[p]<o[p],v[i]>v[p],rs[i]>rs[p],k[p]<=20 and k[i]>k[p],k[i]>d[i]]
+
+    macd_short_flip = hist[p] > 0 and hist[i] < 0
+    macd_long_flip = hist[p] < 0 and hist[i] > 0
+
+    short=[macd_short_flip,cl[i]<o[i],cl[p]>o[p],v[i]>v[p],rs[i]<rs[p],k[p]>=80 and k[i]<k[p],k[i]<d[i]]
+    long=[macd_long_flip,cl[i]>o[i],cl[p]<o[p],v[i]>v[p],rs[i]>rs[p],k[p]<=20 and k[i]>k[p],k[i]>d[i]]
     ss=sum(short); ls=sum(long); side='SHORT' if ss>=ls else 'LONG'; score=max(ss,ls)
-    return {'inst':inst,'side':side,'score':score,'exact':score==7,'rsi':rs[i],'k':k[i],'d':d[i]}
+    macd_flip = macd_short_flip if side=='SHORT' else macd_long_flip
+    flip_label = 'MACD ZIELONY→CZERWONY' if macd_short_flip else ('MACD CZERWONY→ZIELONY' if macd_long_flip else 'MACD bez świeżej zmiany')
+    return {'inst':inst,'side':side,'score':score,'exact':score==7,'rsi':rs[i],'k':k[i],'d':d[i],'macd_flip':macd_flip,'flip_label':flip_label}
 
 def notify(text):
     r=requests.post(f'https://ntfy.sh/{NTFY_TOPIC}',data=text.encode(),headers={'Title':'BloFin 1H Scanner'},timeout=20); r.raise_for_status()
@@ -101,11 +107,14 @@ def main():
                 x=analyze(coin['inst']); x.update(coin); results.append(x)
             except Exception as e: errors.append(f"{coin['inst']}: {e}")
             time.sleep(.12)
-        results.sort(key=lambda x:(x['score'],-x['blofin_rank']),reverse=True)
+
+        # Najpierw świeża zmiana koloru MACD, potem liczba spełnionych warunków, potem ranking BloFin.
+        results.sort(key=lambda x:(x['macd_flip'],x['score'],-x['blofin_rank']),reverse=True)
         exact=[x for x in results if x['exact']]
         chosen=exact if exact else results[:REPORT_N]
-        head=f"Przeskanowano {len(coins)} USDT-M. " + (f"PEŁNY SETUP ({len(exact)}):" if exact else f"Brak 7/7. Najlepsze {min(REPORT_N,len(results))}:")
-        lines=[f"{n}. {x['inst']} {x['side']} — {x['score']}/7 | BloFin #{x['blofin_rank']} {x['change']:+.2f}% | RSI {x['rsi']:.1f} | STOCH {x['k']:.1f}/{x['d']:.1f}" for n,x in enumerate(chosen,1)]
+        flips=sum(1 for x in results if x['macd_flip'])
+        head=f"Przeskanowano {len(coins)} USDT-M. Świeże zmiany MACD: {flips}. " + (f"PEŁNY SETUP ({len(exact)}):" if exact else f"Najlepsze {min(REPORT_N,len(results))}:")
+        lines=[f"{n}. {x['inst']} {x['side']} — {x['score']}/7 | {x['flip_label']} | BloFin #{x['blofin_rank']} {x['change']:+.2f}% | RSI {x['rsi']:.1f} | STOCH {x['k']:.1f}/{x['d']:.1f}" for n,x in enumerate(chosen,1)]
         msg=head+'\n'+'\n'.join(lines)
         if errors: msg+=f'\nPominięto {len(errors)} (brak danych/błąd).'
         notify(msg); print(msg)
