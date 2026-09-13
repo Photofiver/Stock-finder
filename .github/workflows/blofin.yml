@@ -7,13 +7,13 @@ on:
       - '.github/workflows/blofin.yml'
   schedule:
     - cron: '1 * * * *'
-    - cron: '6 21 13 9 *'
+    - cron: '18 21 13 9 *'
   workflow_dispatch:
 
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
