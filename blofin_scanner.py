@@ -55,15 +55,25 @@ def macd(values,fast=12,slow=26,signal=9):
     return hist
 
 def top10():
+    # Dokładnie rynek Futures -> USDT-M: aktywne liniowe perpetual SWAP rozliczane w USDT.
+    live=set()
+    for x in get_json('/api/v1/market/instruments'):
+        if (x.get('state')=='live' and x.get('instType')=='SWAP' and x.get('contractType')=='linear'
+                and x.get('settleCurrency')=='USDT'):
+            live.add(x.get('instId',''))
+
     rows=[]
     for t in get_json('/api/v1/market/tickers'):
         inst=t.get('instId','')
-        if not inst.endswith('-USDT'): continue
+        if inst not in live: continue
         try:
             last=float(t.get('last') or 0); op=float(t.get('open24h') or 0)
-            if last>0 and op>0: rows.append(((last/op-1)*100,inst))
+            if last>0 and op>0:
+                change=(last/op-1)*100
+                rows.append((change,inst))
         except: pass
-    rows.sort(reverse=True); return [x[1] for x in rows[:TOP_N]]
+    rows.sort(key=lambda x:x[0], reverse=True)
+    return [{'inst':inst,'change':change,'blofin_rank':n} for n,(change,inst) in enumerate(rows[:TOP_N],1)]
 
 def candles(inst):
     data=get_json('/api/v1/market/candles',{'instId':inst,'bar':TIMEFRAME,'limit':'120'}); rows=[]
@@ -89,17 +99,18 @@ def notify(text):
 
 def main():
     try:
-        coins=top10()
-        if len(coins)<TOP_N: raise RuntimeError(f'Pobrano tylko {len(coins)} coinów')
+        top=top10()
+        if len(top)<TOP_N: raise RuntimeError(f'Pobrano tylko {len(top)} coinów')
         results=[]; errors=[]
-        for inst in coins:
-            try: results.append(analyze(inst))
-            except Exception as e: errors.append(f'{inst}: {e}')
+        for coin in top:
+            try:
+                x=analyze(coin['inst']); x.update(coin); results.append(x)
+            except Exception as e: errors.append(f"{coin['inst']}: {e}")
             time.sleep(.15)
-        results.sort(key=lambda x:(x['score'],x['exact']),reverse=True)
+        results.sort(key=lambda x:(x['score'], -x['blofin_rank']),reverse=True)
         exact=[x for x in results if x['exact']]
         head='PEŁNY SETUP:' if exact else 'Najbliżej pełnego setupu:'
-        lines=[f"{n}. {x['inst']} {x['side']} — {x['score']}/7 | RSI {x['rsi']:.1f} | STOCH {x['k']:.1f}/{x['d']:.1f}" for n,x in enumerate(results,1)]
+        lines=[f"{n}. {x['inst']} {x['side']} — {x['score']}/7 | BloFin #{x['blofin_rank']} {x['change']:+.2f}% | RSI {x['rsi']:.1f} | STOCH {x['k']:.1f}/{x['d']:.1f}" for n,x in enumerate(results,1)]
         msg=head+'\n'+'\n'.join(lines)
         if errors: msg+=f'\nBłędy dla {len(errors)} coinów.'
         notify(msg); print(msg)
