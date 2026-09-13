@@ -5,81 +5,54 @@ TOP_N=10
 TIMEFRAME='1H'
 NTFY_TOPIC=os.getenv('NTFY_TOPIC','blofin-nhd0jt7wspfnhtitdlaowk1n').strip()
 
-
 def get_json(path, params=None):
-    r=requests.get(BASE+path, params=params, timeout=20)
-    r.raise_for_status()
-    data=r.json()
-    if str(data.get('code'))!='0':
-        raise RuntimeError(f'BloFin API error: {data}')
+    r=requests.get(BASE+path, params=params, timeout=20); r.raise_for_status(); data=r.json()
+    if str(data.get('code'))!='0': raise RuntimeError(f'BloFin API error: {data}')
     return data.get('data',[])
-
 
 def ema(values, period):
     out=[None]*len(values)
     if len(values)<period: return out
-    a=2/(period+1)
-    prev=sum(values[:period])/period
-    out[period-1]=prev
+    a=2/(period+1); prev=sum(values[:period])/period; out[period-1]=prev
     for i in range(period,len(values)):
-        prev=a*values[i]+(1-a)*prev
-        out[i]=prev
+        prev=a*values[i]+(1-a)*prev; out[i]=prev
     return out
-
 
 def rsi(values, period=14):
     out=[None]*len(values)
     if len(values)<period+1: return out
     gains=[]; losses=[]
     for i in range(1,period+1):
-        d=values[i]-values[i-1]
-        gains.append(max(d,0)); losses.append(max(-d,0))
-    ag=sum(gains)/period; al=sum(losses)/period
-    out[period]=100 if al==0 else 100-100/(1+ag/al)
+        x=values[i]-values[i-1]; gains.append(max(x,0)); losses.append(max(-x,0))
+    ag=sum(gains)/period; al=sum(losses)/period; out[period]=100 if al==0 else 100-100/(1+ag/al)
     for i in range(period+1,len(values)):
-        d=values[i]-values[i-1]
-        g=max(d,0); l=max(-d,0)
-        ag=(ag*(period-1)+g)/period
-        al=(al*(period-1)+l)/period
+        x=values[i]-values[i-1]; ag=(ag*(period-1)+max(x,0))/period; al=(al*(period-1)+max(-x,0))/period
         out[i]=100 if al==0 else 100-100/(1+ag/al)
     return out
-
 
 def sma(values, period):
     out=[None]*len(values)
     for i in range(period-1,len(values)):
         w=values[i-period+1:i+1]
-        if any(v is None for v in w): continue
-        out[i]=sum(w)/period
+        if not any(x is None for x in w): out[i]=sum(w)/period
     return out
 
-
-def stochastic(highs,lows,closes,k_period=14,smooth_k=3,d_period=3):
-    raw=[None]*len(closes)
-    for i in range(k_period-1,len(closes)):
-        hh=max(highs[i-k_period+1:i+1]); ll=min(lows[i-k_period+1:i+1])
-        raw[i]=50.0 if hh==ll else 100*(closes[i]-ll)/(hh-ll)
-    k=sma(raw,smooth_k); d=sma(k,d_period)
-    return k,d
-
+def stochastic(h,l,c,k_period=14,smooth_k=3,d_period=3):
+    raw=[None]*len(c)
+    for i in range(k_period-1,len(c)):
+        hh=max(h[i-k_period+1:i+1]); ll=min(l[i-k_period+1:i+1]); raw[i]=50 if hh==ll else 100*(c[i]-ll)/(hh-ll)
+    k=sma(raw,smooth_k); return k,sma(k,d_period)
 
 def macd(values,fast=12,slow=26,signal=9):
-    ef=ema(values,fast); es=ema(values,slow)
-    line=[None]*len(values)
+    ef=ema(values,fast); es=ema(values,slow); line=[None]*len(values)
     for i in range(len(values)):
-        if ef[i] is not None and es[i] is not None:
-            line[i]=ef[i]-es[i]
-    valid=[x for x in line if x is not None]
-    sigv=ema(valid,signal)
-    hist=[None]*len(values)
-    j=0
+        if ef[i] is not None and es[i] is not None: line[i]=ef[i]-es[i]
+    valid=[x for x in line if x is not None]; sig=ema(valid,signal); hist=[None]*len(values); j=0
     for i,x in enumerate(line):
         if x is not None:
-            s=sigv[j]
-            if s is not None: hist[i]=x-s
+            if sig[j] is not None: hist[i]=x-sig[j]
             j+=1
     return hist
-
 
 def top10():
     rows=[]
@@ -88,63 +61,50 @@ def top10():
         if not inst.endswith('-USDT'): continue
         try:
             last=float(t.get('last') or 0); op=float(t.get('open24h') or 0)
-            if last<=0 or op<=0: continue
-            rows.append(((last/op-1)*100,inst))
+            if last>0 and op>0: rows.append(((last/op-1)*100,inst))
         except: pass
-    rows.sort(reverse=True)
-    return [x[1] for x in rows[:TOP_N]]
-
+    rows.sort(reverse=True); return [x[1] for x in rows[:TOP_N]]
 
 def candles(inst):
-    data=get_json('/api/v1/market/candles',{'instId':inst,'bar':TIMEFRAME,'limit':'120'})
-    rows=[]
+    data=get_json('/api/v1/market/candles',{'instId':inst,'bar':TIMEFRAME,'limit':'120'}); rows=[]
     for c in data:
-        try:
-            rows.append((int(c[0]),float(c[1]),float(c[2]),float(c[3]),float(c[4]),float(c[5]),str(c[8]) if len(c)>8 else '1'))
+        try: rows.append((int(c[0]),float(c[1]),float(c[2]),float(c[3]),float(c[4]),float(c[5]),str(c[8]) if len(c)>8 else '0'))
         except: pass
-    rows.sort(key=lambda x:x[0])
-    closed=[r for r in rows if r[6]=='1']
-    return closed if len(closed)>=40 else rows
-
+    rows.sort(key=lambda x:x[0]); return [r for r in rows if r[6]=='1']
 
 def analyze(inst):
     c=candles(inst)
-    if len(c)<40: return None
+    if len(c)<40: raise RuntimeError('za mało zamkniętych świec')
     o=[x[1] for x in c]; h=[x[2] for x in c]; l=[x[3] for x in c]; cl=[x[4] for x in c]; v=[x[5] for x in c]
-    hist=macd(cl); rs=rsi(cl); k,d=stochastic(h,l,cl)
-    i=len(c)-1; p=i-1
-    if any(arr[idx] is None for arr in (hist,rs,k,d) for idx in (p,i)): return None
-    short=(hist[p]>0 and hist[i]<0 and cl[i]<o[i] and cl[p]>o[p] and v[i]>v[p] and rs[i]<rs[p] and k[p]>=80 and k[i]<k[p] and k[i]<d[i])
-    long=(hist[p]<0 and hist[i]>0 and cl[i]>o[i] and cl[p]<o[p] and v[i]>v[p] and rs[i]>rs[p] and k[p]<=20 and k[i]>k[p] and k[i]>d[i])
-    if short: return f'{inst} SHORT | MACD✓ VOL✓ RSI↓ {rs[i]:.1f} STOCH↓ {k[i]:.1f}/{d[i]:.1f}'
-    if long: return f'{inst} LONG | MACD✓ VOL✓ RSI↑ {rs[i]:.1f} STOCH↑ {k[i]:.1f}/{d[i]:.1f}'
-    return None
-
+    hist=macd(cl); rs=rsi(cl); k,d=stochastic(h,l,cl); i=len(c)-1; p=i-1
+    if any(a[x] is None for a in (hist,rs,k,d) for x in (p,i)): raise RuntimeError('brak danych wskaźników')
+    short=[hist[p]>0 and hist[i]<0, cl[i]<o[i], cl[p]>o[p], v[i]>v[p], rs[i]<rs[p], k[p]>=80 and k[i]<k[p], k[i]<d[i]]
+    long=[hist[p]<0 and hist[i]>0, cl[i]>o[i], cl[p]<o[p], v[i]>v[p], rs[i]>rs[p], k[p]<=20 and k[i]>k[p], k[i]>d[i]]
+    ss=sum(short); ls=sum(long); side='SHORT' if ss>=ls else 'LONG'; score=max(ss,ls)
+    exact=score==7
+    return {'inst':inst,'side':side,'score':score,'exact':exact,'rsi':rs[i],'k':k[i],'d':d[i]}
 
 def notify(text):
-    r=requests.post(f'https://ntfy.sh/{NTFY_TOPIC}',data=text.encode('utf-8'),headers={'Title':'BloFin 1H Scanner'},timeout=20)
-    r.raise_for_status()
-
+    r=requests.post(f'https://ntfy.sh/{NTFY_TOPIC}',data=text.encode(),headers={'Title':'BloFin 1H Scanner'},timeout=20); r.raise_for_status()
 
 def main():
     try:
         coins=top10()
         if len(coins)<TOP_N: raise RuntimeError(f'Pobrano tylko {len(coins)} coinów')
-        hits=[]; errors=[]
+        results=[]; errors=[]
         for inst in coins:
-            try:
-                x=analyze(inst)
-                if x: hits.append(x)
-            except Exception as e:
-                errors.append(f'{inst}: {e}')
+            try: results.append(analyze(inst))
+            except Exception as e: errors.append(f'{inst}: {e}')
             time.sleep(.15)
-        msg=('Sygnał 1H:\n'+'\n'.join(hits)) if hits else 'Brak pełnego setupu w Top 10 BloFin na zamkniętej świecy 1H.'
+        results.sort(key=lambda x:(x['score'],x['exact']),reverse=True)
+        exact=[x for x in results if x['exact']]
+        head='PEŁNY SETUP:' if exact else 'Najbliżej pełnego setupu:'
+        lines=[f"{n}. {x['inst']} {x['side']} — {x['score']}/7 | RSI {x['rsi']:.1f} | STOCH {x['k']:.1f}/{x['d']:.1f}" for n,x in enumerate(results,1)]
+        msg=head+'\n'+'\n'.join(lines)
         if errors: msg+=f'\nBłędy dla {len(errors)} coinów.'
-        notify(msg)
-        print(msg)
+        notify(msg); print(msg)
     except Exception as e:
-        msg=f'BŁĄD SKANERA: {type(e).__name__}: {e}'
-        print(msg,file=sys.stderr)
+        msg=f'BŁĄD SKANERA: {type(e).__name__}: {e}'; print(msg,file=sys.stderr)
         try: notify(msg)
         except: pass
         raise
