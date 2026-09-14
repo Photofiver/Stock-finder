@@ -1,9 +1,11 @@
-import os, sys, time, requests
+import os, sys, requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 BASE='https://openapi.blofin.com'
 TIMEFRAME='1H'
 TOP_N=200
 REPORT_N=10
+WORKERS=10
 NTFY_TOPIC=os.getenv('NTFY_TOPIC','blofin-nhd0jt7wspfnhtitdlaowk1n').strip()
 
 def get_json(path, params=None):
@@ -104,11 +106,15 @@ def main():
         coins=universe()
         if not coins: raise RuntimeError('Nie znaleziono aktywnych USDT-M')
         results=[]; errors=[]
-        for coin in coins:
-            try:
-                x=analyze(coin['inst']); x.update(coin); results.append(x)
-            except Exception as e: errors.append(f"{coin['inst']}: {e}")
-            time.sleep(.12)
+
+        with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+            jobs={pool.submit(analyze,coin['inst']):coin for coin in coins}
+            for job in as_completed(jobs):
+                coin=jobs[job]
+                try:
+                    x=job.result(); x.update(coin); results.append(x)
+                except Exception as e:
+                    errors.append(f"{coin['inst']}: {e}")
 
         results.sort(key=lambda x:(x['macd_flip'],x['score'],-x['blofin_rank']),reverse=True)
         exact=[x for x in results if x['exact']]
