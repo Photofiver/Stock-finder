@@ -1,134 +1,284 @@
-import os, sys, requests
+import os
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-BASE='https://openapi.blofin.com'
-TIMEFRAME='1H'
-TOP_N=200
-REPORT_N=10
-WORKERS=10
-NTFY_TOPIC=os.getenv('NTFY_TOPIC','blofin-nhd0jt7wspfnhtitdlaowk1n').strip()
+import requests
 
-def get_json(path, params=None):
-    r=requests.get(BASE+path, params=params, timeout=20); r.raise_for_status(); data=r.json()
-    if str(data.get('code'))!='0': raise RuntimeError(f'BloFin API error: {data}')
-    return data.get('data',[])
+BASE = 'https://openapi.blofin.com'
+TIMEFRAME = '1H'
+TOP_N = 200
+REPORT_N = 10
+WORKERS = 10
+NTFY_TOPIC = os.getenv('NTFY_TOPIC', 'blofin-nhd0jt7wspfnhtitdlaowk1n').strip()
+
+
+def api_get(path, params=None):
+    response = requests.get(BASE + path, params=params, timeout=20)
+    response.raise_for_status()
+    payload = response.json()
+    if str(payload.get('code')) != '0':
+        raise RuntimeError(f"BloFin API error: {payload}")
+    return payload.get('data', [])
+
 
 def ema(values, period):
-    out=[None]*len(values)
-    if len(values)<period: return out
-    a=2/(period+1); prev=sum(values[:period])/period; out[period-1]=prev
-    for i in range(period,len(values)):
-        prev=a*values[i]+(1-a)*prev; out[i]=prev
+    out = [None] * len(values)
+    if len(values) < period:
+        return out
+    alpha = 2 / (period + 1)
+    previous = sum(values[:period]) / period
+    out[period - 1] = previous
+    for i in range(period, len(values)):
+        previous = alpha * values[i] + (1 - alpha) * previous
+        out[i] = previous
     return out
+
 
 def rsi(values, period=14):
-    out=[None]*len(values)
-    if len(values)<period+1: return out
-    gains=[]; losses=[]
-    for i in range(1,period+1):
-        x=values[i]-values[i-1]; gains.append(max(x,0)); losses.append(max(-x,0))
-    ag=sum(gains)/period; al=sum(losses)/period; out[period]=100 if al==0 else 100-100/(1+ag/al)
-    for i in range(period+1,len(values)):
-        x=values[i]-values[i-1]; ag=(ag*(period-1)+max(x,0))/period; al=(al*(period-1)+max(-x,0))/period
-        out[i]=100 if al==0 else 100-100/(1+ag/al)
+    out = [None] * len(values)
+    if len(values) < period + 1:
+        return out
+    gains, losses = [], []
+    for i in range(1, period + 1):
+        delta = values[i] - values[i - 1]
+        gains.append(max(delta, 0))
+        losses.append(max(-delta, 0))
+    avg_gain = sum(gains) / period
+    avg_loss = sum(losses) / period
+    out[period] = 100 if avg_loss == 0 else 100 - 100 / (1 + avg_gain / avg_loss)
+    for i in range(period + 1, len(values)):
+        delta = values[i] - values[i - 1]
+        avg_gain = (avg_gain * (period - 1) + max(delta, 0)) / period
+        avg_loss = (avg_loss * (period - 1) + max(-delta, 0)) / period
+        out[i] = 100 if avg_loss == 0 else 100 - 100 / (1 + avg_gain / avg_loss)
     return out
+
 
 def sma(values, period):
-    out=[None]*len(values)
-    for i in range(period-1,len(values)):
-        w=values[i-period+1:i+1]
-        if not any(x is None for x in w): out[i]=sum(w)/period
+    out = [None] * len(values)
+    for i in range(period - 1, len(values)):
+        window = values[i - period + 1:i + 1]
+        if not any(x is None for x in window):
+            out[i] = sum(window) / period
     return out
 
-def stochastic(h,l,c,k_period=14,smooth_k=3,d_period=3):
-    raw=[None]*len(c)
-    for i in range(k_period-1,len(c)):
-        hh=max(h[i-k_period+1:i+1]); ll=min(l[i-k_period+1:i+1]); raw[i]=50 if hh==ll else 100*(c[i]-ll)/(hh-ll)
-    k=sma(raw,smooth_k); return k,sma(k,d_period)
 
-def macd(values,fast=12,slow=26,signal=9):
-    ef=ema(values,fast); es=ema(values,slow); line=[None]*len(values)
+def stochastic(highs, lows, closes, k_period=14, smooth_k=3, d_period=3):
+    raw = [None] * len(closes)
+    for i in range(k_period - 1, len(closes)):
+        highest = max(highs[i - k_period + 1:i + 1])
+        lowest = min(lows[i - k_period + 1:i + 1])
+        raw[i] = 50 if highest == lowest else 100 * (closes[i] - lowest) / (highest - lowest)
+    k = sma(raw, smooth_k)
+    d = sma(k, d_period)
+    return k, d
+
+
+def macd_histogram(values, fast=12, slow=26, signal=9):
+    fast_ema = ema(values, fast)
+    slow_ema = ema(values, slow)
+    line = [None] * len(values)
     for i in range(len(values)):
-        if ef[i] is not None and es[i] is not None: line[i]=ef[i]-es[i]
-    valid=[x for x in line if x is not None]; sig=ema(valid,signal); hist=[None]*len(values); j=0
-    for i,x in enumerate(line):
-        if x is not None:
-            if sig[j] is not None: hist[i]=x-sig[j]
-            j+=1
-    return hist
+        if fast_ema[i] is not None and slow_ema[i] is not None:
+            line[i] = fast_ema[i] - slow_ema[i]
+    valid_line = [x for x in line if x is not None]
+    signal_line = ema(valid_line, signal)
+    histogram = [None] * len(values)
+    j = 0
+    for i, value in enumerate(line):
+        if value is not None:
+            if signal_line[j] is not None:
+                histogram[i] = value - signal_line[j]
+            j += 1
+    return histogram
 
-def universe():
-    live=set()
-    for x in get_json('/api/v1/market/instruments'):
-        if (x.get('state')=='live' and x.get('instType')=='SWAP' and x.get('contractType')=='linear' and x.get('settleCurrency')=='USDT'):
-            live.add(x.get('instId',''))
-    rows=[]
-    for t in get_json('/api/v1/market/tickers'):
-        inst=t.get('instId','')
-        if inst not in live: continue
+
+def get_universe():
+    live = set()
+    for row in api_get('/api/v1/market/instruments'):
+        if (
+            row.get('state') == 'live'
+            and row.get('instType') == 'SWAP'
+            and row.get('contractType') == 'linear'
+            and row.get('settleCurrency') == 'USDT'
+        ):
+            live.add(row.get('instId', ''))
+
+    ranked = []
+    for ticker in api_get('/api/v1/market/tickers'):
+        inst = ticker.get('instId', '')
+        if inst not in live:
+            continue
         try:
-            last=float(t.get('last') or 0); op=float(t.get('open24h') or 0)
-            if last>0 and op>0: rows.append(((last/op-1)*100,inst))
-        except: pass
-    rows.sort(key=lambda x:x[0],reverse=True)
-    rows=rows[:TOP_N]
-    return [{'inst':inst,'change':change,'blofin_rank':n} for n,(change,inst) in enumerate(rows,1)]
+            last = float(ticker.get('last') or 0)
+            open_24h = float(ticker.get('open24h') or 0)
+            if last > 0 and open_24h > 0:
+                ranked.append(((last / open_24h - 1) * 100, inst))
+        except (TypeError, ValueError):
+            continue
 
-def candles(inst):
-    data=get_json('/api/v1/market/candles',{'instId':inst,'bar':TIMEFRAME,'limit':'120'}); rows=[]
-    for c in data:
-        try: rows.append((int(c[0]),float(c[1]),float(c[2]),float(c[3]),float(c[4]),float(c[5]),str(c[8]) if len(c)>8 else '0'))
-        except: pass
-    rows.sort(key=lambda x:x[0]); return [r for r in rows if r[6]=='1']
+    ranked.sort(key=lambda x: x[0], reverse=True)
+    ranked = ranked[:TOP_N]
+    return [
+        {'inst': inst, 'change': change, 'blofin_rank': rank}
+        for rank, (change, inst) in enumerate(ranked, 1)
+    ]
+
+
+def get_closed_candles(inst):
+    rows = []
+    raw = api_get('/api/v1/market/candles', {'instId': inst, 'bar': TIMEFRAME, 'limit': '120'})
+    for candle in raw:
+        try:
+            rows.append((
+                int(candle[0]),
+                float(candle[1]),
+                float(candle[2]),
+                float(candle[3]),
+                float(candle[4]),
+                float(candle[5]),
+                str(candle[8]) if len(candle) > 8 else '0',
+            ))
+        except (ValueError, TypeError, IndexError):
+            continue
+    rows.sort(key=lambda x: x[0])
+    return [row for row in rows if row[6] == '1']
+
 
 def analyze(inst):
-    c=candles(inst)
-    if len(c)<40: raise RuntimeError('za mało zamkniętych świec')
-    o=[x[1] for x in c]; h=[x[2] for x in c]; l=[x[3] for x in c]; cl=[x[4] for x in c]; v=[x[5] for x in c]
-    hist=macd(cl); rs=rsi(cl); k,d=stochastic(h,l,cl); i=len(c)-1; p=i-1
-    if any(a[x] is None for a in (hist,rs,k,d) for x in (p,i)): raise RuntimeError('brak danych wskaźników')
+    candles = get_closed_candles(inst)
+    if len(candles) < 40:
+        raise RuntimeError('za mało zamkniętych świec')
 
-    macd_short_flip = hist[p] > 0 and hist[i] < 0
-    macd_long_flip = hist[p] < 0 and hist[i] > 0
+    opens = [x[1] for x in candles]
+    highs = [x[2] for x in candles]
+    lows = [x[3] for x in candles]
+    closes = [x[4] for x in candles]
+    volumes = [x[5] for x in candles]
 
-    short=[macd_short_flip,cl[i]<o[i],cl[p]>o[p],v[i]>v[p],rs[i]<rs[p],k[p]>=80 and k[i]<k[p],k[i]<d[i]]
-    long=[macd_long_flip,cl[i]>o[i],cl[p]<o[p],v[i]>v[p],rs[i]>rs[p],k[p]<=20 and k[i]>k[p],k[i]>d[i]]
-    ss=sum(short); ls=sum(long); side='SHORT' if ss>=ls else 'LONG'; score=max(ss,ls)
-    macd_flip = macd_short_flip if side=='SHORT' else macd_long_flip
-    flip_label = 'MACD ZIELONY→CZERWONY' if macd_short_flip else ('MACD CZERWONY→ZIELONY' if macd_long_flip else 'MACD bez świeżej zmiany')
-    return {'inst':inst,'side':side,'score':score,'exact':score==7,'rsi':rs[i],'k':k[i],'d':d[i],'macd_flip':macd_flip,'flip_label':flip_label}
+    hist = macd_histogram(closes)
+    rs = rsi(closes)
+    k, d = stochastic(highs, lows, closes)
 
-def notify(text):
-    r=requests.post(f'https://ntfy.sh/{NTFY_TOPIC}',data=text.encode(),headers={'Title':'BloFin 1H Scanner'},timeout=20); r.raise_for_status()
+    i = len(candles) - 1
+    p = i - 1
+    if any(series[idx] is None for series in (hist, rs, k, d) for idx in (p, i)):
+        raise RuntimeError('brak danych wskaźników')
+
+    short_flip = hist[p] > 0 and hist[i] < 0
+    long_flip = hist[p] < 0 and hist[i] > 0
+
+    short_rules = [
+        short_flip,
+        closes[i] < opens[i],
+        closes[p] > opens[p],
+        volumes[i] > volumes[p],
+        rs[i] < rs[p],
+        k[p] >= 80 and k[i] < k[p],
+        k[i] < d[i],
+    ]
+
+    long_rules = [
+        long_flip,
+        closes[i] > opens[i],
+        closes[p] < opens[p],
+        volumes[i] > volumes[p],
+        rs[i] > rs[p],
+        k[p] <= 20 and k[i] > k[p],
+        k[i] > d[i],
+    ]
+
+    short_score = sum(short_rules)
+    long_score = sum(long_rules)
+    side = 'SHORT' if short_score >= long_score else 'LONG'
+    score = max(short_score, long_score)
+    selected_flip = short_flip if side == 'SHORT' else long_flip
+
+    if short_flip:
+        flip_label = 'MACD ZIELONY→CZERWONY'
+    elif long_flip:
+        flip_label = 'MACD CZERWONY→ZIELONY'
+    else:
+        flip_label = 'MACD bez świeżej zmiany'
+
+    return {
+        'inst': inst,
+        'side': side,
+        'score': score,
+        'exact': score == 7,
+        'rsi': rs[i],
+        'k': k[i],
+        'd': d[i],
+        'macd_flip': selected_flip,
+        'flip_label': flip_label,
+    }
+
+
+def send_ntfy(message):
+    response = requests.post(
+        f'https://ntfy.sh/{NTFY_TOPIC}',
+        data=message.encode('utf-8'),
+        headers={'Title': 'BloFin 1H Scanner'},
+        timeout=20,
+    )
+    response.raise_for_status()
+
 
 def main():
     try:
-        coins=universe()
-        if not coins: raise RuntimeError('Nie znaleziono aktywnych USDT-M')
-        results=[]; errors=[]
+        coins = get_universe()
+        if not coins:
+            raise RuntimeError('Nie znaleziono aktywnych USDT-M')
 
-        with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-            jobs={pool.submit(analyze,coin['inst']):coin for coin in coins}
-            for job in as_completed(jobs):
-                coin=jobs[job]
+        results = []
+        errors = []
+
+        with ThreadPoolExecutor(max_workers=WORKERS) as executor:
+            futures = {executor.submit(analyze, coin['inst']): coin for coin in coins}
+            for future in as_completed(futures):
+                coin = futures[future]
                 try:
-                    x=job.result(); x.update(coin); results.append(x)
-                except Exception as e:
-                    errors.append(f"{coin['inst']}: {e}")
+                    result = future.result()
+                    result.update(coin)
+                    results.append(result)
+                except Exception as exc:
+                    errors.append(f"{coin['inst']}: {exc}")
 
-        results.sort(key=lambda x:(x['macd_flip'],x['score'],-x['blofin_rank']),reverse=True)
-        exact=[x for x in results if x['exact']]
-        chosen=exact if exact else results[:REPORT_N]
-        flips=sum(1 for x in results if x['macd_flip'])
-        head=f"Przeskanowano TOP {len(coins)} USDT-M na 1H. Świeże zmiany MACD: {flips}. " + (f"PEŁNY SETUP ({len(exact)}):" if exact else f"Najlepsze {min(REPORT_N,len(results))}:")
-        lines=[f"{n}. {x['inst']} {x['side']} — {x['score']}/7 | {x['flip_label']} | BloFin #{x['blofin_rank']} {x['change']:+.2f}% | RSI {x['rsi']:.1f} | STOCH {x['k']:.1f}/{x['d']:.1f}" for n,x in enumerate(chosen,1)]
-        msg=head+'\n'+'\n'.join(lines)
-        if errors: msg+=f'\nPominięto {len(errors)} (brak danych/błąd).'
-        notify(msg); print(msg)
-    except Exception as e:
-        msg=f'BŁĄD SKANERA: {type(e).__name__}: {e}'; print(msg,file=sys.stderr)
-        try: notify(msg)
-        except: pass
+        results.sort(
+            key=lambda x: (x['macd_flip'], x['score'], -x['blofin_rank']),
+            reverse=True,
+        )
+
+        exact = [x for x in results if x['exact']]
+        chosen = exact if exact else results[:REPORT_N]
+        flips = sum(1 for x in results if x['macd_flip'])
+
+        if exact:
+            header = f"Przeskanowano TOP {len(coins)} USDT-M na 1H. Świeże zmiany MACD: {flips}. PEŁNY SETUP ({len(exact)}):"
+        else:
+            header = f"Przeskanowano TOP {len(coins)} USDT-M na 1H. Świeże zmiany MACD: {flips}. Najlepsze {min(REPORT_N, len(results))}:"
+
+        lines = [
+            f"{n}. {x['inst']} {x['side']} — {x['score']}/7 | {x['flip_label']} | BloFin #{x['blofin_rank']} {x['change']:+.2f}% | RSI {x['rsi']:.1f} | STOCH {x['k']:.1f}/{x['d']:.1f}"
+            for n, x in enumerate(chosen, 1)
+        ]
+
+        message = header + '\n' + '\n'.join(lines)
+        if errors:
+            message += f"\nPominięto {len(errors)} (brak danych/błąd)."
+
+        send_ntfy(message)
+        print(message)
+
+    except Exception as exc:
+        message = f"BŁĄD SKANERA: {type(exc).__name__}: {exc}"
+        print(message, file=sys.stderr)
+        try:
+            send_ntfy(message)
+        except Exception:
+            pass
         raise
 
-if __name__=='__main__': main()
+
+if __name__ == '__main__':
+    main()
