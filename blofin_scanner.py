@@ -13,7 +13,7 @@ COINPAPRIKA_URL = "https://api.coinpaprika.com/v1/tickers"
 NTFY_TOPIC = os.getenv("NTFY_TOPIC", "blofin-nhd0jt7wspfnhtitdlaowk1n").strip()
 
 TIMEFRAME = "1H"
-TOP_N = 50
+TOP_N = 25
 REPORT_N = 10
 WORKERS = 4
 REQUEST_INTERVAL = 0.15
@@ -535,7 +535,7 @@ def build_message(coins, results, errors, ranking_errors, marketcap_error):
     if marketcap_error:
         lines.append("MC chwilowo niedostępny — pozostałe 7 warunków policzone.")
     if errors:
-        lines.append(f"Pominięto {len(errors)} instrumentów z TOP 50 podczas analizy.")
+        lines.append(f"Pominięto {len(errors)} instrumentów z TOP 25 podczas analizy.")
     if ranking_errors:
         lines.append(f"Nie udało się policzyć rankingu 1H dla {len(ranking_errors)} instrumentów.")
 
