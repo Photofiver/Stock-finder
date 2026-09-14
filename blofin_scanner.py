@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
@@ -9,17 +10,40 @@ BASE = 'https://openapi.blofin.com'
 TIMEFRAME = '1H'
 TOP_N = 200
 REPORT_N = 10
-WORKERS = 6
+WORKERS = 4
 RETRIES = 4
+REQUEST_INTERVAL = 0.15
 NTFY_TOPIC = os.getenv('NTFY_TOPIC', 'blofin-nhd0jt7wspfnhtitdlaowk1n').strip()
+
+_request_lock = threading.Lock()
+_last_request_at = 0.0
+
+
+def wait_for_request_slot():
+    global _last_request_at
+    with _request_lock:
+        now = time.monotonic()
+        delay = REQUEST_INTERVAL - (now - _last_request_at)
+        if delay > 0:
+            time.sleep(delay)
+        _last_request_at = time.monotonic()
 
 
 def api_get(path, params=None):
     last_error = None
     for attempt in range(RETRIES):
         try:
+            wait_for_request_slot()
             response = requests.get(BASE + path, params=params, timeout=20)
-            if response.status_code == 429 or response.status_code >= 500:
+            if response.status_code == 429:
+                retry_after = response.headers.get('Retry-After')
+                if retry_after:
+                    try:
+                        time.sleep(max(float(retry_after), 1.0))
+                    except ValueError:
+                        pass
+                raise requests.HTTPError('HTTP 429', response=response)
+            if response.status_code >= 500:
                 raise requests.HTTPError(f'HTTP {response.status_code}', response=response)
             response.raise_for_status()
             payload = response.json()
@@ -30,7 +54,7 @@ def api_get(path, params=None):
             last_error = exc
             if attempt == RETRIES - 1:
                 break
-            time.sleep(0.4 * (2 ** attempt))
+            time.sleep(1.0 * (attempt + 1))
     raise RuntimeError(f'BloFin request failed after {RETRIES} attempts: {last_error}')
 
 
