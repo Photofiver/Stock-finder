@@ -5,6 +5,8 @@ on:
     paths:
       - 'trigger.txt'
   schedule:
+    - cron: '55 * * * *'
+    - cron: '58 * * * *'
     - cron: '1 * * * *'
     - cron: '6 * * * *'
   workflow_dispatch:
@@ -19,12 +21,37 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 12
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
+      - name: Align early trigger to minute 01
+        if: github.event_name != 'workflow_dispatch'
+        shell: bash
+        run: |
+          MIN=$(date -u +%M)
+          SEC=$(date -u +%S)
+          MIN=$((10#$MIN))
+          SEC=$((10#$SEC))
+          WAIT=0
+
+          if [ "$MIN" -ge 50 ]; then
+            WAIT=$(( ((60 - MIN) + 1) * 60 - SEC ))
+          elif [ "$MIN" -eq 0 ]; then
+            WAIT=$(( 60 - SEC ))
+          fi
+
+          if [ "$WAIT" -gt 0 ] && [ "$WAIT" -le 420 ]; then
+            echo "Early trigger received. Waiting ${WAIT}s for xx:01."
+            sleep "$WAIT"
+          fi
+
+      - name: Refresh state
+        shell: bash
+        run: git pull --ff-only
 
       - name: Skip duplicate scan
         id: guard
@@ -73,5 +100,6 @@ jobs:
             echo "No state update needed"
           else
             git commit -m "Update scanner state"
+            git pull --rebase origin main
             git push
           fi
