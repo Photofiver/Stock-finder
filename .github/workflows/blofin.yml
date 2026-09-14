@@ -4,6 +4,9 @@ on:
   push:
     paths:
       - 'trigger.txt'
+  schedule:
+    - cron: '1 * * * *'
+    - cron: '6 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -11,36 +14,64 @@ permissions:
 
 concurrency:
   group: blofin-hourly
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 4
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Skip duplicate scan
+        id: guard
+        shell: bash
+        run: |
+          NOW=$(date +%s)
+          if [ -f last_scan_epoch.txt ]; then
+            LAST=$(cat last_scan_epoch.txt 2>/dev/null || echo 0)
+          else
+            LAST=0
+          fi
+          AGE=$((NOW - LAST))
+          if [ "$AGE" -ge 0 ] && [ "$AGE" -lt 1200 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Recent successful scan detected (${AGE}s ago). Skipping duplicate trigger."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Python
+        if: steps.guard.outputs.skip != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Install dependencies
+        if: steps.guard.outputs.skip != 'true'
         run: pip install -r requirements.txt
 
       - name: Run scanner
+        if: steps.guard.outputs.skip != 'true'
         run: python blofin_scanner.py
 
-      - name: Save market cap baseline
+      - name: Save successful scan state
+        if: steps.guard.outputs.skip != 'true' && success()
         shell: bash
         run: |
-          if [ -n "$(git status --porcelain -- marketcap_state.json)" ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          date +%s > last_scan_epoch.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add last_scan_epoch.txt
+          if [ -f marketcap_state.json ]; then
             git add marketcap_state.json
-            git commit -m "Update hourly market cap baseline"
-            git push
+          fi
+          if git diff --cached --quiet; then
+            echo "No state update needed"
           else
-            echo "No market cap baseline update needed"
+            git commit -m "Update scanner state"
+            git push
           fi
