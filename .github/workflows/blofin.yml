@@ -50,21 +50,44 @@ jobs:
           fi
 
       - name: Refresh repository state
+        if: github.event_name != 'push'
         shell: bash
         run: git pull --ff-only
 
+      - name: Random-time pipeline smoke test
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TEST_LABEL=$(cat _pipeline_test.txt)
+          STARTED=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
+          echo "TEST_START $TEST_LABEL $STARTED"
+
+          BLOFIN_JSON=$(curl -fsS --retry 3 --retry-delay 1 --max-time 20 \
+            'https://openapi.blofin.com/api/v1/market/tickers')
+          python -c 'import json,sys; p=json.load(sys.stdin); assert str(p.get("code"))=="0" and isinstance(p.get("data"),list) and p["data"], "bad BloFin response"' <<< "$BLOFIN_JSON"
+          echo "BLOFIN_OK"
+
+          NTFY_JSON=$(curl -fsS --retry 3 --retry-delay 1 --max-time 20 \
+            -H 'Title: BloFin pipeline test' \
+            -H 'Priority: 4' \
+            -d "TEST $TEST_LABEL | GitHub->BloFin->ntfy OK | $STARTED" \
+            'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n')
+          python -c 'import json,sys; p=json.load(sys.stdin); assert p.get("id"), "ntfy missing id"; print("NTFY_OK", p["id"])' <<< "$NTFY_JSON"
+          echo "TEST_END $TEST_LABEL $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+
       - name: Set up Python
+        if: github.event_name != 'push'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Install dependencies
+        if: github.event_name != 'push'
         run: pip install -r requirements.txt
 
       - name: Run scanner
-        env:
-          FORCE_SCAN: ${{ github.event_name == 'push' && '1' || '0' }}
-          NO_STATE: ${{ github.event_name == 'push' && '1' || '0' }}
+        if: github.event_name != 'push'
         run: python blofin_scanner.py
 
       - name: Save scanner state
