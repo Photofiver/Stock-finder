@@ -190,38 +190,27 @@ def get_live_instruments():
     return sorted(set(live))
 
 
-def get_latest_closed_1h_change(inst):
-    raw = blofin_get(
-        "/api/v1/market/candles",
-        {"instId": inst, "bar": TIMEFRAME, "limit": "3"},
-    )
-    closed = [row for row in parse_candles(raw) if row[6] == "1"]
-    if not closed:
-        raise RuntimeError("brak zamkniętej świecy 1H")
-    latest = closed[-1]
-    open_price = latest[1]
-    close_price = latest[4]
-    if open_price <= 0 or close_price <= 0:
-        raise RuntimeError("nieprawidłowa cena świecy 1H")
-    return (close_price / open_price - 1) * 100
-
-
 def get_universe():
     live = get_live_instruments()
+    live_set = set(live)
     ranked = []
     ranking_errors = []
 
-    with ThreadPoolExecutor(max_workers=WORKERS) as executor:
-        future_map = {
-            executor.submit(get_latest_closed_1h_change, inst): inst
-            for inst in live
-        }
-        for future in as_completed(future_map):
-            inst = future_map[future]
-            try:
-                ranked.append((future.result(), inst))
-            except Exception as exc:
-                ranking_errors.append(f"{inst}: {type(exc).__name__}: {exc}")
+    for ticker in blofin_get("/api/v1/market/tickers"):
+        inst = str(ticker.get("instId") or "")
+        if inst not in live_set:
+            continue
+        try:
+            last = float(ticker.get("last") or 0)
+            open_24h = float(ticker.get("open24h") or 0)
+        except (TypeError, ValueError):
+            ranking_errors.append(f"{inst}: nieprawidłowe dane 24h")
+            continue
+        if last <= 0 or open_24h <= 0:
+            ranking_errors.append(f"{inst}: brak poprawnej ceny 24h")
+            continue
+        change_24h = (last / open_24h - 1) * 100
+        ranked.append((change_24h, inst))
 
     ranked.sort(key=lambda item: item[0], reverse=True)
     ranked = ranked[:TOP_N]
@@ -510,12 +499,12 @@ def build_message(coins, results, errors, ranking_errors, marketcap_error):
 
     if exact:
         header = (
-            f"TOP {len(coins)} BloFin USDT-M | 1H ranking + 1H wskaźniki | "
+            f"TOP {len(coins)} BloFin wg 24h Change | analiza 1H | "
             f"świeże MACD: {flips} | PEŁNY SETUP 8/8: {len(exact)}"
         )
     else:
         header = (
-            f"TOP {len(coins)} BloFin USDT-M | 1H ranking + 1H wskaźniki | "
+            f"TOP {len(coins)} BloFin wg 24h Change | analiza 1H | "
             f"świeże MACD: {flips} | najlepsze {len(chosen)}"
         )
 
@@ -523,8 +512,8 @@ def build_message(coins, results, errors, ranking_errors, marketcap_error):
     for n, row in enumerate(chosen, start=1):
         lines.append(
             f"{n}. {row['inst']} {row['side']} — {row['score']}/8 | "
-            f"{row['flip_label']} | 1H rank #{row['blofin_rank']} "
-            f"{row['change']:+.2f}% | RSI {row['rsi']:.1f} | "
+            f"{row['flip_label']} | BloFin 24h rank #{row['blofin_rank']} "
+            f"{row['change']:+.2f}%/24h | RSI {row['rsi']:.1f} | "
             f"STOCH K {row['prev_k']:.1f}→{row['k']:.1f}, D {row['d']:.1f} | "
             f"{format_market_cap_status(row)}"
         )
@@ -535,9 +524,9 @@ def build_message(coins, results, errors, ranking_errors, marketcap_error):
     if marketcap_error:
         lines.append("MC chwilowo niedostępny — pozostałe 7 warunków policzone.")
     if errors:
-        lines.append(f"Pominięto {len(errors)} instrumentów z TOP 10 podczas analizy.")
+        lines.append(f"Pominięto {len(errors)} instrumentów z TOP 10 podczas analizy 1H.")
     if ranking_errors:
-        lines.append(f"Nie udało się policzyć rankingu 1H dla {len(ranking_errors)} instrumentów.")
+        lines.append(f"Pominięto {len(ranking_errors)} instrumentów z błędnymi danymi 24h.")
 
     return header + "\n" + "\n".join(lines)
 
@@ -555,7 +544,7 @@ def main():
 
     coins, live_instruments, ranking_errors = get_universe()
     if not coins:
-        raise RuntimeError("Nie znaleziono aktywnych kontraktów USDT-M z zamkniętą świecą 1H")
+        raise RuntimeError("Nie znaleziono aktywnych kontraktów USDT-M z danymi 24h")
 
     previous_market_caps = state.get("market_caps") or {}
 
@@ -594,7 +583,7 @@ def main():
                 errors.append(f"{inst}: {type(exc).__name__}: {exc}")
 
     for error in ranking_errors:
-        print(f"RANKING 1H: {error}", file=sys.stderr)
+        print(f"RANKING 24H: {error}", file=sys.stderr)
     for error in errors:
         print(error, file=sys.stderr)
 
