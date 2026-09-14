@@ -1,13 +1,8 @@
 name: BloFin 1H Scanner
 
 on:
-  push:
-    paths:
-      - 'blofin_scanner.py'
-      - '.github/workflows/blofin.yml'
   schedule:
     - cron: '1 * * * *'
-    - cron: '18 21 13 9 *'
   workflow_dispatch:
 
 jobs:
