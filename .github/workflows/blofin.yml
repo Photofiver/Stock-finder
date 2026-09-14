@@ -3,9 +3,9 @@ name: BloFin 1H Scanner
 on:
   schedule:
     - cron: '1 * * * *'
-      timezone: 'Europe/London'
-    - cron: '15 8 14 9 *'
-      timezone: 'Europe/London'
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 concurrency:
@@ -15,13 +15,18 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 3
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install requests
-        run: pip install requests==2.32.3
-      - name: Run BloFin scanner
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scanner
         run: python blofin_scanner.py
