@@ -2,8 +2,13 @@ name: BloFin 1H Scanner
 
 on:
   schedule:
-    - cron: '1 * * * *'
+    - cron: '7 * * * *'
+      timezone: 'Europe/London'
   workflow_dispatch:
+
+concurrency:
+  group: blofin-hourly
+  cancel-in-progress: true
 
 jobs:
   scan:
