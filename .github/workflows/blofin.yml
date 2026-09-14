@@ -1,12 +1,8 @@
 name: BloFin 1H Scanner
 
 on:
-  push:
-    paths:
-      - 'trigger.txt'
   schedule:
-    - cron: '55 * * * *'
-    - cron: '58 * * * *'
+    - cron: '59 * * * *'
     - cron: '1 * * * *'
     - cron: '6 * * * *'
   workflow_dispatch:
@@ -22,14 +18,15 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     timeout-minutes: 12
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Align early trigger to minute 01
-        if: github.event_name != 'workflow_dispatch'
+      - name: Align early run to minute 01
+        if: github.event_name == 'schedule'
         shell: bash
         run: |
           MIN=$(date -u +%M)
@@ -38,78 +35,50 @@ jobs:
           SEC=$((10#$SEC))
           WAIT=0
 
-          if [ "$MIN" -ge 50 ]; then
-            WAIT=$(( ((60 - MIN) + 1) * 60 - SEC ))
+          if [ "$MIN" -eq 59 ]; then
+            WAIT=$((120 - SEC))
           elif [ "$MIN" -eq 0 ]; then
-            WAIT=$(( 60 - SEC ))
+            WAIT=$((60 - SEC))
           fi
 
-          if [ "$WAIT" -gt 0 ] && [ "$WAIT" -le 420 ]; then
-            echo "Early trigger received. Waiting ${WAIT}s for xx:01."
+          if [ "$WAIT" -gt 0 ] && [ "$WAIT" -le 180 ]; then
+            echo "Waiting ${WAIT}s for xx:01"
             sleep "$WAIT"
           fi
 
-      - name: Refresh state
+      - name: Refresh repository state
         shell: bash
         run: git pull --ff-only
 
-      - name: Skip duplicate scan
-        id: guard
-        shell: bash
-        run: |
-          NOW=$(date +%s)
-          if [ -f last_scan_epoch.txt ]; then
-            LAST=$(cat last_scan_epoch.txt 2>/dev/null || echo 0)
-          else
-            LAST=0
-          fi
-          AGE=$((NOW - LAST))
-          if [ "$AGE" -ge 0 ] && [ "$AGE" -lt 1200 ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Recent successful scan detected (${AGE}s ago). Skipping duplicate trigger."
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Mark aligned hourly scan
-        if: steps.guard.outputs.skip != 'true' && github.event_name != 'workflow_dispatch'
-        shell: bash
-        run: |
-          MIN=$(date -u +%M)
-          MIN=$((10#$MIN))
-          if [ "$MIN" -ge 1 ] && [ "$MIN" -le 7 ]; then
-            date -u +"%Y-%m-%dT%H:01:00+00:00" > trigger.txt
-          fi
-
-      - name: Python
-        if: steps.guard.outputs.skip != 'true'
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Install dependencies
-        if: steps.guard.outputs.skip != 'true'
         run: pip install -r requirements.txt
 
       - name: Run scanner
-        if: steps.guard.outputs.skip != 'true'
         run: python blofin_scanner.py
 
-      - name: Save successful scan state
-        if: steps.guard.outputs.skip != 'true' && success()
+      - name: Save scanner state
+        if: success()
         shell: bash
         run: |
-          date +%s > last_scan_epoch.txt
+          if [ ! -f scanner_state.json ]; then
+            echo "No scanner state to save"
+            exit 0
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add last_scan_epoch.txt
-          if [ -f marketcap_state.json ]; then
-            git add marketcap_state.json
-          fi
+          git add scanner_state.json
+
           if git diff --cached --quiet; then
-            echo "No state update needed"
-          else
-            git commit -m "Update scanner state"
-            git pull --rebase origin main
-            git push
+            echo "No scanner state change"
+            exit 0
           fi
+
+          git commit -m "Update scanner state"
+          git pull --rebase origin main
+          git push
