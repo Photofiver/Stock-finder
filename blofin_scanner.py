@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 import requests
 
 BLOFIN_BASE = "https://openapi.blofin.com"
-COINPAPRIKA_URL = "https://api.coinpaprika.com/v1/tickers"
 NTFY_TOPIC = os.getenv("NTFY_TOPIC", "blofin-nhd0jt7wspfnhtitdlaowk1n").strip()
 
 TIMEFRAME = "1H"
@@ -19,11 +18,6 @@ WORKERS = 4
 REQUEST_INTERVAL = 0.15
 HTTP_RETRIES = 4
 STATE_FILE = "scanner_state.json"
-
-NON_CRYPTO_SYMBOLS = {
-    "AAPL", "AMZN", "AVGO", "CL", "COIN", "GOOGL", "META", "MSFT", "MSTR",
-    "NATGAS", "NG", "NVDA", "OIL", "TSLA", "WTIOIL", "XLE", "XOM",
-}
 
 _request_lock = threading.Lock()
 _last_request_started = 0.0
@@ -149,7 +143,6 @@ def macd_histogram(values, fast=12, slow=26, signal=9):
     for j, i in enumerate(positions):
         if compact_signal[j] is not None:
             histogram[i] = macd_line[i] - compact_signal[j]
-
     return histogram
 
 
@@ -219,7 +212,7 @@ def get_universe():
         {"inst": inst, "change": change, "blofin_rank": rank}
         for rank, (change, inst) in enumerate(ranked, start=1)
     ]
-    return coins, live, ranking_errors
+    return coins, ranking_errors
 
 
 def get_closed_candles(inst):
@@ -230,109 +223,40 @@ def get_closed_candles(inst):
     return [row for row in parse_candles(raw) if row[6] == "1"]
 
 
-def fetch_market_caps():
-    last_error = None
-    for attempt in range(3):
-        try:
-            response = requests.get(
-                COINPAPRIKA_URL,
-                params={"quotes": "USD"},
-                timeout=30,
-            )
-            response.raise_for_status()
-            payload = response.json()
-            if not isinstance(payload, list):
-                raise RuntimeError("CoinPaprika returned non-list data")
-
-            by_symbol = {}
-            for row in payload:
-                try:
-                    symbol = str(row.get("symbol") or "").upper().strip()
-                    rank = int(row.get("rank") or 999999)
-                    market_cap = float(
-                        row.get("quotes", {}).get("USD", {}).get("market_cap") or 0
-                    )
-                except (TypeError, ValueError, AttributeError):
-                    continue
-
-                if not symbol or market_cap <= 0:
-                    continue
-
-                candidate = (rank, -market_cap, market_cap)
-                current = by_symbol.get(symbol)
-                if current is None or candidate[:2] < current[:2]:
-                    by_symbol[symbol] = candidate
-
-            return {symbol: values[2] for symbol, values in by_symbol.items()}
-        except (requests.RequestException, ValueError, RuntimeError) as exc:
-            last_error = exc
-            if attempt < 2:
-                time.sleep(2 + attempt)
-
-    raise RuntimeError(f"CoinPaprika request failed: {last_error}")
-
-
-def market_cap_for_instrument(inst, market_caps):
-    base = inst.split("-", 1)[0].upper()
-
-    if base in NON_CRYPTO_SYMBOLS:
-        return None
-    if base in market_caps:
-        return market_caps[base]
-    if base.startswith("1000") and base[4:] in market_caps:
-        return market_caps[base[4:]]
-
-    return None
-
-
 def load_state():
     try:
         with open(STATE_FILE, "r", encoding="utf-8") as handle:
             payload = json.load(handle)
         if not isinstance(payload, dict):
-            return {"last_slot": None, "captured_at": None, "market_caps": {}}
-
-        market_caps = {}
-        for key, value in (payload.get("market_caps") or {}).items():
-            try:
-                number = float(value)
-                if number > 0:
-                    market_caps[str(key)] = number
-            except (TypeError, ValueError):
-                continue
-
+            return {"last_slot": None, "captured_at": None}
         return {
             "last_slot": payload.get("last_slot"),
             "captured_at": payload.get("captured_at"),
-            "market_caps": market_caps,
         }
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
-        return {"last_slot": None, "captured_at": None, "market_caps": {}}
+        return {"last_slot": None, "captured_at": None}
 
 
 def current_slot():
-    now = datetime.now(timezone.utc)
-    return now.strftime("%Y-%m-%dT%H:00Z")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00Z")
 
 
-def save_state(slot, market_caps):
+def save_state(slot):
     payload = {
         "last_slot": slot,
         "captured_at": datetime.now(timezone.utc).isoformat(),
-        "market_caps": market_caps,
     }
     with open(STATE_FILE, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
         handle.write("\n")
 
 
-def analyze(coin, current_mc, previous_mc):
+def analyze(coin):
     inst = coin["inst"]
     candles = get_closed_candles(inst)
     if len(candles) < 40:
         raise RuntimeError(f"za mało zamkniętych świec ({len(candles)})")
 
-    opens = [row[1] for row in candles]
     highs = [row[2] for row in candles]
     lows = [row[3] for row in candles]
     closes = [row[4] for row in candles]
@@ -352,34 +276,20 @@ def analyze(coin, current_mc, previous_mc):
     short_flip = hist[p] > 0 and hist[i] < 0
     long_flip = hist[p] < 0 and hist[i] > 0
 
-    mc_available = (
-        current_mc is not None
-        and previous_mc is not None
-        and previous_mc > 0
-    )
-    mc_up = mc_available and current_mc > previous_mc
-    mc_down = mc_available and current_mc < previous_mc
-
     short_rules = [
         short_flip,
-        closes[i] < opens[i],
-        closes[p] > opens[p],
         volumes[i] > volumes[p],
         rs[i] < rs[p],
         k[p] >= 80 and k[i] < k[p],
         k[i] < d[i],
-        mc_down,
     ]
 
     long_rules = [
         long_flip,
-        closes[i] > opens[i],
-        closes[p] < opens[p],
         volumes[i] > volumes[p],
         rs[i] > rs[p],
         k[p] <= 20 and k[i] > k[p],
         k[i] > d[i],
-        mc_up,
     ]
 
     short_score = sum(short_rules)
@@ -401,54 +311,23 @@ def analyze(coin, current_mc, previous_mc):
     else:
         flip_label = "MACD bez świeżej zmiany"
 
-    mc_change = None
-    if mc_available:
-        mc_change = (current_mc / previous_mc - 1) * 100
-
     result = dict(coin)
     result.update(
         {
             "side": side,
             "score": score,
-            "exact": score == 8,
+            "exact": score == 5,
             "macd_flip": selected_flip,
             "flip_label": flip_label,
             "rsi": rs[i],
+            "prev_rsi": rs[p],
             "prev_k": k[p],
             "k": k[i],
             "d": d[i],
-            "market_cap": current_mc,
-            "market_cap_change": mc_change,
+            "volume_up": volumes[i] > volumes[p],
         }
     )
     return result
-
-
-def format_market_cap(value):
-    if value is None:
-        return "niedostępny"
-    if value >= 1_000_000_000_000:
-        return f"${value / 1_000_000_000_000:.2f}T"
-    if value >= 1_000_000_000:
-        return f"${value / 1_000_000_000:.2f}B"
-    if value >= 1_000_000:
-        return f"${value / 1_000_000:.1f}M"
-    if value >= 1_000:
-        return f"${value / 1_000:.1f}K"
-    return f"${value:.0f}"
-
-
-def format_market_cap_status(row):
-    current = row.get("market_cap")
-    change = row.get("market_cap_change")
-
-    if current is None:
-        return "MC niedostępny"
-    if change is None:
-        return f"MC {format_market_cap(current)} | brak historii 1H"
-
-    arrow = "↑" if change > 0 else "↓" if change < 0 else "→"
-    return f"MC {format_market_cap(current)} {arrow} {change:+.2f}%/1H"
 
 
 def send_ntfy(message):
@@ -461,10 +340,7 @@ def send_ntfy(message):
             response = requests.post(
                 f"https://ntfy.sh/{NTFY_TOPIC}",
                 data=message.encode("utf-8"),
-                headers={
-                    "Title": "BloFin 1H Scanner",
-                    "Priority": "4",
-                },
+                headers={"Title": "BloFin 1H Scanner", "Priority": "4"},
                 timeout=20,
             )
             response.raise_for_status()
@@ -479,17 +355,12 @@ def send_ntfy(message):
             last_error = exc
             if attempt < 4:
                 time.sleep(2 ** attempt)
-
     raise RuntimeError(f"ntfy failed after 5 attempts: {last_error}")
 
 
-def build_message(coins, results, errors, ranking_errors, marketcap_error):
+def build_message(coins, results, errors, ranking_errors):
     results.sort(
-        key=lambda row: (
-            row["macd_flip"],
-            row["score"],
-            -row["blofin_rank"],
-        ),
+        key=lambda row: (row["macd_flip"], row["score"], -row["blofin_rank"]),
         reverse=True,
     )
 
@@ -499,34 +370,31 @@ def build_message(coins, results, errors, ranking_errors, marketcap_error):
 
     if exact:
         header = (
-            f"TOP {len(coins)} BloFin wg 24h Change | analiza 1H | "
-            f"świeże MACD: {flips} | PEŁNY SETUP 8/8: {len(exact)}"
+            f"TOP {len(coins)} BloFin 24h | analiza 1H | "
+            f"świeże MACD: {flips} | PEŁNY SETUP 5/5: {len(exact)}"
         )
     else:
         header = (
-            f"TOP {len(coins)} BloFin wg 24h Change | analiza 1H | "
+            f"TOP {len(coins)} BloFin 24h | analiza 1H | "
             f"świeże MACD: {flips} | najlepsze {len(chosen)}"
         )
 
     lines = []
     for n, row in enumerate(chosen, start=1):
         lines.append(
-            f"{n}. {row['inst']} {row['side']} — {row['score']}/8 | "
-            f"{row['flip_label']} | BloFin 24h rank #{row['blofin_rank']} "
-            f"{row['change']:+.2f}%/24h | RSI {row['rsi']:.1f} | "
-            f"STOCH K {row['prev_k']:.1f}→{row['k']:.1f}, D {row['d']:.1f} | "
-            f"{format_market_cap_status(row)}"
+            f"{n}. {row['inst']} {row['side']} — {row['score']}/5 | "
+            f"{row['flip_label']} | BloFin 24h #{row['blofin_rank']} "
+            f"{row['change']:+.2f}% | VOL {'↑' if row['volume_up'] else '↓/='} | "
+            f"RSI {row['prev_rsi']:.1f}→{row['rsi']:.1f} | "
+            f"STOCH K {row['prev_k']:.1f}→{row['k']:.1f}, D {row['d']:.1f}"
         )
 
     if not lines:
         lines.append("Brak instrumentów z wystarczającymi danymi.")
-
-    if marketcap_error:
-        lines.append("MC chwilowo niedostępny — pozostałe 7 warunków policzone.")
     if errors:
-        lines.append(f"Pominięto {len(errors)} instrumentów z TOP 10 podczas analizy 1H.")
+        lines.append(f"Pominięto {len(errors)} instrumentów z TOP 10 podczas analizy.")
     if ranking_errors:
-        lines.append(f"Pominięto {len(ranking_errors)} instrumentów z błędnymi danymi 24h.")
+        lines.append(f"Pominięto {len(ranking_errors)} instrumentów przy rankingu BloFin 24h.")
 
     return header + "\n" + "\n".join(lines)
 
@@ -537,44 +405,18 @@ def main():
 
     state = load_state()
     slot = current_slot()
-
     if state.get("last_slot") == slot and not force_scan:
         print(f"SKIP: scan for {slot} already completed")
         return 0
 
-    coins, live_instruments, ranking_errors = get_universe()
+    coins, ranking_errors = get_universe()
     if not coins:
-        raise RuntimeError("Nie znaleziono aktywnych kontraktów USDT-M z danymi 24h")
-
-    previous_market_caps = state.get("market_caps") or {}
-
-    marketcap_error = None
-    try:
-        by_symbol = fetch_market_caps()
-    except Exception as exc:
-        by_symbol = {}
-        marketcap_error = f"{type(exc).__name__}: {exc}"
-        print(f"MARKET CAP ERROR: {marketcap_error}", file=sys.stderr)
-
-    current_market_caps = {
-        inst: market_cap_for_instrument(inst, by_symbol)
-        for inst in live_instruments
-    }
+        raise RuntimeError("Nie znaleziono aktywnych kontraktów USDT-M")
 
     results = []
     errors = []
-
     with ThreadPoolExecutor(max_workers=WORKERS) as executor:
-        future_map = {
-            executor.submit(
-                analyze,
-                coin,
-                current_market_caps.get(coin["inst"]),
-                previous_market_caps.get(coin["inst"]),
-            ): coin["inst"]
-            for coin in coins
-        }
-
+        future_map = {executor.submit(analyze, coin): coin["inst"] for coin in coins}
         for future in as_completed(future_map):
             inst = future_map[future]
             try:
@@ -587,18 +429,12 @@ def main():
     for error in errors:
         print(error, file=sys.stderr)
 
-    message = build_message(coins, results, errors, ranking_errors, marketcap_error)
+    message = build_message(coins, results, errors, ranking_errors)
     send_ntfy(message)
     print(message)
 
     if not no_state:
-        state_values = {
-            inst: value
-            for inst, value in current_market_caps.items()
-            if value is not None and value > 0
-        }
-        save_state(slot, state_values)
-
+        save_state(slot)
     return 0
 
 
