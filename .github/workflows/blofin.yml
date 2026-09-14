@@ -1,6 +1,9 @@
 name: BloFin 1H Scanner
 
 on:
+  push:
+    paths:
+      - '_pipeline_test.txt'
   schedule:
     - cron: '59 * * * *'
     - cron: '1 * * * *'
@@ -59,10 +62,13 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run scanner
+        env:
+          FORCE_SCAN: ${{ github.event_name == 'push' && '1' || '0' }}
+          NO_STATE: ${{ github.event_name == 'push' && '1' || '0' }}
         run: python blofin_scanner.py
 
       - name: Save scanner state
-        if: success()
+        if: success() && github.event_name != 'push'
         shell: bash
         run: |
           if [ ! -f scanner_state.json ]; then
