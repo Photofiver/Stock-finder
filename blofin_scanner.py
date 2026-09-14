@@ -221,8 +221,6 @@ def fetch_market_caps():
             if not symbol or market_cap <= 0:
                 continue
             current = by_symbol.get(symbol)
-            # With duplicate tickers choose the higher-ranked project; market cap is
-            # used as a tie-breaker if ranks are equal/unknown.
             candidate = (rank, -market_cap, market_cap)
             if current is None or candidate[:2] < current[:2]:
                 by_symbol[symbol] = candidate
@@ -244,9 +242,15 @@ def market_cap_for_instrument(inst, market_caps):
 
 
 def should_save_hourly_state():
-    # Normal trigger runs at :01. Keep only an hourly baseline so manual tests
-    # do not replace it with a snapshot taken in the middle of the hour.
-    return datetime.now(timezone.utc).minute <= 5
+    # The hourly automation writes a plain ISO timestamp to trigger.txt at :01.
+    # Manual tests use other text, so they cannot overwrite the hourly baseline.
+    try:
+        with open('trigger.txt', 'r', encoding='utf-8') as handle:
+            raw = handle.read().strip()
+        trigger_time = datetime.fromisoformat(raw.replace('Z', '+00:00'))
+        return trigger_time.minute == 1
+    except (OSError, ValueError):
+        return False
 
 
 def save_marketcap_state(current_market_caps):
@@ -430,6 +434,7 @@ def main():
         exact = [x for x in results if x['exact']]
         chosen = exact if exact else results[:REPORT_N]
         flips = sum(1 for x in results if x['macd_flip'])
+        save_hourly = should_save_hourly_state()
 
         if exact:
             header = f"Przeskanowano TOP {len(coins)} USDT-M na 1H. Świeże zmiany MACD: {flips}. PEŁNY SETUP 8/8 ({len(exact)}):"
@@ -446,7 +451,10 @@ def main():
             message += '\nMarket Cap chwilowo niedostępny — pozostałe 7 warunków policzono normalnie.'
             print(f'MARKET CAP ERROR: {marketcap_error}')
         elif not previous_market_caps:
-            message += '\nMarket Cap: zapisano pierwszy punkt odniesienia. Porównanie 1H będzie dostępne od następnego pełnego skanu godzinowego.'
+            if save_hourly:
+                message += '\nMarket Cap: zapisano pierwszy punkt odniesienia. Porównanie 1H będzie dostępne od następnego pełnego skanu godzinowego.'
+            else:
+                message += '\nMarket Cap działa. To był test poza :01, więc historia godzinowa nie została nadpisana.'
 
         if errors:
             message += f"\nPominięto {len(errors)} instrumentów."
@@ -457,7 +465,7 @@ def main():
         send_ntfy(message)
         print(message)
 
-        if market_caps_by_symbol and should_save_hourly_state():
+        if market_caps_by_symbol and save_hourly:
             state_values = {
                 inst: value
                 for inst, value in current_market_caps.items()
