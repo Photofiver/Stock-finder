@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
@@ -8,17 +9,29 @@ BASE = 'https://openapi.blofin.com'
 TIMEFRAME = '1H'
 TOP_N = 200
 REPORT_N = 10
-WORKERS = 10
+WORKERS = 6
+RETRIES = 4
 NTFY_TOPIC = os.getenv('NTFY_TOPIC', 'blofin-nhd0jt7wspfnhtitdlaowk1n').strip()
 
 
 def api_get(path, params=None):
-    response = requests.get(BASE + path, params=params, timeout=20)
-    response.raise_for_status()
-    payload = response.json()
-    if str(payload.get('code')) != '0':
-        raise RuntimeError(f"BloFin API error: {payload}")
-    return payload.get('data', [])
+    last_error = None
+    for attempt in range(RETRIES):
+        try:
+            response = requests.get(BASE + path, params=params, timeout=20)
+            if response.status_code == 429 or response.status_code >= 500:
+                raise requests.HTTPError(f'HTTP {response.status_code}', response=response)
+            response.raise_for_status()
+            payload = response.json()
+            if str(payload.get('code')) != '0':
+                raise RuntimeError(f"BloFin API error: {payload}")
+            return payload.get('data', [])
+        except (requests.RequestException, ValueError, RuntimeError) as exc:
+            last_error = exc
+            if attempt == RETRIES - 1:
+                break
+            time.sleep(0.4 * (2 ** attempt))
+    raise RuntimeError(f'BloFin request failed after {RETRIES} attempts: {last_error}')
 
 
 def ema(values, period):
@@ -148,7 +161,7 @@ def get_closed_candles(inst):
 def analyze(inst):
     candles = get_closed_candles(inst)
     if len(candles) < 40:
-        raise RuntimeError('za mało zamkniętych świec')
+        raise RuntimeError(f'za mało zamkniętych świec ({len(candles)})')
 
     opens = [x[1] for x in candles]
     highs = [x[2] for x in candles]
@@ -207,6 +220,7 @@ def analyze(inst):
         'score': score,
         'exact': score == 7,
         'rsi': rs[i],
+        'prev_k': k[p],
         'k': k[i],
         'd': d[i],
         'macd_flip': selected_flip,
@@ -242,7 +256,7 @@ def main():
                     result.update(coin)
                     results.append(result)
                 except Exception as exc:
-                    errors.append(f"{coin['inst']}: {exc}")
+                    errors.append(f"{coin['inst']}: {type(exc).__name__}: {exc}")
 
         results.sort(
             key=lambda x: (x['macd_flip'], x['score'], -x['blofin_rank']),
@@ -259,13 +273,16 @@ def main():
             header = f"Przeskanowano TOP {len(coins)} USDT-M na 1H. Świeże zmiany MACD: {flips}. Najlepsze {min(REPORT_N, len(results))}:"
 
         lines = [
-            f"{n}. {x['inst']} {x['side']} — {x['score']}/7 | {x['flip_label']} | BloFin #{x['blofin_rank']} {x['change']:+.2f}% | RSI {x['rsi']:.1f} | STOCH {x['k']:.1f}/{x['d']:.1f}"
+            f"{n}. {x['inst']} {x['side']} — {x['score']}/7 | {x['flip_label']} | BloFin #{x['blofin_rank']} {x['change']:+.2f}% | RSI {x['rsi']:.1f} | STOCH K {x['prev_k']:.1f}→{x['k']:.1f}, D {x['d']:.1f}"
             for n, x in enumerate(chosen, 1)
         ]
 
         message = header + '\n' + '\n'.join(lines)
         if errors:
-            message += f"\nPominięto {len(errors)} (brak danych/błąd)."
+            message += f"\nPominięto {len(errors)} instrumentów."
+            print('POMINIĘTE / BŁĘDY:')
+            for error in errors:
+                print(error)
 
         send_ntfy(message)
         print(message)
