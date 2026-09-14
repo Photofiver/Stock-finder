@@ -1,9 +1,10 @@
 name: BloFin 1H Scanner
 
 on:
+  push:
+    paths:
+      - 'trigger.txt'
   schedule:
-    - cron: '59 * * * *'
-    - cron: '1 * * * *'
     - cron: '6 * * * *'
   workflow_dispatch:
 
@@ -17,7 +18,7 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -25,30 +26,38 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Align early run to minute 01
-        if: github.event_name == 'schedule'
+      - name: Align external trigger to minute 01
+        if: github.event_name == 'push'
         shell: bash
         run: |
+          set -euo pipefail
           MIN=$(date -u +%M)
           SEC=$(date -u +%S)
           MIN=$((10#$MIN))
           SEC=$((10#$SEC))
           WAIT=0
 
-          if [ "$MIN" -eq 59 ]; then
-            WAIT=$((120 - SEC))
+          # Normal pre-triggers arrive near xx:50/55/58 and wait for the next xx:01.
+          if [ "$MIN" -ge 50 ]; then
+            WAIT=$((((61 - MIN) * 60) - SEC))
           elif [ "$MIN" -eq 0 ]; then
             WAIT=$((60 - SEC))
           fi
 
-          if [ "$WAIT" -gt 0 ] && [ "$WAIT" -le 180 ]; then
-            echo "Waiting ${WAIT}s for xx:01"
+          # If an external trigger itself was delayed past xx:01, recover immediately
+          # instead of waiting another hour.
+          if [ "$WAIT" -gt 0 ] && [ "$WAIT" -le 900 ]; then
+            echo "External trigger received at minute ${MIN}; waiting ${WAIT}s for xx:01"
             sleep "$WAIT"
+          else
+            echo "Running immediately at minute ${MIN}"
           fi
 
       - name: Refresh repository state
         shell: bash
-        run: git pull --ff-only
+        run: |
+          git fetch origin main --depth=1
+          git reset --hard origin/main
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -82,3 +91,13 @@ jobs:
           git commit -m "Update scanner state"
           git pull --rebase origin main
           git push
+
+      - name: Notify workflow failure
+        if: failure()
+        shell: bash
+        run: |
+          curl -fsS --retry 3 --retry-delay 1 --max-time 20 \
+            -H 'Title: BloFin 1H Scanner' \
+            -H 'Priority: 4' \
+            -d "BŁĄD workflow GitHub Actions. Sprawdź run ${GITHUB_RUN_ID}." \
+            'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n' || true
