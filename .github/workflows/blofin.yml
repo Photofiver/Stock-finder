@@ -6,6 +6,9 @@ on:
       - 'trigger.txt'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 concurrency:
   group: blofin-hourly
   cancel-in-progress: true
@@ -28,3 +31,16 @@ jobs:
 
       - name: Run scanner
         run: python blofin_scanner.py
+
+      - name: Save market cap baseline
+        shell: bash
+        run: |
+          if [ -n "$(git status --porcelain -- marketcap_state.json)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add marketcap_state.json
+            git commit -m "Update hourly market cap baseline"
+            git push
+          else
+            echo "No market cap baseline update needed"
+          fi
