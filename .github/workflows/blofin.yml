@@ -1,8 +1,9 @@
 name: BloFin 1H Scanner
 
 on:
-  schedule:
-    - cron: '1 * * * *'
+  push:
+    paths:
+      - 'trigger.txt'
   workflow_dispatch:
 
 concurrency:
