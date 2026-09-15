@@ -365,22 +365,17 @@ def build_message(coins, results, errors, ranking_errors):
     )
 
     exact = [row for row in results if row["exact"]]
-    chosen = exact if exact else results[:REPORT_N]
-    flips = sum(1 for row in results if row["macd_flip"])
+    if not exact:
+        return None
 
-    if exact:
-        header = (
-            f"TOP {len(coins)} BloFin 24h | analiza 1H | "
-            f"świeże MACD: {flips} | PEŁNY SETUP 5/5: {len(exact)}"
-        )
-    else:
-        header = (
-            f"TOP {len(coins)} BloFin 24h | analiza 1H | "
-            f"świeże MACD: {flips} | najlepsze {len(chosen)}"
-        )
+    flips = sum(1 for row in results if row["macd_flip"])
+    header = (
+        f"TOP {len(coins)} BloFin 24h | analiza 1H | "
+        f"świeże MACD: {flips} | PEŁNY SETUP 5/5: {len(exact)}"
+    )
 
     lines = []
-    for n, row in enumerate(chosen, start=1):
+    for n, row in enumerate(exact, start=1):
         lines.append(
             f"{n}. {row['inst']} {row['side']} — {row['score']}/5 | "
             f"{row['flip_label']} | BloFin 24h #{row['blofin_rank']} "
@@ -389,8 +384,6 @@ def build_message(coins, results, errors, ranking_errors):
             f"STOCH K {row['prev_k']:.1f}→{row['k']:.1f}, D {row['d']:.1f}"
         )
 
-    if not lines:
-        lines.append("Brak instrumentów z wystarczającymi danymi.")
     if errors:
         lines.append(f"Pominięto {len(errors)} instrumentów z TOP 10 podczas analizy.")
     if ranking_errors:
@@ -430,8 +423,11 @@ def main():
         print(error, file=sys.stderr)
 
     message = build_message(coins, results, errors, ranking_errors)
-    send_ntfy(message)
-    print(message)
+    if message:
+        send_ntfy(message)
+        print(message)
+    else:
+        print("Brak setupu 5/5 — bez powiadomienia.")
 
     if not no_state:
         save_state(slot)
