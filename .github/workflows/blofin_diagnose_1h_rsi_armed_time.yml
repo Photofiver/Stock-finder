@@ -1,0 +1,19 @@
+name: BloFin Diagnose 1H RSI Armed TIME
+
+on:
+  push:
+    paths:
+      - 'blofin_diagnose_1h_rsi_armed_time.py'
+      - '.github/workflows/blofin_diagnose_1h_rsi_armed_time.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python blofin_diagnose_1h_rsi_armed_time.py
