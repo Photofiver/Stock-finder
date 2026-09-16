@@ -1,0 +1,20 @@
+name: BloFin V04 Spike Filter Fine Backtest
+
+on:
+  push:
+    paths:
+      - 'blofin_backtest_v04_spikefilter_fine.py'
+      - '.github/workflows/blofin_backtest_v04_spikefilter_fine.yml'
+  workflow_dispatch:
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python blofin_backtest_v04_spikefilter_fine.py
