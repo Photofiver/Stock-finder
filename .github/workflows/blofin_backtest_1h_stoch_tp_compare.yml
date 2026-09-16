@@ -1,0 +1,19 @@
+name: BloFin 1H Stochastic TP Compare
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_backtest_1h_stoch_tp_compare.py'
+      - '.github/workflows/blofin_backtest_1h_stoch_tp_compare.yml'
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python blofin_backtest_1h_stoch_tp_compare.py
