@@ -1,0 +1,19 @@
+name: BloFin RSI Armed TP SL Grid Hold5
+
+on:
+  push:
+    paths:
+      - 'blofin_backtest_rsi_armed_tp_sl_grid_hold5.py'
+      - '.github/workflows/blofin_backtest_rsi_armed_tp_sl_grid_hold5.yml'
+  workflow_dispatch:
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python blofin_backtest_rsi_armed_tp_sl_grid_hold5.py
