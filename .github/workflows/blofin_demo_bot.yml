@@ -1,7 +1,9 @@
-name: BloFin DEMO Bot 1m
+name: BloFin DEMO Bot continuous
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '7 */6 * * *'
   push:
     paths:
       - 'demo_trigger.txt'
@@ -16,7 +18,7 @@ concurrency:
 jobs:
   demo:
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    timeout-minutes: 359
 
     steps:
       - name: Checkout
@@ -42,31 +44,30 @@ jobs:
           test -n "$BLOFIN_DEMO_SECRET" || { echo 'Missing BLOFIN_DEMO_SECRET'; exit 1; }
           test -n "$BLOFIN_DEMO_PASSPHRASE" || { echo 'Missing BLOFIN_DEMO_PASSPHRASE'; exit 1; }
 
-      - name: Run 60-minute demo session with reinvestment
+      - name: Run continuous DEMO session with reinvestment
         env:
           BLOFIN_DEMO_API_KEY: ${{ secrets.BLOFIN_DEMO_API_KEY }}
           BLOFIN_DEMO_SECRET: ${{ secrets.BLOFIN_DEMO_SECRET }}
           BLOFIN_DEMO_PASSPHRASE: ${{ secrets.BLOFIN_DEMO_PASSPHRASE }}
-          DEMO_TEST_MINUTES: '60'
+          DEMO_TEST_MINUTES: '350'
           DEMO_START_BANKROLL_USDT: '10'
           DEMO_BANKROLL_FILE: 'demo_bankroll.json'
+          DEMO_POSITION_FILE: 'demo_position.json'
         run: python blofin_demo_bot_reinvest.py
 
-      - name: Persist demo bankroll
+      - name: Persist demo state
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -f demo_bankroll.json ]; then
-            exit 0
-          fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add demo_bankroll.json
+          [ -f demo_bankroll.json ] && git add demo_bankroll.json || true
+          [ -f demo_position.json ] && git add demo_position.json || true
           if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m 'Persist demo bankroll [skip ci]'
+          git commit -m 'Persist demo state [skip ci]'
           git pull --rebase origin main
           git push origin HEAD:main
 
