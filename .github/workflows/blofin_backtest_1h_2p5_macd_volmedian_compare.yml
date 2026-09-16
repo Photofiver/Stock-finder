@@ -1,0 +1,20 @@
+name: BloFin 1H MACD Median Lookback Compare
+
+on:
+  push:
+    paths:
+      - 'blofin_backtest_1h_2p5_macd_volmedian_compare.py'
+      - '.github/workflows/blofin_backtest_1h_2p5_macd_volmedian_compare.yml'
+  workflow_dispatch:
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python blofin_backtest_1h_2p5_macd_volmedian_compare.py
