@@ -1,4 +1,4 @@
-name: BloFin 5m Test
+name: BloFin Multi-TF Test
 
 on:
   push:
@@ -25,9 +25,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run 5m test
+      - name: Run multi-timeframe volume test
         env:
-          TIMEFRAME: 5m
           FORCE_SCAN: '1'
           NO_STATE: '1'
         run: python blofin_scanner.py
