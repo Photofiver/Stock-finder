@@ -1,0 +1,21 @@
+name: BloFin Last Hour Backtest
+
+on:
+  push:
+    paths:
+      - 'backtest_trigger.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python blofin_backtest_last_hour.py
