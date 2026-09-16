@@ -11,7 +11,7 @@ import requests
 BLOFIN_BASE = "https://openapi.blofin.com"
 NTFY_TOPIC = os.getenv("NTFY_TOPIC", "blofin-nhd0jt7wspfnhtitdlaowk1n").strip()
 
-TIMEFRAME = "1H"
+TIMEFRAME = os.getenv("TIMEFRAME", "1H").strip() or "1H"
 TOP_N = 10
 WORKERS = 4
 REQUEST_INTERVAL = 0.15
@@ -270,7 +270,7 @@ def send_ntfy(message):
             response = requests.post(
                 f"https://ntfy.sh/{NTFY_TOPIC}",
                 data=message.encode("utf-8"),
-                headers={"Title": "BloFin 1H Scanner", "Priority": "4"},
+                headers={"Title": f"BloFin {TIMEFRAME} Scanner", "Priority": "4"},
                 timeout=20,
             )
             response.raise_for_status()
@@ -296,7 +296,7 @@ def build_message(coins, results, errors, ranking_errors):
 
     qualified = [row for row in results if row["score"] == 2]
     header = (
-        f"TOP {len(coins)} BloFin 24h | analiza 1H | "
+        f"TOP {len(coins)} BloFin 24h | analiza {TIMEFRAME} | "
         f"SETUP MACD+VOL 2/2: {len(qualified)}"
     )
 
