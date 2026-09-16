@@ -12,7 +12,7 @@ SYMBOLS = [
 RANK = {s: i + 1 for i, s in enumerate(SYMBOLS)}
 NOTIONAL = 10.0
 TP_PCT = 0.005
-SL_PCT = 0.005
+SL_PCT = 0.01
 HOLD_HOURS = 2
 SPIKE_CAP = 2.5
 STOCH_K_PERIOD = 14
@@ -195,7 +195,6 @@ def main():
                 if chosen is None:
                     skipped_no_pullback += 1
                     continue
-                # Enter at the close of the 1m retest candle to avoid unknown intraminute ordering.
                 entry_t = chosen["ts"] + D1M
                 entry_px = chosen["c"]
             reason, exit_t, exit_px = resolve_after_entry(inst, side, entry_t, entry_px)
@@ -221,7 +220,7 @@ def main():
         }
 
     print(f"window={fmt(START_TS)} -> {fmt(END_TS)} signals={len(signals)}")
-    print("Rules unchanged: 1H Stochastic 14,3,3 cross + candle color + volume>previous + volume<=2.5x median(prev3), TP=0.5%, SL=0.5%, max hold=2h, one position at a time.")
+    print("Rules: 1H Stochastic 14,3,3 cross + candle color + volume>previous + volume<=2.5x median(prev3), TP=0.5%, SL=1.0%, max hold=2h, one position at a time.")
     print("Pullback variants: after 1H signal at xx:01, wait max 30m for adverse retrace; enter at close of first 1m candle that touches threshold. 1m is only for execution/exit ordering.")
     for pb in (0.0, 0.001, 0.0025, 0.004):
         r = run_variant(pb)
