@@ -7,7 +7,7 @@ on:
       - 'demo_trigger.txt'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: blofin-demo-bot
@@ -42,13 +42,33 @@ jobs:
           test -n "$BLOFIN_DEMO_SECRET" || { echo 'Missing BLOFIN_DEMO_SECRET'; exit 1; }
           test -n "$BLOFIN_DEMO_PASSPHRASE" || { echo 'Missing BLOFIN_DEMO_PASSPHRASE'; exit 1; }
 
-      - name: Run 60-minute demo session
+      - name: Run 60-minute demo session with reinvestment
         env:
           BLOFIN_DEMO_API_KEY: ${{ secrets.BLOFIN_DEMO_API_KEY }}
           BLOFIN_DEMO_SECRET: ${{ secrets.BLOFIN_DEMO_SECRET }}
           BLOFIN_DEMO_PASSPHRASE: ${{ secrets.BLOFIN_DEMO_PASSPHRASE }}
           DEMO_TEST_MINUTES: '60'
-        run: python blofin_demo_bot.py
+          DEMO_START_BANKROLL_USDT: '10'
+          DEMO_BANKROLL_FILE: 'demo_bankroll.json'
+        run: python blofin_demo_bot_reinvest.py
+
+      - name: Persist demo bankroll
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f demo_bankroll.json ]; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add demo_bankroll.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'Persist demo bankroll [skip ci]'
+          git pull --rebase origin main
+          git push origin HEAD:main
 
       - name: Notify workflow failure
         if: failure()
