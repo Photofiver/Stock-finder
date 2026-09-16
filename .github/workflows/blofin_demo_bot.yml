@@ -1,0 +1,61 @@
+name: BloFin DEMO Bot 1m
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'demo_trigger.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blofin-demo-bot
+  cancel-in-progress: false
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check demo API credentials
+        env:
+          BLOFIN_DEMO_API_KEY: ${{ secrets.BLOFIN_DEMO_API_KEY }}
+          BLOFIN_DEMO_SECRET: ${{ secrets.BLOFIN_DEMO_SECRET }}
+          BLOFIN_DEMO_PASSPHRASE: ${{ secrets.BLOFIN_DEMO_PASSPHRASE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$BLOFIN_DEMO_API_KEY" || { echo 'Missing BLOFIN_DEMO_API_KEY'; exit 1; }
+          test -n "$BLOFIN_DEMO_SECRET" || { echo 'Missing BLOFIN_DEMO_SECRET'; exit 1; }
+          test -n "$BLOFIN_DEMO_PASSPHRASE" || { echo 'Missing BLOFIN_DEMO_PASSPHRASE'; exit 1; }
+
+      - name: Run 60-minute demo session
+        env:
+          BLOFIN_DEMO_API_KEY: ${{ secrets.BLOFIN_DEMO_API_KEY }}
+          BLOFIN_DEMO_SECRET: ${{ secrets.BLOFIN_DEMO_SECRET }}
+          BLOFIN_DEMO_PASSPHRASE: ${{ secrets.BLOFIN_DEMO_PASSPHRASE }}
+          DEMO_TEST_MINUTES: '60'
+        run: python blofin_demo_bot.py
+
+      - name: Notify workflow failure
+        if: failure()
+        shell: bash
+        run: |
+          curl -fsS --retry 3 --retry-delay 1 --max-time 20 \
+            -H 'Title: BloFin DEMO Bot' \
+            -H 'Priority: 4' \
+            -d "BŁĄD workflow DEMO. Sprawdź run ${GITHUB_RUN_ID}." \
+            'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n' || true
