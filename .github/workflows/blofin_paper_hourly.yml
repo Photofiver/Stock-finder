@@ -1,0 +1,68 @@
+name: BloFin PAPER hourly
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '7 * * * *'
+  push:
+    paths:
+      - '.github/workflows/blofin_paper_hourly.yml'
+      - 'paper_start.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: blofin-paper-hourly
+  cancel-in-progress: false
+
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run BloFin paper bot
+        env:
+          PAPER_START_BANKROLL_USDT: '10'
+          PAPER_STATE_FILE: 'blofin_paper_state.json'
+          NTFY_TOPIC: 'blofin-nhd0jt7wspfnhtitdlaowk1n'
+        run: python blofin_paper_hourly.py
+
+      - name: Persist paper state
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add blofin_paper_state.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'Persist BloFin paper state [skip ci]'
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Notify workflow failure
+        if: failure()
+        shell: bash
+        run: |
+          curl -fsS --retry 3 --retry-delay 1 --max-time 20 \
+            -H 'Title: BloFin PAPER ERROR' \
+            -H 'Priority: 4' \
+            -d "BŁĄD paper trading. GitHub run ${GITHUB_RUN_ID}." \
+            'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n' || true
