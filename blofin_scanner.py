@@ -360,22 +360,24 @@ def send_ntfy(message):
 
 def build_message(coins, results, errors, ranking_errors):
     results.sort(
-        key=lambda row: (row["macd_flip"], row["score"], -row["blofin_rank"]),
+        key=lambda row: (row["score"], row["macd_flip"], -row["blofin_rank"]),
         reverse=True,
     )
 
-    exact = [row for row in results if row["exact"]]
-    if not exact:
+    qualified = [row for row in results if row["score"] >= 4]
+    if not qualified:
         return None
 
+    setup_5 = sum(1 for row in qualified if row["score"] == 5)
+    setup_4 = sum(1 for row in qualified if row["score"] == 4)
     flips = sum(1 for row in results if row["macd_flip"])
     header = (
-        f"TOP {len(coins)} BloFin 24h | analiza 1H | "
-        f"świeże MACD: {flips} | PEŁNY SETUP 5/5: {len(exact)}"
+        f"TOP {len(coins)} BloFin 24h | analiza 1H | świeże MACD: {flips} | "
+        f"SETUP 5/5: {setup_5} | SETUP 4/5: {setup_4}"
     )
 
     lines = []
-    for n, row in enumerate(exact, start=1):
+    for n, row in enumerate(qualified, start=1):
         lines.append(
             f"{n}. {row['inst']} {row['side']} — {row['score']}/5 | "
             f"{row['flip_label']} | BloFin 24h #{row['blofin_rank']} "
@@ -427,7 +429,7 @@ def main():
         send_ntfy(message)
         print(message)
     else:
-        print("Brak setupu 5/5 — bez powiadomienia.")
+        print("Brak setupu 4/5 lub 5/5 — bez powiadomienia.")
 
     if not no_state:
         save_state(slot)
