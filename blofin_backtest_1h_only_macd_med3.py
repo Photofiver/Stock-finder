@@ -137,9 +137,8 @@ def main():
     if not available:
         raise RuntimeError("No usable 1H data")
 
-    # Align every symbol by the SAME absolute 1H close timestamp.
     start = max(close_times[inst][min_idx] for inst in available)
-    end = min(close_times[inst][-2] for inst in available)  # need one full next 1H candle for exit
+    end = min(close_times[inst][-2] for inst in available)
 
     trades = []
     entries = 0
@@ -160,24 +159,31 @@ def main():
             bars = data[inst]
             prev, cur = bars[i - 1], bars[i]
 
-            # Volume rule on the just-closed 1H candle.
+            # Closed 1H candle must have higher volume than the previous 1H candle.
             if cur["v"] <= prev["v"]:
                 continue
 
+            # Reject only unusually large volume spikes.
             prior = [b["v"] for b in bars[i - VOL_MEDIAN_LOOKBACK:i]]
             med = statistics.median(prior)
             ratio = cur["v"] / med if med > 0 else float("inf")
             if ratio > SPIKE_CAP:
                 continue
 
-            # MACD histogram color change on the same closed 1H candle.
+            # MACD is used only for the color change on this closed 1H candle.
             hp = prev["macd_hist"]
             hc = cur["macd_hist"]
             if hp <= 0 < hc:
-                side = "LONG"
+                side = "LONG"   # red -> green
             elif hp >= 0 > hc:
-                side = "SHORT"
+                side = "SHORT"  # green -> red
             else:
+                continue
+
+            # Direction must also agree with the candle/volume-bar color.
+            if side == "LONG" and not (cur["c"] > cur["o"]):
+                continue
+            if side == "SHORT" and not (cur["c"] < cur["o"]):
                 continue
 
             candidates.append((-c["rank"], c, inst, side, cur["c"], ratio, i))
@@ -197,7 +203,7 @@ def main():
                 hit_tp = nxt["l"] <= tp
 
             if hit_sl or hit_tp:
-                loss = hit_sl  # conservative if both levels occur inside the same 1H candle
+                loss = hit_sl
                 reason = "LOSS" if loss else "WIN"
                 pnl = -NOTIONAL * SL_PCT if loss else NOTIONAL * TP_PCT
             else:
@@ -209,7 +215,7 @@ def main():
                 "inst": inst,
                 "side": side,
                 "signal_close_t": t,
-                "check_t": t + 60_000,  # strategy is checked at xx:01
+                "check_t": t + 60_000,
                 "entry": entry,
                 "ratio": ratio,
                 "reason": reason,
@@ -227,13 +233,13 @@ def main():
     wr = 100 * wins / wl if wl else 0.0
 
     print("\n1H-ONLY CLOSED-CANDLE BACKTEST")
-    print("Rules: ONLY 1H; evaluate at xx:01 after the 1H candle closes; volume>previous; volume<=2.5x median(previous 3); MACD histogram red->green LONG / green->red SHORT")
+    print("Rules: ONLY 1H; check at xx:01; volume>previous; volume<=2.5x median(previous 3); MACD COLOR CHANGE ONLY: red->green LONG / green->red SHORT; candle color must agree with direction")
     print("TP=1%, SL=1%, max hold=1h; TP/SL/time exit evaluated ONLY from the next 1H candle; no 5m/15m/4H data used")
     print(f"window_utc={fmt(start)} -> {fmt(end)} days={(end-start)/86400000:.1f}")
     print(f"entries={entries} closed={len(trades)} wins={wins} losses={losses} time_exits={times}")
     print(f"tp_sl_win_rate={wr:.2f}% ({wins}/{wl})")
     print(f"gross_pnl={total:+.4f} USDT on max {NOTIONAL:.0f} USDT notional")
-    print("NOTE: current TOP10 held fixed historically; fees/slippage excluded; if TP and SL both touch in the same next 1H candle, LOSS is assumed. Because lower-TF data are intentionally excluded, entry uses the close of the just-closed 1H candle as the price proxy for the xx:01 check.")
+    print("NOTE: current TOP10 held fixed historically; fees/slippage excluded; if TP and SL both touch in the same next 1H candle, LOSS is assumed. Entry uses the close of the just-closed 1H candle as the xx:01 price proxy because no lower-TF data are used.")
 
 
 if __name__ == "__main__":
