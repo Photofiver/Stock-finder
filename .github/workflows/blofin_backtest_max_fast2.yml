@@ -1,0 +1,27 @@
+name: BloFin Paginated Max History Backtest
+
+on:
+  push:
+    paths:
+      - 'backtest_max_fast2_trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blofin-paginated-max-history-backtest
+  cancel-in-progress: false
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Run corrected paginated max-history backtest
+        run: python blofin_backtest_max_fast2.py
