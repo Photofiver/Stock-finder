@@ -1,0 +1,19 @@
+name: BloFin Stoch TP05 SL10 1m
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_backtest_stoch_tp05_sl10_1m.py'
+      - '.github/workflows/blofin_backtest_stoch_tp05_sl10_1m.yml'
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python blofin_backtest_stoch_tp05_sl10_1m.py
