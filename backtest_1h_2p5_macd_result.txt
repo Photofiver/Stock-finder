@@ -1,0 +1,8 @@
+1H + MACD CROSS BACKTEST
+Rules: 1H volume>previous; volume<=2.5x median(previous 20 1H bars); MACD(12,26,9) histogram red->green LONG / green->red SHORT; fresh 1H close
+TP=1%, SL=1%, max hold=1h, one position at a time, TP/SL evaluated on 5m bars
+window_utc=2026-09-11 11:35 -> 2026-09-16 11:25 days=5.0
+entries=33 closed=33 wins=13 losses=13 time_exits=7 end_exits=0
+tp_sl_win_rate=50.00% (13/26)
+gross_pnl=+0.0876 USDT on max 10 USDT notional
+NOTE: current TOP10 held fixed historically; fees/slippage excluded; if TP and SL both touch in one 5m bar, LOSS is assumed.
