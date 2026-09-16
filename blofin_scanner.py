@@ -65,41 +65,6 @@ def blofin_get(path, params=None):
     raise RuntimeError(f"BloFin request failed after {HTTP_RETRIES} attempts: {last_error}")
 
 
-def ema(values, period):
-    out = [None] * len(values)
-    if len(values) < period:
-        return out
-    alpha = 2 / (period + 1)
-    previous = sum(values[:period]) / period
-    out[period - 1] = previous
-    for i in range(period, len(values)):
-        previous = alpha * values[i] + (1 - alpha) * previous
-        out[i] = previous
-    return out
-
-
-def macd_histogram(values, fast=12, slow=26, signal=9):
-    fast_ema = ema(values, fast)
-    slow_ema = ema(values, slow)
-
-    macd_line = [None] * len(values)
-    compact = []
-    positions = []
-    for i, (fast_value, slow_value) in enumerate(zip(fast_ema, slow_ema)):
-        if fast_value is not None and slow_value is not None:
-            value = fast_value - slow_value
-            macd_line[i] = value
-            compact.append(value)
-            positions.append(i)
-
-    compact_signal = ema(compact, signal)
-    histogram = [None] * len(values)
-    for j, i in enumerate(positions):
-        if compact_signal[j] is not None:
-            histogram[i] = macd_line[i] - compact_signal[j]
-    return histogram
-
-
 def parse_candles(raw):
     candles = []
     for row in raw:
@@ -208,53 +173,22 @@ def save_state(slot):
 def analyze(coin):
     inst = coin["inst"]
     candles = get_closed_candles(inst)
-    if len(candles) < 40:
+    if len(candles) < 2:
         raise RuntimeError(f"za mało zamkniętych świec ({len(candles)})")
 
-    closes = [row[4] for row in candles]
     volumes = [row[5] for row in candles]
-    hist = macd_histogram(closes)
-
     i = len(candles) - 1
     p = i - 1
-    if hist[p] is None or hist[i] is None:
-        raise RuntimeError("brak danych MACD")
-
-    short_flip = hist[p] > 0 and hist[i] < 0
-    long_flip = hist[p] < 0 and hist[i] > 0
     volume_up = volumes[i] > volumes[p]
-
-    short_rules = [short_flip, volume_up]
-    long_rules = [long_flip, volume_up]
-
-    short_score = sum(short_rules)
-    long_score = sum(long_rules)
-
-    if short_score >= long_score:
-        side = "SHORT"
-        score = short_score
-        selected_flip = short_flip
-    else:
-        side = "LONG"
-        score = long_score
-        selected_flip = long_flip
-
-    if short_flip:
-        flip_label = "MACD ZIELONY→CZERWONY"
-    elif long_flip:
-        flip_label = "MACD CZERWONY→ZIELONY"
-    else:
-        flip_label = "MACD bez świeżej zmiany"
 
     result = dict(coin)
     result.update(
         {
-            "side": side,
-            "score": score,
-            "exact": score == 2,
-            "macd_flip": selected_flip,
-            "flip_label": flip_label,
+            "score": 1 if volume_up else 0,
+            "exact": volume_up,
             "volume_up": volume_up,
+            "prev_volume": volumes[p],
+            "volume": volumes[i],
         }
     )
     return result
@@ -289,27 +223,23 @@ def send_ntfy(message):
 
 
 def build_message(coins, results, errors, ranking_errors):
-    results.sort(
-        key=lambda row: (row["score"], row["macd_flip"], -row["blofin_rank"]),
-        reverse=True,
-    )
+    results.sort(key=lambda row: (row["score"], -row["blofin_rank"]), reverse=True)
+    qualified = [row for row in results if row["volume_up"]]
 
-    qualified = [row for row in results if row["score"] == 2]
     header = (
         f"TOP {len(coins)} BloFin 24h | analiza {TIMEFRAME} | "
-        f"SETUP MACD+VOL 2/2: {len(qualified)}"
+        f"VOLUME 1/1: {len(qualified)}"
     )
 
     lines = []
     if qualified:
         for n, row in enumerate(qualified, start=1):
             lines.append(
-                f"{n}. {row['inst']} {row['side']} — 2/2 | "
-                f"{row['flip_label']} | VOL ↑ | BloFin 24h #{row['blofin_rank']} "
-                f"{row['change']:+.2f}%"
+                f"{n}. {row['inst']} — VOL ↑ {row['prev_volume']:.4f}→{row['volume']:.4f} | "
+                f"BloFin 24h #{row['blofin_rank']} {row['change']:+.2f}%"
             )
     else:
-        lines.append("Brak setupu MACD+VOL 2/2.")
+        lines.append("Brak coinów z wyższym volume niż na poprzedniej zamkniętej świecy.")
 
     if errors:
         lines.append(f"Pominięto {len(errors)} instrumentów z TOP 10 podczas analizy.")
