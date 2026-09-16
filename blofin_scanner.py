@@ -295,21 +295,21 @@ def build_message(coins, results, errors, ranking_errors):
     )
 
     qualified = [row for row in results if row["score"] == 2]
-    if not qualified:
-        return None
-
     header = (
         f"TOP {len(coins)} BloFin 24h | analiza 1H | "
         f"SETUP MACD+VOL 2/2: {len(qualified)}"
     )
 
     lines = []
-    for n, row in enumerate(qualified, start=1):
-        lines.append(
-            f"{n}. {row['inst']} {row['side']} — 2/2 | "
-            f"{row['flip_label']} | VOL ↑ | BloFin 24h #{row['blofin_rank']} "
-            f"{row['change']:+.2f}%"
-        )
+    if qualified:
+        for n, row in enumerate(qualified, start=1):
+            lines.append(
+                f"{n}. {row['inst']} {row['side']} — 2/2 | "
+                f"{row['flip_label']} | VOL ↑ | BloFin 24h #{row['blofin_rank']} "
+                f"{row['change']:+.2f}%"
+            )
+    else:
+        lines.append("Brak setupu MACD+VOL 2/2.")
 
     if errors:
         lines.append(f"Pominięto {len(errors)} instrumentów z TOP 10 podczas analizy.")
@@ -350,11 +350,8 @@ def main():
         print(error, file=sys.stderr)
 
     message = build_message(coins, results, errors, ranking_errors)
-    if message:
-        send_ntfy(message)
-        print(message)
-    else:
-        print("Brak setupu MACD+VOL 2/2 — bez powiadomienia.")
+    send_ntfy(message)
+    print(message)
 
     if not no_state:
         save_state(slot)
