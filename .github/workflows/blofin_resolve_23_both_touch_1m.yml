@@ -1,0 +1,19 @@
+name: BloFin Resolve 23 Both Touch 1m
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_resolve_23_both_touch_1m.py'
+      - '.github/workflows/blofin_resolve_23_both_touch_1m.yml'
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python blofin_resolve_23_both_touch_1m.py
