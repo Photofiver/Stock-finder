@@ -11,7 +11,9 @@ import requests
 BLOFIN_BASE = "https://openapi.blofin.com"
 NTFY_TOPIC = os.getenv("NTFY_TOPIC", "blofin-nhd0jt7wspfnhtitdlaowk1n").strip()
 
-TIMEFRAME = os.getenv("TIMEFRAME", "1H").strip() or "1H"
+SINGLE_TIMEFRAME = os.getenv("TIMEFRAME", "").strip()
+TIMEFRAMES = [SINGLE_TIMEFRAME] if SINGLE_TIMEFRAME else ["4H", "1H", "15m", "5m"]
+MIN_MATCHES = 1 if SINGLE_TIMEFRAME else 2
 TOP_N = 10
 WORKERS = 4
 REQUEST_INTERVAL = 0.15
@@ -134,10 +136,10 @@ def get_universe():
     return coins, ranking_errors
 
 
-def get_closed_candles(inst):
+def get_closed_candles(inst, timeframe):
     raw = blofin_get(
         "/api/v1/market/candles",
-        {"instId": inst, "bar": TIMEFRAME, "limit": "120"},
+        {"instId": inst, "bar": timeframe, "limit": "10"},
     )
     return [row for row in parse_candles(raw) if row[6] == "1"]
 
@@ -171,25 +173,32 @@ def save_state(slot):
 
 
 def analyze(coin):
-    inst = coin["inst"]
-    candles = get_closed_candles(inst)
-    if len(candles) < 2:
-        raise RuntimeError(f"za mało zamkniętych świec ({len(candles)})")
-
-    volumes = [row[5] for row in candles]
-    i = len(candles) - 1
-    p = i - 1
-    volume_up = volumes[i] > volumes[p]
-
     result = dict(coin)
-    result.update(
-        {
-            "score": 1 if volume_up else 0,
-            "exact": volume_up,
-            "volume_up": volume_up,
-            "prev_volume": volumes[p],
-            "volume": volumes[i],
-        }
+    result["timeframes"] = {}
+    result["errors"] = []
+
+    for timeframe in TIMEFRAMES:
+        try:
+            candles = get_closed_candles(coin["inst"], timeframe)
+            if len(candles) < 2:
+                raise RuntimeError(f"za mało zamkniętych świec ({len(candles)})")
+            prev_volume = candles[-2][5]
+            volume = candles[-1][5]
+            volume_up = volume > prev_volume
+            result["timeframes"][timeframe] = {
+                "volume_up": volume_up,
+                "prev_volume": prev_volume,
+                "volume": volume,
+            }
+        except Exception as exc:
+            result["timeframes"][timeframe] = None
+            result["errors"].append(f"{timeframe}: {type(exc).__name__}: {exc}")
+
+    result["matches"] = sum(
+        1
+        for timeframe in TIMEFRAMES
+        if result["timeframes"].get(timeframe)
+        and result["timeframes"][timeframe]["volume_up"]
     )
     return result
 
@@ -198,13 +207,18 @@ def send_ntfy(message):
     if not NTFY_TOPIC:
         raise RuntimeError("NTFY_TOPIC is empty")
 
+    if SINGLE_TIMEFRAME:
+        title = f"BloFin {SINGLE_TIMEFRAME} Scanner"
+    else:
+        title = "BloFin Multi-TF Volume"
+
     last_error = None
     for attempt in range(5):
         try:
             response = requests.post(
                 f"https://ntfy.sh/{NTFY_TOPIC}",
                 data=message.encode("utf-8"),
-                headers={"Title": f"BloFin {TIMEFRAME} Scanner", "Priority": "4"},
+                headers={"Title": title, "Priority": "4"},
                 timeout=20,
             )
             response.raise_for_status()
@@ -222,27 +236,52 @@ def send_ntfy(message):
     raise RuntimeError(f"ntfy failed after 5 attempts: {last_error}")
 
 
-def build_message(coins, results, errors, ranking_errors):
-    results.sort(key=lambda row: (row["score"], -row["blofin_rank"]), reverse=True)
-    qualified = [row for row in results if row["volume_up"]]
+def timeframe_status(row, timeframe):
+    data = row["timeframes"].get(timeframe)
+    if data is None:
+        return f"{timeframe} ?"
+    return f"{timeframe} {'✓' if data['volume_up'] else '✗'}"
 
-    header = (
-        f"TOP {len(coins)} BloFin 24h | analiza {TIMEFRAME} | "
-        f"VOLUME 1/1: {len(qualified)}"
-    )
+
+def build_message(coins, results, ranking_errors):
+    results.sort(key=lambda row: (row["matches"], -row["blofin_rank"]), reverse=True)
+    qualified = [row for row in results if row["matches"] >= MIN_MATCHES]
+
+    if SINGLE_TIMEFRAME:
+        header = (
+            f"TOP {len(coins)} BloFin 24h | analiza {SINGLE_TIMEFRAME} | "
+            f"VOLUME 1/1: {len(qualified)}"
+        )
+    else:
+        header = (
+            f"TOP {len(coins)} BloFin 24h | VOLUME multi-TF 4H→1H→15m→5m | "
+            f"min 2/4: {len(qualified)}"
+        )
 
     lines = []
     if qualified:
         for n, row in enumerate(qualified, start=1):
-            lines.append(
-                f"{n}. {row['inst']} — VOL ↑ {row['prev_volume']:.4f}→{row['volume']:.4f} | "
-                f"BloFin 24h #{row['blofin_rank']} {row['change']:+.2f}%"
-            )
+            if SINGLE_TIMEFRAME:
+                data = row["timeframes"][SINGLE_TIMEFRAME]
+                lines.append(
+                    f"{n}. {row['inst']} — VOL ↑ {data['prev_volume']:.4f}→{data['volume']:.4f} | "
+                    f"BloFin 24h #{row['blofin_rank']} {row['change']:+.2f}%"
+                )
+            else:
+                statuses = " | ".join(timeframe_status(row, tf) for tf in TIMEFRAMES)
+                lines.append(
+                    f"{n}. {row['inst']} — {row['matches']}/4 | {statuses} | "
+                    f"BloFin 24h #{row['blofin_rank']} {row['change']:+.2f}%"
+                )
     else:
-        lines.append("Brak coinów z wyższym volume niż na poprzedniej zamkniętej świecy.")
+        if SINGLE_TIMEFRAME:
+            lines.append("Brak coinów z wyższym volume niż na poprzedniej zamkniętej świecy.")
+        else:
+            lines.append("Brak coinów z rosnącym volume na co najmniej 2 z 4 interwałów.")
 
-    if errors:
-        lines.append(f"Pominięto {len(errors)} instrumentów z TOP 10 podczas analizy.")
+    analysis_errors = sum(len(row["errors"]) for row in results)
+    if analysis_errors:
+        lines.append(f"Błędy danych dla {analysis_errors} kombinacji coin/interwał.")
     if ranking_errors:
         lines.append(f"Pominięto {len(ranking_errors)} instrumentów przy rankingu BloFin 24h.")
 
@@ -264,7 +303,6 @@ def main():
         raise RuntimeError("Nie znaleziono aktywnych kontraktów USDT-M")
 
     results = []
-    errors = []
     with ThreadPoolExecutor(max_workers=WORKERS) as executor:
         future_map = {executor.submit(analyze, coin): coin["inst"] for coin in coins}
         for future in as_completed(future_map):
@@ -272,14 +310,15 @@ def main():
             try:
                 results.append(future.result())
             except Exception as exc:
-                errors.append(f"{inst}: {type(exc).__name__}: {exc}")
+                print(f"{inst}: {type(exc).__name__}: {exc}", file=sys.stderr)
 
     for error in ranking_errors:
         print(f"RANKING 24H: {error}", file=sys.stderr)
-    for error in errors:
-        print(error, file=sys.stderr)
+    for row in results:
+        for error in row["errors"]:
+            print(f"{row['inst']} {error}", file=sys.stderr)
 
-    message = build_message(coins, results, errors, ranking_errors)
+    message = build_message(coins, results, ranking_errors)
     send_ntfy(message)
     print(message)
 
