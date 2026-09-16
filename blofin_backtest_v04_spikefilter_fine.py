@@ -8,7 +8,7 @@ class Cap(float):
         return super().__format__(spec)
 
 
-bt.SPIKE_CAPS = [None, Cap(2.0), Cap(2.25), Cap(2.5), Cap(2.75), Cap(3.0)]
+bt.SPIKE_CAPS = [None, Cap(2.0), Cap(2.25), Cap(2.5), Cap(2.75), Cap(3.0), Cap(3.5)]
 
 if __name__ == "__main__":
     bt.main()
