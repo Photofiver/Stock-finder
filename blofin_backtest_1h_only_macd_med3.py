@@ -1,3 +1,4 @@
+import bisect
 import statistics
 import time
 from datetime import datetime, timezone
@@ -121,6 +122,7 @@ def main():
     print("CURRENT TOP10:", ", ".join(f"#{c['rank']} {c['inst']} {c['change']:+.2f}%" for c in coins))
 
     data = {}
+    close_times = {}
     for c in coins:
         inst = c["inst"]
         bars = fetch_1h(inst)
@@ -128,30 +130,37 @@ def main():
         for i, h in enumerate(hist):
             bars[i]["macd_hist"] = h
         data[inst] = bars
+        close_times[inst] = [b["ts"] + D1H for b in bars]
 
-    min_bars = MACD_SLOW + MACD_SIGNAL + 2
-    available = [c["inst"] for c in coins if len(data[c["inst"]]) >= min_bars + 1]
+    min_idx = MACD_SLOW + MACD_SIGNAL + 2
+    available = [c["inst"] for c in coins if len(data[c["inst"]]) >= min_idx + 2]
     if not available:
         raise RuntimeError("No usable 1H data")
 
-    start_idx = min_bars
+    # Align every symbol by the SAME absolute 1H close timestamp.
+    start = max(close_times[inst][min_idx] for inst in available)
+    end = min(close_times[inst][-2] for inst in available)  # need one full next 1H candle for exit
+
     trades = []
     entries = 0
+    t = start
 
-    # Only 1H data are used. Signal is read from a fully closed 1H candle.
-    # Operationally this corresponds to checking at xx:01 after the xx:00 close.
-    # Entry reference is the close of that just-closed 1H candle because no lower-TF data are used.
-    max_len = min(len(data[inst]) for inst in available)
-
-    for i in range(start_idx, max_len - 1):
+    while t <= end:
         candidates = []
         for c in coins:
             inst = c["inst"]
             if inst not in available:
                 continue
+
+            times = close_times[inst]
+            i = bisect.bisect_left(times, t)
+            if i >= len(times) or times[i] != t or i < min_idx or i + 1 >= len(data[inst]):
+                continue
+
             bars = data[inst]
             prev, cur = bars[i - 1], bars[i]
 
+            # Volume rule on the just-closed 1H candle.
             if cur["v"] <= prev["v"]:
                 continue
 
@@ -161,6 +170,7 @@ def main():
             if ratio > SPIKE_CAP:
                 continue
 
+            # MACD histogram color change on the same closed 1H candle.
             hp = prev["macd_hist"]
             hc = cur["macd_hist"]
             if hp <= 0 < hc:
@@ -170,63 +180,60 @@ def main():
             else:
                 continue
 
-            candidates.append((-c["rank"], c, inst, side, cur["c"], ratio, cur["ts"] + D1H))
+            candidates.append((-c["rank"], c, inst, side, cur["c"], ratio, i))
 
-        if not candidates:
-            continue
+        if candidates:
+            candidates.sort(reverse=True, key=lambda x: x[0])
+            _, c, inst, side, entry, ratio, i = candidates[0]
+            nxt = data[inst][i + 1]
+            tp = entry * (1.01 if side == "LONG" else 0.99)
+            sl = entry * (0.99 if side == "LONG" else 1.01)
 
-        candidates.sort(reverse=True, key=lambda x: x[0])
-        _, c, inst, side, entry, ratio, signal_close_t = candidates[0]
-        nxt = data[inst][i + 1]
-        tp = entry * (1.01 if side == "LONG" else 0.99)
-        sl = entry * (0.99 if side == "LONG" else 1.01)
+            if side == "LONG":
+                hit_sl = nxt["l"] <= sl
+                hit_tp = nxt["h"] >= tp
+            else:
+                hit_sl = nxt["h"] >= sl
+                hit_tp = nxt["l"] <= tp
 
-        if side == "LONG":
-            hit_sl = nxt["l"] <= sl
-            hit_tp = nxt["h"] >= tp
-        else:
-            hit_sl = nxt["h"] >= sl
-            hit_tp = nxt["l"] <= tp
+            if hit_sl or hit_tp:
+                loss = hit_sl  # conservative if both levels occur inside the same 1H candle
+                reason = "LOSS" if loss else "WIN"
+                pnl = -NOTIONAL * SL_PCT if loss else NOTIONAL * TP_PCT
+            else:
+                reason = "TIME"
+                d = 1 if side == "LONG" else -1
+                pnl = NOTIONAL * (nxt["c"] / entry - 1) * d
 
-        if hit_sl or hit_tp:
-            loss = hit_sl  # conservative if both are touched within same 1H candle
-            reason = "LOSS" if loss else "WIN"
-            pnl = -NOTIONAL * SL_PCT if loss else NOTIONAL * TP_PCT
-        else:
-            reason = "TIME"
-            d = 1 if side == "LONG" else -1
-            pnl = NOTIONAL * (nxt["c"] / entry - 1) * d
+            trades.append({
+                "inst": inst,
+                "side": side,
+                "signal_close_t": t,
+                "check_t": t + 60_000,  # strategy is checked at xx:01
+                "entry": entry,
+                "ratio": ratio,
+                "reason": reason,
+                "pnl": pnl,
+            })
+            entries += 1
 
-        trades.append({
-            "inst": inst,
-            "side": side,
-            "signal_close_t": signal_close_t,
-            "entry_check_t": signal_close_t + 60_000,
-            "entry": entry,
-            "ratio": ratio,
-            "reason": reason,
-            "pnl": pnl,
-        })
-        entries += 1
+        t += D1H
 
-    wins = sum(t["reason"] == "WIN" for t in trades)
-    losses = sum(t["reason"] == "LOSS" for t in trades)
-    times = sum(t["reason"] == "TIME" for t in trades)
-    total = sum(t["pnl"] for t in trades)
+    wins = sum(x["reason"] == "WIN" for x in trades)
+    losses = sum(x["reason"] == "LOSS" for x in trades)
+    times = sum(x["reason"] == "TIME" for x in trades)
+    total = sum(x["pnl"] for x in trades)
     wl = wins + losses
     wr = 100 * wins / wl if wl else 0.0
 
-    first_t = min(data[inst][start_idx]["ts"] + D1H for inst in available)
-    last_t = min(data[inst][max_len - 1]["ts"] + D1H for inst in available)
-
     print("\n1H-ONLY CLOSED-CANDLE BACKTEST")
-    print("Rules: only 1H; evaluate at xx:01 after candle close; volume>previous; volume<=2.5x median(previous 3); MACD histogram red->green LONG / green->red SHORT")
-    print("TP=1%, SL=1%, max hold=1h; exits evaluated ONLY from the next 1H candle; no 5m/15m/4H data used")
-    print(f"window_utc={fmt(first_t)} -> {fmt(last_t)} days={(last_t-first_t)/86400000:.1f}")
+    print("Rules: ONLY 1H; evaluate at xx:01 after the 1H candle closes; volume>previous; volume<=2.5x median(previous 3); MACD histogram red->green LONG / green->red SHORT")
+    print("TP=1%, SL=1%, max hold=1h; TP/SL/time exit evaluated ONLY from the next 1H candle; no 5m/15m/4H data used")
+    print(f"window_utc={fmt(start)} -> {fmt(end)} days={(end-start)/86400000:.1f}")
     print(f"entries={entries} closed={len(trades)} wins={wins} losses={losses} time_exits={times}")
     print(f"tp_sl_win_rate={wr:.2f}% ({wins}/{wl})")
     print(f"gross_pnl={total:+.4f} USDT on max {NOTIONAL:.0f} USDT notional")
-    print("NOTE: current TOP10 held fixed historically; fees/slippage excluded; if TP and SL both touch in the same next 1H candle, LOSS is assumed; entry price uses the closed 1H candle close because lower-TF data are intentionally excluded.")
+    print("NOTE: current TOP10 held fixed historically; fees/slippage excluded; if TP and SL both touch in the same next 1H candle, LOSS is assumed. Because lower-TF data are intentionally excluded, entry uses the close of the just-closed 1H candle as the price proxy for the xx:01 check.")
 
 
 if __name__ == "__main__":
