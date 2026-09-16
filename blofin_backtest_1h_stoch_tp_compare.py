@@ -145,7 +145,6 @@ def main():
     start = max(close_times[inst][min_idx] for inst in available)
     end = min(close_times[inst][-1] for inst in available)
 
-    # Average 1H movement over the exact common test window and same frozen symbols.
     ranges = []
     bodies = []
     close_to_close = []
@@ -203,10 +202,11 @@ def main():
         candidates.sort(reverse=True, key=lambda x: x[0])
         return candidates
 
-    def simulate(tp_sl_pct):
+    def simulate(tp_pct, sl_pct):
         open_pos = None
         trades = []
         entries = 0
+        both_touch = 0
         t = start
 
         while t <= end:
@@ -223,8 +223,10 @@ def main():
                         hit_tp = b["l"] <= open_pos["tp"]
 
                     if hit_sl or hit_tp:
-                        loss = hit_sl  # conservative if both levels touched in same 1H candle
-                        pnl = -NOTIONAL * tp_sl_pct if loss else NOTIONAL * tp_sl_pct
+                        if hit_sl and hit_tp:
+                            both_touch += 1
+                        loss = hit_sl
+                        pnl = -NOTIONAL * sl_pct if loss else NOTIONAL * tp_pct
                         trades.append({**open_pos, "reason": "LOSS" if loss else "WIN", "pnl": pnl})
                         open_pos = None
                     elif t - open_pos["entry_close_t"] >= HOLD_HOURS * D1H:
@@ -242,8 +244,8 @@ def main():
                         "side": side,
                         "entry_close_t": t,
                         "entry": entry,
-                        "tp": entry * (1.0 + tp_sl_pct if side == "LONG" else 1.0 - tp_sl_pct),
-                        "sl": entry * (1.0 - tp_sl_pct if side == "LONG" else 1.0 + tp_sl_pct),
+                        "tp": entry * (1.0 + tp_pct if side == "LONG" else 1.0 - tp_pct),
+                        "sl": entry * (1.0 - sl_pct if side == "LONG" else 1.0 + sl_pct),
                     }
                     entries += 1
 
@@ -266,7 +268,8 @@ def main():
         wl = wins + losses
         wr = 100.0 * wins / wl if wl else 0.0
         return {
-            "pct": tp_sl_pct * 100,
+            "tp": tp_pct * 100,
+            "sl": sl_pct * 100,
             "entries": entries,
             "closed": len(trades),
             "wins": wins,
@@ -276,21 +279,22 @@ def main():
             "wr": wr,
             "wl": wl,
             "pnl": total,
+            "both": both_touch,
         }
 
-    r100 = simulate(0.01)
-    r050 = simulate(0.005)
+    baseline = simulate(0.01, 0.01)
+    test = simulate(0.005, 0.01)
 
-    print("\n1H MOVEMENT + STOCHASTIC TP/SL COMPARISON")
-    print("Same frozen TOP10 and same fetched 1H candles for both TP/SL variants.")
+    print("\n1H STOCHASTIC ASYMMETRIC TP/SL COMPARISON")
+    print("Same frozen TOP10 and same fetched 1H candles for both variants.")
     print(f"window_utc={fmt(start)} -> {fmt(end)} days={(end-start)/86400000:.1f}")
     print(f"AVG_1H_HIGH_LOW_RANGE={statistics.mean(ranges):.3f}% MEDIAN={statistics.median(ranges):.3f}%")
     print(f"AVG_1H_ABS_BODY_OPEN_CLOSE={statistics.mean(bodies):.3f}% MEDIAN={statistics.median(bodies):.3f}%")
     print(f"AVG_1H_ABS_CLOSE_TO_CLOSE={statistics.mean(close_to_close):.3f}% MEDIAN={statistics.median(close_to_close):.3f}%")
     print("Rules: ONLY 1H; xx:01; volume>previous; volume<=2.5x median(previous 3); Stochastic 14,3,3 K/D cross; candle color agrees; max hold=2h; one position at a time")
-    for r in (r100, r050):
-        print(f"TP_SL_{r['pct']:.1f}% entries={r['entries']} closed={r['closed']} wins={r['wins']} losses={r['losses']} time_exits={r['time']} end_exits={r['end']} tp_sl_win_rate={r['wr']:.2f}% ({r['wins']}/{r['wl']}) gross_pnl={r['pnl']:+.4f} USDT")
-    print(f"DELTA_0.5_MINUS_1.0={r050['pnl'] - r100['pnl']:+.4f} USDT")
+    for r in (baseline, test):
+        print(f"TP_{r['tp']:.1f}_SL_{r['sl']:.1f} entries={r['entries']} closed={r['closed']} wins={r['wins']} losses={r['losses']} time_exits={r['time']} end_exits={r['end']} tp_sl_win_rate={r['wr']:.2f}% ({r['wins']}/{r['wl']}) both_touch={r['both']} gross_pnl={r['pnl']:+.4f} USDT")
+    print(f"DELTA_TEST_MINUS_BASELINE={test['pnl'] - baseline['pnl']:+.4f} USDT")
     print("NOTE: fees/slippage excluded; current TOP10 held fixed historically; if TP and SL both touch in the same 1H candle, LOSS is assumed; entry uses the just-closed 1H close as xx:01 price proxy.")
 
 
