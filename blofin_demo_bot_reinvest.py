@@ -6,6 +6,7 @@ from decimal import Decimal
 import blofin_demo_bot as base
 
 BANKROLL_FILE = os.getenv("DEMO_BANKROLL_FILE", "demo_bankroll.json")
+POSITION_FILE = os.getenv("DEMO_POSITION_FILE", "demo_position.json")
 START_BANKROLL_USDT = Decimal(os.getenv("DEMO_START_BANKROLL_USDT", "10"))
 MIN_BANKROLL_USDT = Decimal("0.01")
 
@@ -33,6 +34,39 @@ def save_bankroll(bankroll):
         json.dump(payload, f, ensure_ascii=False, indent=2)
         f.write("\n")
     os.replace(tmp, BANKROLL_FILE)
+
+
+def load_position():
+    try:
+        with open(POSITION_FILE, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        if payload.get("inst") and payload.get("opened_ms"):
+            return payload
+    except (FileNotFoundError, ValueError, TypeError, json.JSONDecodeError):
+        pass
+    return None
+
+
+def save_position(position):
+    if not position:
+        try:
+            os.remove(POSITION_FILE)
+        except FileNotFoundError:
+            pass
+        return
+    keep = {
+        "inst": position.get("inst"),
+        "direction": position.get("direction"),
+        "opened_ms": int(position.get("opened_ms") or 0),
+        "order_id": position.get("order_id", ""),
+        "signal_key": position.get("signal_key"),
+        "notional": str(position.get("notional", "0")),
+    }
+    tmp = POSITION_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(keep, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    os.replace(tmp, POSITION_FILE)
 
 
 def get_closed_result(position, reason_hint=None):
@@ -82,17 +116,23 @@ def run():
     base.require_credentials()
     base.ensure_net_mode()
     instruments = base.get_instruments()
-    position = None
-    last_signal_key = None
+    position = load_position()
+    last_signal_key = position.get("signal_key") if position else None
     bankroll = load_bankroll()
     save_bankroll(bankroll)
+
+    if position:
+        base.notify(
+            f"Wznowiono sesję DEMO z otwartą pozycją {position['direction']} {position['inst']}. "
+            f"Bankroll {bankroll:.4f} USDT.",
+            "BloFin DEMO RESUME",
+        )
 
     started = time.monotonic()
     end_time = started + base.TEST_MINUTES * 60
     base.notify(
-        f"START test DEMO z reinwestowaniem: bankroll {bankroll:.4f} USDT, "
-        f"sesja {base.TEST_MINUTES} min. Po każdym zamknięciu kolejna pozycja używa "
-        "bankroll + zysk - strata.",
+        f"START sesji DEMO z reinwestowaniem: bankroll {bankroll:.4f} USDT, "
+        f"sesja {base.TEST_MINUTES} min. Stan pozycji i bankroll są zachowywane między sesjami.",
         "BloFin DEMO START",
     )
 
@@ -105,11 +145,15 @@ def run():
                     net = get_closed_result(position)
                     bankroll = apply_result(bankroll, net)
                     position = None
-                elif time.monotonic() - position["opened_monotonic"] >= base.MAX_HOLD_SECONDS:
-                    base.close_position(position["inst"])
-                    net = get_closed_result(position, "TIME EXIT")
-                    bankroll = apply_result(bankroll, net)
-                    position = None
+                    save_position(None)
+                else:
+                    age_seconds = max(0, (int(time.time() * 1000) - int(position["opened_ms"])) / 1000)
+                    if age_seconds >= base.MAX_HOLD_SECONDS:
+                        base.close_position(position["inst"])
+                        net = get_closed_result(position, "TIME EXIT")
+                        bankroll = apply_result(bankroll, net)
+                        position = None
+                        save_position(None)
 
             if not position:
                 if bankroll < MIN_BANKROLL_USDT:
@@ -119,14 +163,13 @@ def run():
                     )
                     break
 
-                # Existing sizing logic treats MAX_NOTIONAL_USDT as the position notional cap.
-                # Set it to the strategy bankroll so profits and losses are compounded automatically.
                 base.MAX_NOTIONAL_USDT = bankroll
                 top10 = base.get_top10(instruments)
                 candidate = base.choose_candidate(top10, instruments, last_signal_key)
                 if candidate:
                     position = base.place_trade(candidate, instruments[candidate["inst"]])
                     last_signal_key = candidate["signal_key"]
+                    save_position(position)
                     base.notify(
                         f"Reinvest ON | bankroll {bankroll:.4f} USDT | "
                         f"pozycja notional≈{Decimal(position['notional']):.4f} USDT",
@@ -142,25 +185,20 @@ def run():
         if wait > 0 and time.monotonic() + wait < end_time:
             time.sleep(wait)
 
-    if position:
-        try:
-            if base.find_open_position(position["inst"]):
-                base.close_position(position["inst"])
-                net = get_closed_result(position, "TEST END")
-            else:
-                net = get_closed_result(position)
-            bankroll = apply_result(bankroll, net)
-        except Exception as exc:
-            base.notify(
-                f"BŁĄD przy zamykaniu końcowym {position['inst']}: {exc}",
-                "BloFin DEMO ERROR",
-            )
-
     save_bankroll(bankroll)
-    base.notify(
-        f"KONIEC sesji testowej DEMO. Bankroll zapisany: {bankroll:.4f} USDT.",
-        "BloFin DEMO STOP",
-    )
+    save_position(position)
+    if position:
+        base.notify(
+            f"KONIEC tej sesji GitHub. Pozycja {position['direction']} {position['inst']} pozostaje otwarta "
+            "i będzie dalej pilnowana w następnej sesji.",
+            "BloFin DEMO CONTINUE",
+        )
+    else:
+        base.notify(
+            f"KONIEC tej sesji GitHub. Bankroll zapisany: {bankroll:.4f} USDT. "
+            "Następna sesja uruchomi się automatycznie.",
+            "BloFin DEMO CONTINUE",
+        )
 
 
 if __name__ == "__main__":
