@@ -13,7 +13,6 @@ NTFY_TOPIC = os.getenv("NTFY_TOPIC", "blofin-nhd0jt7wspfnhtitdlaowk1n").strip()
 
 TIMEFRAME = "1H"
 TOP_N = 10
-REPORT_N = 10
 WORKERS = 4
 REQUEST_INTERVAL = 0.15
 HTTP_RETRIES = 4
@@ -66,15 +65,6 @@ def blofin_get(path, params=None):
     raise RuntimeError(f"BloFin request failed after {HTTP_RETRIES} attempts: {last_error}")
 
 
-def sma(values, period):
-    out = [None] * len(values)
-    for i in range(period - 1, len(values)):
-        window = values[i - period + 1:i + 1]
-        if not any(v is None for v in window):
-            out[i] = sum(window) / period
-    return out
-
-
 def ema(values, period):
     out = [None] * len(values)
     if len(values) < period:
@@ -86,42 +76,6 @@ def ema(values, period):
         previous = alpha * values[i] + (1 - alpha) * previous
         out[i] = previous
     return out
-
-
-def rsi(values, period=14):
-    out = [None] * len(values)
-    if len(values) < period + 1:
-        return out
-
-    gains = []
-    losses = []
-    for i in range(1, period + 1):
-        change = values[i] - values[i - 1]
-        gains.append(max(change, 0))
-        losses.append(max(-change, 0))
-
-    avg_gain = sum(gains) / period
-    avg_loss = sum(losses) / period
-    out[period] = 100 if avg_loss == 0 else 100 - 100 / (1 + avg_gain / avg_loss)
-
-    for i in range(period + 1, len(values)):
-        change = values[i] - values[i - 1]
-        avg_gain = (avg_gain * (period - 1) + max(change, 0)) / period
-        avg_loss = (avg_loss * (period - 1) + max(-change, 0)) / period
-        out[i] = 100 if avg_loss == 0 else 100 - 100 / (1 + avg_gain / avg_loss)
-
-    return out
-
-
-def stochastic(highs, lows, closes, period=14, smooth_k=3, smooth_d=3):
-    raw_k = [None] * len(closes)
-    for i in range(period - 1, len(closes)):
-        high = max(highs[i - period + 1:i + 1])
-        low = min(lows[i - period + 1:i + 1])
-        raw_k[i] = 50.0 if high == low else 100 * (closes[i] - low) / (high - low)
-    k = sma(raw_k, smooth_k)
-    d = sma(k, smooth_d)
-    return k, d
 
 
 def macd_histogram(values, fast=12, slow=26, signal=9):
@@ -257,40 +211,21 @@ def analyze(coin):
     if len(candles) < 40:
         raise RuntimeError(f"za mało zamkniętych świec ({len(candles)})")
 
-    highs = [row[2] for row in candles]
-    lows = [row[3] for row in candles]
     closes = [row[4] for row in candles]
     volumes = [row[5] for row in candles]
-
     hist = macd_histogram(closes)
-    rs = rsi(closes)
-    k, d = stochastic(highs, lows, closes)
 
     i = len(candles) - 1
     p = i - 1
-
-    for series in (hist, rs, k, d):
-        if series[p] is None or series[i] is None:
-            raise RuntimeError("brak danych wskaźników")
+    if hist[p] is None or hist[i] is None:
+        raise RuntimeError("brak danych MACD")
 
     short_flip = hist[p] > 0 and hist[i] < 0
     long_flip = hist[p] < 0 and hist[i] > 0
+    volume_up = volumes[i] > volumes[p]
 
-    short_rules = [
-        short_flip,
-        volumes[i] > volumes[p],
-        rs[i] < rs[p],
-        k[p] >= 80 and k[i] < k[p],
-        k[i] < d[i],
-    ]
-
-    long_rules = [
-        long_flip,
-        volumes[i] > volumes[p],
-        rs[i] > rs[p],
-        k[p] <= 20 and k[i] > k[p],
-        k[i] > d[i],
-    ]
+    short_rules = [short_flip, volume_up]
+    long_rules = [long_flip, volume_up]
 
     short_score = sum(short_rules)
     long_score = sum(long_rules)
@@ -316,15 +251,10 @@ def analyze(coin):
         {
             "side": side,
             "score": score,
-            "exact": score == 5,
+            "exact": score == 2,
             "macd_flip": selected_flip,
             "flip_label": flip_label,
-            "rsi": rs[i],
-            "prev_rsi": rs[p],
-            "prev_k": k[p],
-            "k": k[i],
-            "d": d[i],
-            "volume_up": volumes[i] > volumes[p],
+            "volume_up": volume_up,
         }
     )
     return result
@@ -364,26 +294,21 @@ def build_message(coins, results, errors, ranking_errors):
         reverse=True,
     )
 
-    qualified = [row for row in results if row["score"] >= 4]
+    qualified = [row for row in results if row["score"] == 2]
     if not qualified:
         return None
 
-    setup_5 = sum(1 for row in qualified if row["score"] == 5)
-    setup_4 = sum(1 for row in qualified if row["score"] == 4)
-    flips = sum(1 for row in results if row["macd_flip"])
     header = (
-        f"TOP {len(coins)} BloFin 24h | analiza 1H | świeże MACD: {flips} | "
-        f"SETUP 5/5: {setup_5} | SETUP 4/5: {setup_4}"
+        f"TOP {len(coins)} BloFin 24h | analiza 1H | "
+        f"SETUP MACD+VOL 2/2: {len(qualified)}"
     )
 
     lines = []
     for n, row in enumerate(qualified, start=1):
         lines.append(
-            f"{n}. {row['inst']} {row['side']} — {row['score']}/5 | "
-            f"{row['flip_label']} | BloFin 24h #{row['blofin_rank']} "
-            f"{row['change']:+.2f}% | VOL {'↑' if row['volume_up'] else '↓/='} | "
-            f"RSI {row['prev_rsi']:.1f}→{row['rsi']:.1f} | "
-            f"STOCH K {row['prev_k']:.1f}→{row['k']:.1f}, D {row['d']:.1f}"
+            f"{n}. {row['inst']} {row['side']} — 2/2 | "
+            f"{row['flip_label']} | VOL ↑ | BloFin 24h #{row['blofin_rank']} "
+            f"{row['change']:+.2f}%"
         )
 
     if errors:
@@ -429,7 +354,7 @@ def main():
         send_ntfy(message)
         print(message)
     else:
-        print("Brak setupu 4/5 lub 5/5 — bez powiadomienia.")
+        print("Brak setupu MACD+VOL 2/2 — bez powiadomienia.")
 
     if not no_state:
         save_state(slot)
