@@ -1,0 +1,75 @@
+name: BloFin 5m One-Time Test
+
+on:
+  push:
+    paths:
+      - 'test_trigger.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blofin-5m-test
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run isolated 5m test
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cp blofin_scanner.py blofin_scanner_test.py
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('blofin_scanner_test.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('TIMEFRAME = "1H"', 'TIMEFRAME = "5m"', 1)
+          text = text.replace('BloFin 1H Scanner', 'BloFin 5m Test')
+          text = text.replace('analiza 1H |', 'analiza 5m |')
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          set +e
+          OUTPUT=$(FORCE_SCAN=1 NO_STATE=1 python blofin_scanner_test.py 2>&1)
+          STATUS=$?
+          set -e
+
+          printf '%s\n' "$OUTPUT"
+
+          if [ "$STATUS" -ne 0 ]; then
+            exit "$STATUS"
+          fi
+
+          if grep -q 'SETUP MACD+VOL 2/2:' <<< "$OUTPUT"; then
+            echo '5m test found at least one 2/2 setup; scanner already sent ntfy result.'
+          elif grep -q 'Brak setupu MACD+VOL 2/2' <<< "$OUTPUT"; then
+            curl -fsS --retry 3 --retry-delay 1 --max-time 20 \
+              -H 'Title: BloFin 5m Test' \
+              -H 'Priority: 4' \
+              -d 'TOP 10 BloFin 24h | analiza 5m | TEST: brak setupu MACD+VOL 2/2.' \
+              'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n'
+          else
+            curl -fsS --retry 3 --retry-delay 1 --max-time 20 \
+              -H 'Title: BloFin 5m Test' \
+              -H 'Priority: 4' \
+              -d 'BŁĄD TESTU 5m: skaner zakończył się bez jednoznacznego wyniku 2/2.' \
+              'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n'
+            exit 1
+          fi
