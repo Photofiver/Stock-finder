@@ -1,0 +1,17 @@
+name: BloFin Diagnose TP05 SL05 Losses
+on:
+  push:
+    paths:
+      - 'blofin_diagnose_tp05_sl05_losses.py'
+      - '.github/workflows/blofin_diagnose_tp05_sl05_losses.yml'
+  workflow_dispatch:
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python blofin_diagnose_tp05_sl05_losses.py
