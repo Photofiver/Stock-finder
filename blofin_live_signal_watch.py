@@ -1,9 +1,6 @@
-import hashlib
-import hmac
 import json
 import os
 import uuid
-from urllib.parse import urlencode
 
 import requests
 
@@ -13,8 +10,6 @@ SIGNAL_STATE_FILE = os.getenv("SIGNAL_STATE_FILE", "blofin_signal_state.json")
 PENDING_FILE = os.getenv("PENDING_SIGNAL_FILE", "blofin_pending_signal.json")
 APPROVAL_TTL_MS = 2 * 60 * 1000
 APPROVAL_URL = "https://github.com/Photofiver/Stock-finder/actions/workflows/blofin_live_manual.yml"
-ONE_CLICK_RELAY_URL = os.getenv("ONE_CLICK_RELAY_URL", "").strip()
-ONE_CLICK_HMAC_SECRET = os.getenv("ONE_CLICK_HMAC_SECRET", "").strip()
 
 
 def load_json(path, default):
@@ -48,41 +43,16 @@ def default_signal_state():
     }
 
 
-def signature_payload(pending):
-    return "|".join(
-        [
-            str(pending["signal_id"]),
-            str(pending["inst"]),
-            str(pending["side"]),
-            str(pending["signal_close_ms"]),
-            str(pending["created_at_ms"]),
-            str(pending["expires_at_ms"]),
-        ]
-    )
-
-
-def approval_signature(pending):
-    if not ONE_CLICK_HMAC_SECRET:
-        return ""
-    return hmac.new(
-        ONE_CLICK_HMAC_SECRET.encode("utf-8"),
-        signature_payload(pending).encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
-
-
 def notify_signal(pending):
     inst = pending["inst"]
     side = pending["side"]
     rank = pending["rank"]
     message = (
         f"SYGNAL {side} {inst} | TOP{rank} | masz 2 minuty na zatwierdzenie. "
+        "Kliknij ZATWIERDZ, a potem Run workflow w GitHub. "
         "Po 2 minutach sygnal wygasa i zlecenie nie zostanie wyslane."
     )
     print(message)
-
-    signature = approval_signature(pending)
-    one_click_ready = bool(ONE_CLICK_RELAY_URL and signature)
 
     payload = {
         "topic": bot.NTFY_TOPIC,
@@ -90,39 +60,15 @@ def notify_signal(pending):
         "title": "BloFin SIGNAL - 2 min",
         "priority": 5,
         "click": APPROVAL_URL,
-    }
-
-    if one_click_ready:
-        params = {
-            "signal_id": pending["signal_id"],
-            "inst": pending["inst"],
-            "side": pending["side"],
-            "signal_close_ms": str(pending["signal_close_ms"]),
-            "created_at_ms": str(pending["created_at_ms"]),
-            "expires_at_ms": str(pending["expires_at_ms"]),
-            "signature": signature,
-        }
-        separator = "&" if "?" in ONE_CLICK_RELAY_URL else "?"
-        approve_url = ONE_CLICK_RELAY_URL + separator + urlencode(params)
-        payload["actions"] = [
-            {
-                "action": "http",
-                "label": "ZATWIERDZ",
-                "url": approve_url,
-                "method": "POST",
-                "clear": True,
-            }
-        ]
-    else:
-        payload["actions"] = [
+        "actions": [
             {
                 "action": "view",
                 "label": "ZATWIERDZ",
                 "url": APPROVAL_URL,
                 "clear": True,
             }
-        ]
-        print("ONE-CLICK NOT READY: secure relay is not configured")
+        ],
+    }
 
     try:
         requests.post(
