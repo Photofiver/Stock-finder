@@ -61,10 +61,16 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Scan for LIVE signal
+      - name: Scan for LIVE signal and wait for one-tap approval
+        env:
+          BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
+          BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
+          BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
+          BLOFIN_LIVE_ENABLED: 'true'
+          LIVE_MAX_BANKROLL_USDT: '10.6136'
         run: python blofin_live_signal_watch.py
 
-      - name: Save signal state
+      - name: Save signal and LIVE state
         if: success()
         run: |
           git config user.name 'github-actions[bot]'
@@ -72,6 +78,9 @@ jobs:
           git add blofin_signal_state.json
           if [ -f blofin_pending_signal.json ]; then
             git add blofin_pending_signal.json
+          fi
+          if [ -f blofin_live_state.json ]; then
+            git add blofin_live_state.json
           fi
           if ! git diff --cached --quiet; then
             git commit -m 'Update BloFin signal state'
