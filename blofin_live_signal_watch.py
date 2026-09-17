@@ -3,6 +3,7 @@ import hmac
 import json
 import os
 import uuid
+from urllib.parse import urlencode
 
 import requests
 
@@ -12,8 +13,8 @@ SIGNAL_STATE_FILE = os.getenv("SIGNAL_STATE_FILE", "blofin_signal_state.json")
 PENDING_FILE = os.getenv("PENDING_SIGNAL_FILE", "blofin_pending_signal.json")
 APPROVAL_TTL_MS = 2 * 60 * 1000
 APPROVAL_URL = "https://github.com/Photofiver/Stock-finder/actions/workflows/blofin_live_manual.yml"
-DISPATCH_URL = "https://api.github.com/repos/Photofiver/Stock-finder/actions/workflows/blofin_live_manual.yml/dispatches"
-DISPATCH_TOKEN = os.getenv("GH_APPROVE_TOKEN", "").strip()
+ONE_CLICK_RELAY_URL = os.getenv("ONE_CLICK_RELAY_URL", "").strip()
+ONE_CLICK_HMAC_SECRET = os.getenv("ONE_CLICK_HMAC_SECRET", "").strip()
 
 
 def load_json(path, default):
@@ -61,10 +62,10 @@ def signature_payload(pending):
 
 
 def approval_signature(pending):
-    if not bot.SECRET:
+    if not ONE_CLICK_HMAC_SECRET:
         return ""
     return hmac.new(
-        bot.SECRET.encode("utf-8"),
+        ONE_CLICK_HMAC_SECRET.encode("utf-8"),
         signature_payload(pending).encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
@@ -81,7 +82,7 @@ def notify_signal(pending):
     print(message)
 
     signature = approval_signature(pending)
-    one_click_ready = bool(DISPATCH_TOKEN and signature)
+    one_click_ready = bool(ONE_CLICK_RELAY_URL and signature)
 
     payload = {
         "topic": bot.NTFY_TOPIC,
@@ -92,7 +93,7 @@ def notify_signal(pending):
     }
 
     if one_click_ready:
-        inputs = {
+        params = {
             "signal_id": pending["signal_id"],
             "inst": pending["inst"],
             "side": pending["side"],
@@ -101,23 +102,14 @@ def notify_signal(pending):
             "expires_at_ms": str(pending["expires_at_ms"]),
             "signature": signature,
         }
-        dispatch_body = json.dumps(
-            {"ref": "main", "inputs": inputs},
-            separators=(",", ":"),
-        )
+        separator = "&" if "?" in ONE_CLICK_RELAY_URL else "?"
+        approve_url = ONE_CLICK_RELAY_URL + separator + urlencode(params)
         payload["actions"] = [
             {
                 "action": "http",
                 "label": "ZATWIERDZ",
-                "url": DISPATCH_URL,
+                "url": approve_url,
                 "method": "POST",
-                "headers": {
-                    "Authorization": f"Bearer {DISPATCH_TOKEN}",
-                    "Accept": "application/vnd.github+json",
-                    "X-GitHub-Api-Version": "2026-03-10",
-                    "Content-Type": "application/json",
-                },
-                "body": dispatch_body,
                 "clear": True,
             }
         ]
@@ -130,7 +122,7 @@ def notify_signal(pending):
                 "clear": True,
             }
         ]
-        print("ONE-CLICK NOT READY: missing GH_APPROVE_TOKEN or BLOFIN_SECRET_KEY")
+        print("ONE-CLICK NOT READY: secure relay is not configured")
 
     try:
         requests.post(
