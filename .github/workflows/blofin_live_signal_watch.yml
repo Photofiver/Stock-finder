@@ -1,9 +1,12 @@
 name: BloFin LIVE signal watch
 
 on:
+  push:
+    paths:
+      - 'trigger.txt'
   workflow_dispatch:
   schedule:
-    - cron: '1 * * * *'
+    - cron: '6 * * * *'
 
 permissions:
   contents: write
@@ -15,10 +18,42 @@ concurrency:
 jobs:
   watch:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Align external trigger to minute 01
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          MIN=$(date -u +%M)
+          SEC=$(date -u +%S)
+          MIN=$((10#$MIN))
+          SEC=$((10#$SEC))
+          WAIT=0
+
+          if [ "$MIN" -ge 50 ]; then
+            WAIT=$((((61 - MIN) * 60) - SEC))
+          elif [ "$MIN" -eq 0 ]; then
+            WAIT=$((60 - SEC))
+          fi
+
+          if [ "$WAIT" -gt 0 ] && [ "$WAIT" -le 900 ]; then
+            echo "External trigger received at minute ${MIN}; waiting ${WAIT}s for xx:01"
+            sleep "$WAIT"
+          else
+            echo "Running immediately at minute ${MIN}"
+          fi
+
+      - name: Refresh repository state
+        shell: bash
+        run: |
+          git fetch origin main --depth=1
+          git reset --hard origin/main
 
       - uses: actions/setup-python@v5
         with:
@@ -30,6 +65,7 @@ jobs:
         run: python blofin_live_signal_watch.py
 
       - name: Save signal state
+        if: success()
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
@@ -42,3 +78,13 @@ jobs:
             git pull --rebase origin main
             git push origin HEAD:main
           fi
+
+      - name: Notify LIVE scanner failure
+        if: failure()
+        shell: bash
+        run: |
+          curl -fsS --retry 3 --retry-delay 1 --max-time 20 \
+            -H 'Title: BloFin LIVE scanner ERROR' \
+            -H 'Priority: 5' \
+            -d "LIVE scanner failed. Sprawdz GitHub Actions run ${GITHUB_RUN_ID}." \
+            'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n' || true
