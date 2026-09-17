@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import json
 import os
 
@@ -26,11 +28,56 @@ def save_pending(data):
     os.replace(tmp, PENDING_FILE)
 
 
+def signature_payload(pending):
+    return "|".join(
+        [
+            str(pending["signal_id"]),
+            str(pending["inst"]),
+            str(pending["side"]),
+            str(pending["signal_close_ms"]),
+            str(pending["created_at_ms"]),
+            str(pending["expires_at_ms"]),
+        ]
+    )
+
+
+def pending_from_inputs():
+    signal_id = os.getenv("APPROVAL_SIGNAL_ID", "").strip()
+    if not signal_id:
+        return None
+
+    pending = {
+        "version": 2,
+        "status": "pending",
+        "signal_id": signal_id,
+        "inst": os.getenv("APPROVAL_INST", "").strip(),
+        "side": os.getenv("APPROVAL_SIDE", "").strip(),
+        "signal_close_ms": int(os.getenv("APPROVAL_SIGNAL_CLOSE_MS", "0") or 0),
+        "created_at_ms": int(os.getenv("APPROVAL_CREATED_AT_MS", "0") or 0),
+        "expires_at_ms": int(os.getenv("APPROVAL_EXPIRES_AT_MS", "0") or 0),
+    }
+    supplied = os.getenv("APPROVAL_SIGNATURE", "").strip()
+    expected = hmac.new(
+        bot.SECRET.encode("utf-8"),
+        signature_payload(pending).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    if not supplied or not hmac.compare_digest(supplied, expected):
+        raise RuntimeError("Invalid LIVE approval signature")
+    return pending
+
+
+def persist_resolution(pending, status):
+    stored = load_pending()
+    if stored and stored.get("signal_id") == pending.get("signal_id"):
+        stored["status"] = status
+        stored["resolved_at_ms"] = bot.now_ms()
+        save_pending(stored)
+
+
 def reject(pending, status, message):
     if pending:
-        pending["status"] = status
-        pending["resolved_at_ms"] = bot.now_ms()
-        save_pending(pending)
+        persist_resolution(pending, status)
     bot.notify(message, "BloFin LIVE NO ORDER")
     print(message)
 
@@ -47,7 +94,10 @@ def current_arm_direction(bars, latest_index):
 def main():
     bot.require_live_enabled()
 
-    pending = load_pending()
+    pending = pending_from_inputs()
+    if pending is None:
+        pending = load_pending()
+
     if not pending or pending.get("status") != "pending":
         reject(pending, "missing", "Brak aktywnego sygnalu do zatwierdzenia.")
         return
@@ -102,15 +152,19 @@ def main():
     candidate = (rank, inst, side, signal_close_ms)
     bot.place_live_trade(state, candidate, tickers, instruments)
 
-    pending["status"] = "consumed"
-    pending["approved_at_ms"] = bot.now_ms()
-    save_pending(pending)
+    stored = load_pending()
+    if stored and stored.get("signal_id") == pending.get("signal_id"):
+        stored["status"] = "consumed"
+        stored["approved_at_ms"] = bot.now_ms()
+        save_pending(stored)
+
     state["last_run_ms"] = bot.now_ms()
     state["last_top10"] = top10
     bot.save_state(state)
 
     print(json.dumps({
         "approved": True,
+        "signal_id": pending.get("signal_id"),
         "inst": inst,
         "side": side,
         "rank": rank,
