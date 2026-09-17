@@ -43,6 +43,27 @@ def default_signal_state():
     }
 
 
+def send_ntfy(title, message, priority=2, actions=None, click=None):
+    payload = {
+        "topic": bot.NTFY_TOPIC,
+        "message": message,
+        "title": title,
+        "priority": priority,
+    }
+    if actions:
+        payload["actions"] = actions
+    if click:
+        payload["click"] = click
+    try:
+        requests.post(
+            "https://ntfy.sh/",
+            json=payload,
+            timeout=bot.HTTP_TIMEOUT,
+        ).raise_for_status()
+    except Exception as exc:
+        print(f"NTFY ERROR: {exc}")
+
+
 def notify_signal(pending):
     inst = pending["inst"]
     side = pending["side"]
@@ -53,14 +74,12 @@ def notify_signal(pending):
         "Po 2 minutach sygnal wygasa i zlecenie nie zostanie wyslane."
     )
     print(message)
-
-    payload = {
-        "topic": bot.NTFY_TOPIC,
-        "message": message,
-        "title": "BloFin SIGNAL - 2 min",
-        "priority": 5,
-        "click": APPROVAL_URL,
-        "actions": [
+    send_ntfy(
+        "BloFin SIGNAL - 2 min",
+        message,
+        priority=5,
+        click=APPROVAL_URL,
+        actions=[
             {
                 "action": "view",
                 "label": "ZATWIERDZ",
@@ -68,16 +87,40 @@ def notify_signal(pending):
                 "clear": True,
             }
         ],
-    }
+    )
 
-    try:
-        requests.post(
-            "https://ntfy.sh/",
-            json=payload,
-            timeout=bot.HTTP_TIMEOUT,
-        ).raise_for_status()
-    except Exception as exc:
-        print(f"NTFY ERROR: {exc}")
+
+def build_live_diagnostic(state, top10):
+    lines = ["Brak sygnalu LIVE. Sprawdzono aktualne TOP10 BloFin 24h:"]
+    arms = state.get("arms", {})
+
+    for rank, inst in enumerate(top10, start=1):
+        try:
+            bars = bot.fetch_1h(inst)
+            if len(bars) < 35:
+                lines.append(f"{rank}. {inst} — za malo danych 1H")
+                continue
+
+            i = len(bars) - 1
+            side = bot.stoch_side(bars, i)
+            arm = arms.get(inst, {})
+            arm_dir = arm.get("direction")
+            used = bool(arm.get("used", False))
+
+            if side is None:
+                detail = f"STOCH+VOL ✗ | RSI arm {arm_dir or '-'}"
+            elif arm_dir != side:
+                detail = f"STOCH+VOL {side} ✓ | RSI arm {arm_dir or '-'} ✗"
+            elif used:
+                detail = f"{side} ✓ | sygnal juz uzyty"
+            else:
+                detail = f"{side} ✓ | gotowy"
+
+            lines.append(f"{rank}. {inst} — {detail}")
+        except Exception as exc:
+            lines.append(f"{rank}. {inst} — blad danych: {type(exc).__name__}")
+
+    return "\n".join(lines)
 
 
 def main():
@@ -104,11 +147,15 @@ def main():
         }
         save_json(PENDING_FILE, created)
         notify_signal(created)
+    else:
+        diagnostic = build_live_diagnostic(state, top10)
+        print(diagnostic)
+        send_ntfy("BloFin LIVE check", diagnostic, priority=2)
 
     state["last_run_ms"] = bot.now_ms()
     state["last_top10"] = top10
     save_json(SIGNAL_STATE_FILE, state)
-    print(json.dumps({"pending": created, "top3": top10[:3]}, ensure_ascii=False))
+    print(json.dumps({"pending": created, "top10": top10}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
