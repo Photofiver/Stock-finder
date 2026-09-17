@@ -27,6 +27,9 @@ jobs:
       - run: pip install -r requirements.txt
 
       - name: Scan for LIVE signal
+        env:
+          GH_APPROVE_TOKEN: ${{ secrets.GH_APPROVE_TOKEN }}
+          BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
         run: python blofin_live_signal_watch.py
 
       - name: Save signal state
