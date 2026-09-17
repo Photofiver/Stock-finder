@@ -29,7 +29,7 @@ jobs:
       - name: Scan for LIVE signal
         env:
           ONE_CLICK_RELAY_URL: ${{ secrets.ONE_CLICK_RELAY_URL }}
-          ONE_CLICK_HMAC_SECRET: ${{ secrets.ONE_CLICK_HMAC_SECRET }}
+          ONE_CLICK_HMAC_SECRET: ${{ secrets.GH_APPROVE_TOKEN }}
         run: python blofin_live_signal_watch.py
 
       - name: Save signal state
