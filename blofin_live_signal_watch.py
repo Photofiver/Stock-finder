@@ -1,6 +1,8 @@
+import hashlib
+import hmac
 import json
 import os
-import time
+import uuid
 
 import requests
 
@@ -10,6 +12,8 @@ SIGNAL_STATE_FILE = os.getenv("SIGNAL_STATE_FILE", "blofin_signal_state.json")
 PENDING_FILE = os.getenv("PENDING_SIGNAL_FILE", "blofin_pending_signal.json")
 APPROVAL_TTL_MS = 2 * 60 * 1000
 APPROVAL_URL = "https://github.com/Photofiver/Stock-finder/actions/workflows/blofin_live_manual.yml"
+DISPATCH_URL = "https://api.github.com/repos/Photofiver/Stock-finder/actions/workflows/blofin_live_manual.yml/dispatches"
+DISPATCH_TOKEN = os.getenv("GH_APPROVE_TOKEN", "").strip()
 
 
 def load_json(path, default):
@@ -43,6 +47,29 @@ def default_signal_state():
     }
 
 
+def signature_payload(pending):
+    return "|".join(
+        [
+            str(pending["signal_id"]),
+            str(pending["inst"]),
+            str(pending["side"]),
+            str(pending["signal_close_ms"]),
+            str(pending["created_at_ms"]),
+            str(pending["expires_at_ms"]),
+        ]
+    )
+
+
+def approval_signature(pending):
+    if not bot.SECRET:
+        return ""
+    return hmac.new(
+        bot.SECRET.encode("utf-8"),
+        signature_payload(pending).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
 def notify_signal(pending):
     inst = pending["inst"]
     side = pending["side"]
@@ -52,16 +79,63 @@ def notify_signal(pending):
         "Po 2 minutach sygnal wygasa i zlecenie nie zostanie wyslane."
     )
     print(message)
+
+    signature = approval_signature(pending)
+    one_click_ready = bool(DISPATCH_TOKEN and signature)
+
+    payload = {
+        "topic": bot.NTFY_TOPIC,
+        "message": message,
+        "title": "BloFin SIGNAL - 2 min",
+        "priority": 5,
+        "click": APPROVAL_URL,
+    }
+
+    if one_click_ready:
+        inputs = {
+            "signal_id": pending["signal_id"],
+            "inst": pending["inst"],
+            "side": pending["side"],
+            "signal_close_ms": str(pending["signal_close_ms"]),
+            "created_at_ms": str(pending["created_at_ms"]),
+            "expires_at_ms": str(pending["expires_at_ms"]),
+            "signature": signature,
+        }
+        dispatch_body = json.dumps(
+            {"ref": "main", "inputs": inputs},
+            separators=(",", ":"),
+        )
+        payload["actions"] = [
+            {
+                "action": "http",
+                "label": "ZATWIERDZ",
+                "url": DISPATCH_URL,
+                "method": "POST",
+                "headers": {
+                    "Authorization": f"Bearer {DISPATCH_TOKEN}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2026-03-10",
+                    "Content-Type": "application/json",
+                },
+                "body": dispatch_body,
+                "clear": True,
+            }
+        ]
+    else:
+        payload["actions"] = [
+            {
+                "action": "view",
+                "label": "ZATWIERDZ",
+                "url": APPROVAL_URL,
+                "clear": True,
+            }
+        ]
+        print("ONE-CLICK NOT READY: missing GH_APPROVE_TOKEN or BLOFIN_SECRET_KEY")
+
     try:
         requests.post(
-            f"https://ntfy.sh/{bot.NTFY_TOPIC}",
-            data=message.encode("utf-8"),
-            headers={
-                "Title": "BloFin SIGNAL - 2 min",
-                "Priority": "5",
-                "Click": APPROVAL_URL,
-                "Actions": f"view, ZATWIERDZ, {APPROVAL_URL}, clear=true",
-            },
+            "https://ntfy.sh/",
+            json=payload,
             timeout=bot.HTTP_TIMEOUT,
         ).raise_for_status()
     except Exception as exc:
@@ -80,8 +154,9 @@ def main():
         rank, inst, side, signal_close_ms = candidates[0]
         now = bot.now_ms()
         created = {
-            "version": 1,
+            "version": 2,
             "status": "pending",
+            "signal_id": uuid.uuid4().hex,
             "inst": inst,
             "side": side,
             "rank": int(rank),
