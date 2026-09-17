@@ -7,6 +7,7 @@ import blofin_live_hourly as bot
 
 PENDING_FILE = os.getenv("PENDING_SIGNAL_FILE", "blofin_pending_signal.json")
 APPROVAL_TTL_MS = 2 * 60 * 1000
+ONE_CLICK_HMAC_SECRET = os.getenv("ONE_CLICK_HMAC_SECRET", "").strip()
 
 
 def load_pending():
@@ -45,6 +46,8 @@ def pending_from_inputs():
     signal_id = os.getenv("APPROVAL_SIGNAL_ID", "").strip()
     if not signal_id:
         return None
+    if not ONE_CLICK_HMAC_SECRET:
+        raise RuntimeError("Missing ONE_CLICK_HMAC_SECRET")
 
     pending = {
         "version": 2,
@@ -58,7 +61,7 @@ def pending_from_inputs():
     }
     supplied = os.getenv("APPROVAL_SIGNATURE", "").strip()
     expected = hmac.new(
-        bot.SECRET.encode("utf-8"),
+        ONE_CLICK_HMAC_SECRET.encode("utf-8"),
         signature_payload(pending).encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
