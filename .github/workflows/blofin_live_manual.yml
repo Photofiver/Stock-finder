@@ -2,6 +2,35 @@ name: BloFin LIVE check
 
 on:
   workflow_dispatch:
+    inputs:
+      signal_id:
+        description: Signal ID
+        required: true
+        type: string
+      inst:
+        description: Instrument
+        required: true
+        type: string
+      side:
+        description: LONG or SHORT
+        required: true
+        type: string
+      signal_close_ms:
+        description: Signal candle close timestamp
+        required: true
+        type: string
+      created_at_ms:
+        description: Signal creation timestamp
+        required: true
+        type: string
+      expires_at_ms:
+        description: Signal expiry timestamp
+        required: true
+        type: string
+      signature:
+        description: Signed approval payload
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -36,6 +65,13 @@ jobs:
           BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
           BLOFIN_LIVE_ENABLED: 'true'
           LIVE_MAX_BANKROLL_USDT: '10.6136'
+          APPROVAL_SIGNAL_ID: ${{ inputs.signal_id }}
+          APPROVAL_INST: ${{ inputs.inst }}
+          APPROVAL_SIDE: ${{ inputs.side }}
+          APPROVAL_SIGNAL_CLOSE_MS: ${{ inputs.signal_close_ms }}
+          APPROVAL_CREATED_AT_MS: ${{ inputs.created_at_ms }}
+          APPROVAL_EXPIRES_AT_MS: ${{ inputs.expires_at_ms }}
+          APPROVAL_SIGNATURE: ${{ inputs.signature }}
         run: python blofin_live_approve.py
 
       - name: Save LIVE approval state
