@@ -1,0 +1,84 @@
+name: BloFin API read-only auth test
+
+on:
+  push:
+    paths:
+      - '.github/workflows/blofin_auth_readonly_test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Test BloFin authenticated GET only
+        env:
+          BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
+          BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
+          BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64, hashlib, hmac, json, os, sys, time, uuid
+          from urllib.request import Request, urlopen
+          from urllib.error import HTTPError
+
+          base = 'https://openapi.blofin.com'
+          path = '/api/v1/account/balance'
+          api_key = os.getenv('BLOFIN_API_KEY', '').strip()
+          secret = os.getenv('BLOFIN_SECRET_KEY', '').strip()
+          passphrase = os.getenv('BLOFIN_PASSPHRASE', '').strip()
+
+          missing = [name for name, value in [
+              ('BLOFIN_API_KEY', api_key),
+              ('BLOFIN_SECRET_KEY', secret),
+              ('BLOFIN_PASSPHRASE', passphrase),
+          ] if not value]
+          if missing:
+              print('MISSING_SECRETS:', ', '.join(missing))
+              sys.exit(2)
+
+          timestamp = str(int(time.time() * 1000))
+          nonce = str(uuid.uuid4())
+          prehash = f'{path}GET{timestamp}{nonce}'
+          hex_signature = hmac.new(secret.encode(), prehash.encode(), hashlib.sha256).hexdigest().encode()
+          signature = base64.b64encode(hex_signature).decode()
+          headers = {
+              'ACCESS-KEY': api_key,
+              'ACCESS-SIGN': signature,
+              'ACCESS-TIMESTAMP': timestamp,
+              'ACCESS-NONCE': nonce,
+              'ACCESS-PASSPHRASE': passphrase,
+              'Content-Type': 'application/json',
+          }
+
+          req = Request(base + path, headers=headers, method='GET')
+          try:
+              with urlopen(req, timeout=20) as resp:
+                  body = resp.read().decode('utf-8')
+          except HTTPError as exc:
+              body = exc.read().decode('utf-8', errors='replace')
+              print('HTTP_STATUS:', exc.code)
+              print('BODY:', body[:1000])
+              sys.exit(1)
+
+          payload = json.loads(body)
+          print('HTTP_STATUS: 200')
+          print('BLOFIN_CODE:', payload.get('code'))
+          print('BLOFIN_MSG:', payload.get('msg'))
+          if str(payload.get('code')) != '0':
+              sys.exit(1)
+
+          data = payload.get('data') or {}
+          details = data.get('details') if isinstance(data, dict) else None
+          currencies = []
+          if isinstance(details, list):
+              currencies = [str(x.get('currency')) for x in details if isinstance(x, dict) and x.get('currency')]
+          print('AUTH_OK: yes')
+          print('ACCOUNT_DATA_RECEIVED: yes')
+          if currencies:
+              print('CURRENCIES:', ','.join(currencies[:10]))
+          PY
