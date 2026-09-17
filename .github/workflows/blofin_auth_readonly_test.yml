@@ -53,6 +53,8 @@ jobs:
               'ACCESS-NONCE': nonce,
               'ACCESS-PASSPHRASE': passphrase,
               'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'User-Agent': 'Mozilla/5.0 BloFinAuthTest/1.0',
           }
 
           req = Request(base + path, headers=headers, method='GET')
@@ -83,4 +85,4 @@ jobs:
               print('CURRENCIES:', ','.join(currencies[:10]))
           PY
 
-# read-only test trigger
+# read-only test trigger with browser-like headers
