@@ -1,6 +1,5 @@
 import json
 import os
-import time
 import uuid
 
 import requests
@@ -81,81 +80,21 @@ def send_ntfy(title, message, priority=2, actions=None, click=None):
         print(f"NTFY ERROR: {exc}")
 
 
-def notify_signal(pending, approval_topic):
+def notify_signal(pending):
     inst = pending["inst"]
     side = pending["side"]
     rank = pending["rank"]
     message = (
-        f"SYGNAL {side} {inst} | TOP{rank} | masz 2 minuty. "
-        "Kliknij tylko ZATWIERDZ. Po kliknieciu bot od razu ponownie sprawdzi sygnal "
-        "i jesli nadal jest poprawny, wykona zlecenie LIVE."
+        f"SYGNAL {side} {inst} | TOP{rank} | tryb AUTO. "
+        "Bot od razu ponownie sprawdzi sygnal i jesli nadal jest poprawny, "
+        "wykona zlecenie LIVE bez klikania."
     )
     print(message)
     send_ntfy(
-        "BloFin SIGNAL - 2 min",
+        "BloFin SIGNAL - AUTO",
         message,
         priority=5,
-        actions=[
-            {
-                "action": "http",
-                "label": "ZATWIERDZ",
-                "url": f"https://ntfy.sh/{approval_topic}",
-                "method": "POST",
-                "body": pending["signal_id"],
-                "clear": True,
-            }
-        ],
     )
-
-
-def wait_for_approval(approval_topic, signal_id, expires_at_ms):
-    url = f"https://ntfy.sh/{approval_topic}/json"
-    print("Czekam maksymalnie 2 minuty na jedno klikniecie ZATWIERDZ...")
-
-    while bot.now_ms() <= expires_at_ms:
-        remaining_s = max(1.0, (expires_at_ms - bot.now_ms()) / 1000.0)
-        read_timeout = min(15.0, max(2.0, remaining_s))
-        try:
-            with requests.get(
-                url,
-                params={"since": "all"},
-                stream=True,
-                timeout=(5, read_timeout),
-            ) as response:
-                response.raise_for_status()
-                for raw in response.iter_lines():
-                    if bot.now_ms() > expires_at_ms:
-                        return False
-                    if not raw:
-                        continue
-                    try:
-                        event = json.loads(raw.decode("utf-8"))
-                    except Exception:
-                        continue
-                    if event.get("event") != "message":
-                        continue
-                    if str(event.get("message") or "").strip() == signal_id:
-                        print("Odebrano ZATWIERDZ z ntfy.")
-                        return True
-        except Exception as exc:
-            if bot.now_ms() > expires_at_ms:
-                break
-            print(f"Approval listener retry: {type(exc).__name__}: {exc}")
-            time.sleep(min(1.0, max(0.0, (expires_at_ms - bot.now_ms()) / 1000.0)))
-
-    return False
-
-
-def expire_pending(pending):
-    stored = load_json(PENDING_FILE, {})
-    if stored.get("signal_id") != pending.get("signal_id"):
-        return
-    if stored.get("status") != "pending":
-        return
-    stored["status"] = "expired"
-    stored["resolved_at_ms"] = bot.now_ms()
-    save_json(PENDING_FILE, stored)
-    print("Minely 2 minuty bez zatwierdzenia. Zlecenia nie wyslano.")
 
 
 def build_live_diagnostic(state, top10):
@@ -215,9 +154,7 @@ def main():
         }
         save_json(PENDING_FILE, created)
 
-        approval_topic = f"blofin-approve-{uuid.uuid4().hex}"
-        notify_signal(created, approval_topic)
-
+        notify_signal(created)
         approval.main()
     else:
         diagnostic = build_live_diagnostic(state, top10)
