@@ -1,0 +1,20 @@
+name: ntfy smoke test
+
+on:
+  push:
+    paths:
+      - '.github/workflows/ntfy_smoke_test.yml'
+  workflow_dispatch:
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send test notification to ntfy
+        shell: bash
+        run: |
+          curl -fsS --retry 3 --retry-delay 1 --max-time 20 \
+            -H 'Title: BloFin TEST' \
+            -H 'Priority: 5' \
+            -d 'TEST GitHub -> ntfy. Jesli to widzisz, powiadomienie dziala.' \
+            'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n'
