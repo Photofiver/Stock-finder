@@ -133,7 +133,11 @@ def main():
 
     bot.require_account_modes()
     state = bot.load_state()
-    open_positions = bot.get_open_positions()
+    tracked_before = state.get("position")
+    open_positions = bot.sync_tracked_position(state)
+    if tracked_before and not state.get("position"):
+        bot.save_state(state)
+
     if state.get("position"):
         reject(pending, "blocked", "Masz juz sledzona pozycje LIVE. Nowe zlecenie nie zostalo wyslane.")
         return
