@@ -1,0 +1,25 @@
+name: BloFin LIVE check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install -r requirements.txt
+
+      - name: Check LIVE bot
+        env:
+          BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
+          BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
+          BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
+          BLOFIN_LIVE_ENABLED: 'false'
+          LIVE_MAX_BANKROLL_USDT: '10.6136'
+        run: python blofin_live_hourly.py
