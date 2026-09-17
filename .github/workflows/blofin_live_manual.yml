@@ -20,6 +20,6 @@ jobs:
           BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
           BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
           BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
-          BLOFIN_LIVE_ENABLED: 'false'
+          BLOFIN_LIVE_ENABLED: 'true'
           LIVE_MAX_BANKROLL_USDT: '10.6136'
         run: python blofin_live_hourly.py
