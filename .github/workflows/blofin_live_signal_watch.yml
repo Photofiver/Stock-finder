@@ -33,7 +33,10 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add blofin_signal_state.json blofin_pending_signal.json 2>/dev/null || true
+          git add blofin_signal_state.json
+          if [ -f blofin_pending_signal.json ]; then
+            git add blofin_pending_signal.json
+          fi
           if ! git diff --cached --quiet; then
             git commit -m 'Update BloFin signal state'
             git pull --rebase origin main
