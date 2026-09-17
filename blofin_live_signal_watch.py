@@ -199,11 +199,17 @@ def main():
         }
         save_json(PENDING_FILE, created)
 
-        # Losowy, jednorazowy temat istnieje tylko dla tego sygnalu i tylko przez jego 2-minutowe okno.
         approval_topic = f"blofin-approve-{uuid.uuid4().hex}"
         notify_signal(created, approval_topic)
 
-        approval.main()
+        if wait_for_approval(
+            approval_topic,
+            created["signal_id"],
+            created["expires_at_ms"],
+        ):
+            approval.main()
+        else:
+            expire_pending(created)
     else:
         diagnostic = build_live_diagnostic(state, top10)
         print(diagnostic)
