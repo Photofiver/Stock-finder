@@ -26,7 +26,7 @@ POSITION_FRACTION = Decimal("0.25")  # legacy/default single-entry fraction
 HARD_SL_PCT = Decimal("0.005")
 TAKE_PROFIT_PCT = Decimal("0.01")
 RSI_PERIOD = 14
-SIGNAL_MINUTES = int(os.getenv("LIVE_SIGNAL_MINUTES", "15"))
+SIGNAL_MINUTES = int(os.getenv("LIVE_SIGNAL_MINUTES", "240"))
 if SIGNAL_MINUTES == 10:
     SIGNAL_BAR = "5m"
     SOURCE_BAR_MS = 5 * 60 * 1000
@@ -35,8 +35,13 @@ elif SIGNAL_MINUTES == 15:
     SIGNAL_BAR = "15m"
     SOURCE_BAR_MS = 15 * 60 * 1000
     SIGNAL_MS = 15 * 60 * 1000
+elif SIGNAL_MINUTES == 240:
+    SIGNAL_BAR = "4H"
+    SOURCE_BAR_MS = 4 * 60 * 60 * 1000
+    SIGNAL_MS = 4 * 60 * 60 * 1000
 else:
-    raise RuntimeError("LIVE_SIGNAL_MINUTES must be 10 or 15")
+    raise RuntimeError("LIVE_SIGNAL_MINUTES must be 10, 15 or 240")
+SIGNAL_LABEL = "4H" if SIGNAL_MINUTES == 240 else f"{SIGNAL_MINUTES}m"
 D1H_MS = SIGNAL_MS  # compatibility alias for older helper names/state code
 HTTP_TIMEOUT = 25
 MAX_RETRIES = 4
@@ -371,7 +376,7 @@ def fetch_signal_bars(inst):
 
 
 def fetch_1h(inst):
-    # Compatibility alias; LIVE strategy now runs on 15m candles.
+    # Compatibility alias for older callers.
     return fetch_signal_bars(inst)
 
 
@@ -405,7 +410,7 @@ def evaluate_signals(state, top10):
             data[inst] = bars
             latest_idx[inst] = len(bars) - 1
         except Exception as exc:
-            print(f"15m ERROR {inst}: {exc}")
+            print(f"{SIGNAL_LABEL} ERROR {inst}: {exc}")
 
     candidates = []
     scan_now_ms = now_ms()
@@ -964,7 +969,7 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         "size": clean_decimal(size),
         "notional_usdt": clean_decimal(estimated_notional),
         "protection_status": "WAITING_FOR_TP1_SL05",
-        "strategy": f"VOLUME_COLOUR_FLIP_{SIGNAL_MINUTES}M",
+        "strategy": f"VOLUME_COLOUR_FLIP_{SIGNAL_LABEL}",
         "risk_profile": risk_profile,
         "account_fraction": account_fraction,
         "allocation_label": allocation_label,
@@ -1409,7 +1414,7 @@ def status(state, top10):
         f"fees {d(state.get('fees_usdt', 0)):.4f} | trades {t.get('total', 0)} "
         f"(W{t.get('wins', 0)}/L{t.get('losses', 0)}/F{t.get('flat', 0)}/U{t.get('unverified', 0)}) | "
         f"{pos_text} | TOP3: {', '.join(top10[:3]) if top10 else 'none'}",
-        f"BloFin LIVE {SIGNAL_MINUTES}m",
+        f"BloFin LIVE {SIGNAL_LABEL}",
     )
 
 
