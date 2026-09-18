@@ -21,6 +21,8 @@ MAX_NOTIONAL_USDT = Decimal(os.getenv("LIVE_MAX_BANKROLL_USDT", "10.6136"))
 LEVERAGE = "1"
 MARGIN_MODE = "isolated"
 TOP_N = 10
+POSITION_FRACTION = Decimal("0.25")
+HARD_SL_PCT = Decimal("0.10")
 RSI_PERIOD = 14
 D1H_MS = 60 * 60 * 1000
 HTTP_TIMEOUT = 25
@@ -483,6 +485,31 @@ def wait_for_order_fill(inst, order_id, client_order_id=""):
     return None
 
 
+def place_sl_for_position(inst, side, sl):
+    close_side = "sell" if side == "LONG" else "buy"
+    client_id = ("livesl" + uuid.uuid4().hex)[:32]
+    data = private_request(
+        "POST",
+        "/api/v1/trade/order-tpsl",
+        body={
+            "instId": inst,
+            "marginMode": MARGIN_MODE,
+            "positionSide": "net",
+            "side": close_side,
+            "slTriggerPrice": clean_decimal(sl),
+            "slOrderPrice": "-1",
+            "slTriggerPriceType": "last",
+            "size": "-1",
+            "reduceOnly": "true",
+            "clientOrderId": client_id,
+        },
+    )
+    row = data[0] if isinstance(data, list) and data else (data or {})
+    if str(row.get("code", "0")) != "0":
+        raise RuntimeError(f"SL rejected: {row}")
+    return str(row.get("tpslId") or ""), client_id
+
+
 def place_tpsl_for_position(inst, side, tp, sl):
     close_side = "sell" if side == "LONG" else "buy"
     client_id = ("livetpsl" + uuid.uuid4().hex)[:32]
@@ -654,6 +681,11 @@ def cancel_tracked_tpsl(state):
     pos = state.get("position")
     if not pos:
         return False
+
+    # New positions intentionally keep a hard -10% SL.
+    if pos.get("risk_profile") == "QUARTER_ACCOUNT_SL10":
+        return False
+
     tpsl_id = str(pos.get("tpsl_id") or "").strip()
     if not tpsl_id:
         pos["protection_status"] = "VOLUME_FLIP_ONLY"
@@ -738,7 +770,8 @@ def place_live_trade(state, candidate, tickers, instruments):
 
     market_reference = d(tickers[inst]["last"])
     available = get_available_usdt()
-    cap = min(MAX_NOTIONAL_USDT, available * Decimal("0.98"))
+    # New risk profile: use only one quarter of available account equity.
+    cap = min(MAX_NOTIONAL_USDT, available * POSITION_FRACTION)
     sized = size_for_notional(market_reference, instruments[inst], cap)
     if sized is None:
         raise RuntimeError(f"{inst}: minimum contract/lot exceeds live cap {cap:.4f} USDT")
@@ -778,8 +811,10 @@ def place_live_trade(state, candidate, tickers, instruments):
         "sl": "",
         "size": clean_decimal(size),
         "notional_usdt": clean_decimal(estimated_notional),
-        "protection_status": "VOLUME_FLIP_ONLY",
+        "protection_status": "WAITING_FOR_SL10",
         "strategy": "VOLUME_COLOUR_FLIP",
+        "risk_profile": "QUARTER_ACCOUNT_SL10",
+        "account_fraction": clean_decimal(POSITION_FRACTION),
     }
 
     fill = wait_for_order_fill(inst, order_id, client_id)
@@ -808,18 +843,56 @@ def place_live_trade(state, candidate, tickers, instruments):
         if contract_value > 0
         else estimated_notional
     )
+    tick = d(instruments[inst].get("tickSize") or "0.00000001")
+    if side == "LONG":
+        hard_sl = price_step(
+            fill_price * (Decimal("1") - HARD_SL_PCT), tick, ROUND_FLOOR
+        )
+    else:
+        hard_sl = price_step(
+            fill_price * (Decimal("1") + HARD_SL_PCT), tick, ROUND_CEILING
+        )
+
     state["position"].update({
         "reference_entry": clean_decimal(fill_price),
         "entry_fee": str(fill.get("fee") or "0"),
         "filled_size": clean_decimal(filled_size),
         "notional_usdt": clean_decimal(actual_notional),
-        "protection_status": "VOLUME_FLIP_ONLY",
+        "sl": clean_decimal(hard_sl),
+        "protection_status": "PLACING_SL10",
     })
+
+    try:
+        sl_id, sl_client_id = place_sl_for_position(inst, side, hard_sl)
+    except Exception as exc:
+        state["position"]["protection_status"] = "SL10_FAILED"
+        state["position"]["protection_error"] = str(exc)
+        notify(
+            f"CRITICAL {side} {inst}: hard -10% SL could not be placed. "
+            f"Closing position for safety. Error: {exc}",
+            "BloFin LIVE SAFETY",
+        )
+        try:
+            close_tracked_position(state, "SAFETY: SL10 placement failed")
+        except Exception as close_exc:
+            state["position"]["protection_error"] = (
+                f"{exc}; safety close failed: {close_exc}"
+            )
+            notify(
+                f"CRITICAL {side} {inst}: safety close failed too: {close_exc}",
+                "BloFin LIVE SAFETY",
+            )
+        return
+
+    state["position"]["tpsl_id"] = sl_id
+    state["position"]["tpsl_client_order_id"] = sl_client_id
+    state["position"]["protection_status"] = "SL10_ACTIVE"
 
     notify(
         f"OPEN {side} {inst} | 1x isolated | actual entry {fill_price} | "
-        f"notional≈{actual_notional:.4f} USDT | no TP/SL | "
-        f"exit only on opposite larger Volume colour flip | "
+        f"notional≈{actual_notional:.4f} USDT (25% of available, capped) | "
+        f"hard SL {hard_sl} (-10%) | no TP | "
+        f"normal exit on opposite larger Volume colour flip | "
         f"signal age {signal_age_ms / 1000:.0f}s",
         "BloFin LIVE OPEN",
     )
@@ -830,7 +903,17 @@ def status(state, top10):
     pos = state.get("position")
     if pos:
         age_h = max(0.0, (now_ms() - int(pos["opened_ms"])) / D1H_MS)
-        pos_text = f"OPEN {pos['side']} {pos['inst']} | {age_h:.1f}h | volume-flip exit"
+        risk = pos.get("risk_profile")
+        if risk == "QUARTER_ACCOUNT_SL10":
+            pos_text = (
+                f"OPEN {pos['side']} {pos['inst']} | {age_h:.1f}h | "
+                "volume-flip exit | hard SL -10%"
+            )
+        else:
+            pos_text = (
+                f"OPEN {pos['side']} {pos['inst']} | {age_h:.1f}h | "
+                "legacy current position: volume-flip exit"
+            )
     else:
         pos_text = "no tracked open position"
     t = state.get("trades", {})
