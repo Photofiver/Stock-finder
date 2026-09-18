@@ -23,7 +23,7 @@ MARGIN_MODE = "isolated"
 TOP_N = 10
 MAX_OPEN_POSITIONS = 4
 POSITION_FRACTION = Decimal("0.25")  # legacy/default single-entry fraction
-HARD_SL_PCT = Decimal("0.10")
+HARD_SL_PCT = Decimal("0.01")
 TAKE_PROFIT_PCT = Decimal("0.01")
 RSI_PERIOD = 14
 SIGNAL_BAR = "15m"
@@ -744,8 +744,12 @@ def cancel_tracked_tpsl(state):
     if not pos:
         return False
 
-    # New positions intentionally keep a hard -10% SL.
-    if str(pos.get("risk_profile") or "").endswith("SL10"):
+    # Managed LIVE positions intentionally keep their broker-side TP/SL protection.
+    if (
+        pos.get("tp_policy") == "TP1"
+        or pos.get("sl_policy") == "SL1"
+        or str(pos.get("risk_profile") or "").endswith(("SL10", "SL1"))
+    ):
         return False
 
     tpsl_id = str(pos.get("tpsl_id") or "").strip()
@@ -835,12 +839,12 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
     if cap_usdt is None:
         cap = min(MAX_NOTIONAL_USDT, available * POSITION_FRACTION)
         allocation_label = allocation_label or "25% of available, capped"
-        risk_profile = "QUARTER_ACCOUNT_SL10"
+        risk_profile = "QUARTER_ACCOUNT_SL1"
         account_fraction = clean_decimal(POSITION_FRACTION)
     else:
         cap = min(d(cap_usdt), available)
         allocation_label = allocation_label or "dynamic equal split of available balance"
-        risk_profile = "DYNAMIC_SPLIT_SL10"
+        risk_profile = "DYNAMIC_SPLIT_SL1"
         account_fraction = ""
     sized = size_for_notional(market_reference, instruments[inst], cap)
     if sized is None:
@@ -881,7 +885,7 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         "sl": "",
         "size": clean_decimal(size),
         "notional_usdt": clean_decimal(estimated_notional),
-        "protection_status": "WAITING_FOR_SL10",
+        "protection_status": "WAITING_FOR_TP1_SL1",
         "strategy": "VOLUME_COLOUR_FLIP_15M",
         "risk_profile": risk_profile,
         "account_fraction": account_fraction,
@@ -938,7 +942,8 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         "tp": clean_decimal(hard_tp),
         "sl": clean_decimal(hard_sl),
         "tp_policy": "TP1",
-        "protection_status": "PLACING_TP1_SL10",
+        "sl_policy": "SL1",
+        "protection_status": "PLACING_TP1_SL1",
     })
 
     try:
@@ -946,15 +951,15 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
             inst, side, hard_tp, hard_sl
         )
     except Exception as exc:
-        state["position"]["protection_status"] = "TP1_SL10_FAILED"
+        state["position"]["protection_status"] = "TP1_SL1_FAILED"
         state["position"]["protection_error"] = str(exc)
         notify(
-            f"CRITICAL {side} {inst}: TP +1% / SL -10% could not be placed. "
+            f"CRITICAL {side} {inst}: TP +1% / SL -1% could not be placed. "
             f"Closing position for safety. Error: {exc}",
             "BloFin LIVE SAFETY",
         )
         try:
-            close_tracked_position(state, "SAFETY: TP1/SL10 placement failed")
+            close_tracked_position(state, "SAFETY: TP1/SL1 placement failed")
         except Exception as close_exc:
             state["position"]["protection_error"] = (
                 f"{exc}; safety close failed: {close_exc}"
@@ -967,12 +972,12 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
 
     state["position"]["tpsl_id"] = tpsl_id
     state["position"]["tpsl_client_order_id"] = tpsl_client_id
-    state["position"]["protection_status"] = "TP1_SL10_ACTIVE"
+    state["position"]["protection_status"] = "TP1_SL1_ACTIVE"
 
     notify(
         f"OPEN {side} {inst} | 1x isolated | actual entry {fill_price} | "
         f"notional≈{actual_notional:.4f} USDT ({allocation_label}) | "
-        f"TP {hard_tp} (+1%) | hard SL {hard_sl} (-10%) | "
+        f"TP {hard_tp} (+1%) | hard SL {hard_sl} (-1%) | "
         f"normal exit on opposite larger Volume colour flip | "
         f"signal age {signal_age_ms / 1000:.0f}s",
         "BloFin LIVE OPEN",
@@ -1037,7 +1042,12 @@ def ensure_tp1_for_all_tracked_positions(state):
         pos = positions.get(inst)
         if not isinstance(pos, dict):
             continue
-        if pos.get("tp_policy") == "TP1" and str(pos.get("tp") or "").strip():
+        if (
+            pos.get("tp_policy") == "TP1"
+            and pos.get("sl_policy") == "SL1"
+            and str(pos.get("tp") or "").strip()
+            and str(pos.get("sl") or "").strip()
+        ):
             continue
         row = open_by_inst.get(inst)
         if not row:
@@ -1090,6 +1100,25 @@ def ensure_tp1_for_all_tracked_positions(state):
             updated.append(inst)
             continue
 
+        sl_already_hit = (
+            last > 0
+            and (
+                (side == "LONG" and last <= sl)
+                or (side == "SHORT" and last >= sl)
+            )
+        )
+        if sl_already_hit:
+            notify(
+                f"{side} {inst} | price already reached/passed SL -1% "
+                f"(target {sl}, last {last}); closing now.",
+                "BloFin LIVE SL1",
+            )
+            _run_for_tracked_position(
+                state, inst, close_tracked_position, "SL -1% reached"
+            )
+            updated.append(inst)
+            continue
+
         old_id = str(pos.get("tpsl_id") or "").strip()
         if old_id:
             try:
@@ -1108,7 +1137,7 @@ def ensure_tp1_for_all_tracked_positions(state):
                     pos["tpsl_id"] = restore_id
                     pos["tpsl_client_order_id"] = restore_client
                     pos["sl"] = clean_decimal(sl)
-                    pos["protection_status"] = "SL10_ACTIVE"
+                    pos["protection_status"] = "SL1_ACTIVE"
                 except Exception as restore_exc:
                     pos["protection_status"] = "PROTECTION_MIGRATION_FAILED"
                     pos["protection_error"] = f"{exc}; restore SL failed: {restore_exc}"
@@ -1133,11 +1162,15 @@ def ensure_tp1_for_all_tracked_positions(state):
         pos["tp"] = clean_decimal(tp)
         pos["sl"] = clean_decimal(sl)
         pos["tp_policy"] = "TP1"
-        pos["protection_status"] = "TP1_SL10_ACTIVE"
+        pos["sl_policy"] = "SL1"
+        old_profile = str(pos.get("risk_profile") or "")
+        if old_profile:
+            pos["risk_profile"] = old_profile.replace("SL10", "SL1")
+        pos["protection_status"] = "TP1_SL1_ACTIVE"
         pos.pop("protection_error", None)
         updated.append(inst)
         notify(
-            f"{side} {inst} | TP +1% active at {tp} | SL -10% stays at {sl}",
+            f"{side} {inst} | TP +1% active at {tp} | SL -1% active at {sl}",
             "BloFin LIVE TP1",
         )
 
