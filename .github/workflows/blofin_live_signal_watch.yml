@@ -5,15 +5,13 @@ on:
     paths:
       - 'trigger.txt'
   workflow_dispatch:
-  schedule:
-    - cron: '1 * * * *'
 
 permissions:
   contents: write
 
 concurrency:
   group: blofin-live-signal-watch
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   watch:
@@ -25,7 +23,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Align external trigger to minute 01
+      - name: Align pre-trigger to the hourly candle close
         if: github.event_name == 'push'
         shell: bash
         run: |
@@ -36,17 +34,19 @@ jobs:
           SEC=$((10#$SEC))
           WAIT=0
 
+          # A pre-trigger late in the hour waits until 2 seconds after xx:00.
+          # Multiple pre-triggers are deduplicated by workflow concurrency above.
           if [ "$MIN" -ge 45 ]; then
-            WAIT=$((((61 - MIN) * 60) - SEC))
-          elif [ "$MIN" -eq 0 ]; then
-            WAIT=$((60 - SEC))
+            WAIT=$((((60 - MIN) * 60) - SEC + 2))
+          elif [ "$MIN" -eq 0 ] && [ "$SEC" -lt 2 ]; then
+            WAIT=$((2 - SEC))
           fi
 
-          if [ "$WAIT" -gt 0 ] && [ "$WAIT" -le 900 ]; then
-            echo "External trigger received at minute ${MIN}; waiting ${WAIT}s for xx:01"
+          if [ "$WAIT" -gt 0 ] && [ "$WAIT" -le 905 ]; then
+            echo "Pre-trigger received at ${MIN}:${SEC}; waiting ${WAIT}s for confirmed hourly close"
             sleep "$WAIT"
           else
-            echo "Running immediately at minute ${MIN}"
+            echo "Running immediately at minute ${MIN}, second ${SEC}"
           fi
 
       - name: Refresh repository state
