@@ -33,6 +33,7 @@ jobs:
           BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
           BLOFIN_LIVE_ENABLED: 'true'
           LIVE_MAX_BANKROLL_USDT: '10.64'
+          LIVE_SIGNAL_MINUTES: '240'
         run: python blofin_live_monitor.py
 
       - name: Save LIVE state
