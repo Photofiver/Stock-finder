@@ -25,8 +25,6 @@ TOP_N = 10
 TP_PCT = Decimal("0.015")
 SL_PCT = Decimal("0.005")
 HOLD_HOURS = 5
-VOL_LOOKBACK = 3
-SPIKE_CAP = 2.5
 STOCH_K_PERIOD = 14
 STOCH_K_SMOOTH = 3
 STOCH_D_PERIOD = 3
@@ -270,11 +268,40 @@ def decorate(bars):
     return bars
 
 
-def volume_ok(bars, i):
-    if i < VOL_LOOKBACK or bars[i]["v"] <= bars[i - 1]["v"]:
+def candle_color(bar):
+    if bar["c"] > bar["o"]:
+        return "GREEN"
+    if bar["c"] < bar["o"]:
+        return "RED"
+    return "DOJI"
+
+
+def volume_ok(bars, i, side):
+    if i < 1:
         return False
-    med = statistics.median([b["v"] for b in bars[i - VOL_LOOKBACK:i]])
-    return med > 0 and bars[i]["v"] / med <= SPIKE_CAP
+    prev, cur = bars[i - 1], bars[i]
+    prev_color = candle_color(prev)
+    cur_color = candle_color(cur)
+
+    if side == "LONG":
+        # Buy only when the current GREEN volume bar is higher than
+        # the immediately previous RED volume bar.
+        return (
+            cur_color == "GREEN"
+            and prev_color == "RED"
+            and cur["v"] > prev["v"]
+        )
+
+    if side == "SHORT":
+        # Sell/short only when the current RED volume bar is higher than
+        # the immediately previous GREEN volume bar.
+        return (
+            cur_color == "RED"
+            and prev_color == "GREEN"
+            and cur["v"] > prev["v"]
+        )
+
+    return False
 
 
 def stoch_side(bars, i):
@@ -289,11 +316,8 @@ def stoch_side(bars, i):
         side = "SHORT"
     else:
         return None
-    if side == "LONG" and cur["c"] <= cur["o"]:
-        return None
-    if side == "SHORT" and cur["c"] >= cur["o"]:
-        return None
-    return side if volume_ok(bars, i) else None
+
+    return side if volume_ok(bars, i, side) else None
 
 
 def rsi_cross(bars, i):
