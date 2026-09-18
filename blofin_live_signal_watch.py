@@ -101,7 +101,7 @@ def wait_for_confirmed_signal_close(top10, expected_close_ms):
             pending.discard(inst)
         if not pending:
             print(
-                f"{bot.SIGNAL_MINUTES}m candle {expected_close_ms} confirmed for all TOP10 "
+                f"{bot.SIGNAL_LABEL} candle {expected_close_ms} confirmed for all TOP10 "
                 f"after {attempt + 1} check(s)."
             )
             return
@@ -109,7 +109,7 @@ def wait_for_confirmed_signal_close(top10, expected_close_ms):
             time.sleep(CANDLE_CONFIRM_DELAY_SEC)
 
     raise RuntimeError(
-        f"{bot.SIGNAL_MINUTES}m candle not confirmed in time for: " + ", ".join(sorted(pending))
+        f"{bot.SIGNAL_LABEL} candle not confirmed in time for: " + ", ".join(sorted(pending))
     )
 
 
@@ -120,7 +120,7 @@ def build_live_diagnostic(state, top10):
         try:
             bars = bot.fetch_signal_bars(inst)
             if len(bars) < 2:
-                lines.append(f"{rank}. {inst} — za malo danych {bot.SIGNAL_MINUTES}m")
+                lines.append(f"{rank}. {inst} — za malo danych {bot.SIGNAL_LABEL}")
                 continue
 
             i = len(bars) - 1
