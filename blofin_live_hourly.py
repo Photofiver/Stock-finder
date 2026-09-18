@@ -24,6 +24,7 @@ TOP_N = 10
 MAX_OPEN_POSITIONS = 4
 POSITION_FRACTION = Decimal("0.25")  # legacy/default single-entry fraction
 HARD_SL_PCT = Decimal("0.10")
+TAKE_PROFIT_PCT = Decimal("0.01")
 RSI_PERIOD = 14
 SIGNAL_BAR = "15m"
 SIGNAL_MS = 15 * 60 * 1000
@@ -555,6 +556,50 @@ def place_tpsl_for_position(inst, side, tp, sl):
     return str(row.get("tpslId") or ""), client_id
 
 
+def place_tp_for_position(inst, side, tp):
+    close_side = "sell" if side == "LONG" else "buy"
+    client_id = ("livetp" + uuid.uuid4().hex)[:32]
+    data = private_request(
+        "POST",
+        "/api/v1/trade/order-tpsl",
+        body={
+            "instId": inst,
+            "marginMode": MARGIN_MODE,
+            "positionSide": "net",
+            "side": close_side,
+            "tpTriggerPrice": clean_decimal(tp),
+            "tpOrderPrice": "-1",
+            "tpTriggerPriceType": "last",
+            "size": "-1",
+            "reduceOnly": "true",
+            "clientOrderId": client_id,
+        },
+    )
+    row = data[0] if isinstance(data, list) and data else (data or {})
+    if str(row.get("code", "0")) != "0":
+        raise RuntimeError(f"TP rejected: {row}")
+    return str(row.get("tpslId") or ""), client_id
+
+
+def cancel_specific_tpsl(pos):
+    tpsl_id = str(pos.get("tpsl_id") or "").strip()
+    if not tpsl_id:
+        return False
+    data = private_request(
+        "POST",
+        "/api/v1/trade/cancel-tpsl",
+        body=[{
+            "instId": pos["inst"],
+            "tpslId": tpsl_id,
+            "clientOrderId": str(pos.get("tpsl_client_order_id") or ""),
+        }],
+    )
+    row = data[0] if isinstance(data, list) and data else (data or {})
+    if str(row.get("code", "0")) != "0":
+        raise RuntimeError(f"TP/SL cancel rejected: {row}")
+    return True
+
+
 def latest_position_history(inst, opened_ms):
     rows = private_request(
         "GET",
@@ -871,10 +916,16 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
     )
     tick = d(instruments[inst].get("tickSize") or "0.00000001")
     if side == "LONG":
+        hard_tp = price_step(
+            fill_price * (Decimal("1") + TAKE_PROFIT_PCT), tick, ROUND_CEILING
+        )
         hard_sl = price_step(
             fill_price * (Decimal("1") - HARD_SL_PCT), tick, ROUND_FLOOR
         )
     else:
+        hard_tp = price_step(
+            fill_price * (Decimal("1") - TAKE_PROFIT_PCT), tick, ROUND_FLOOR
+        )
         hard_sl = price_step(
             fill_price * (Decimal("1") + HARD_SL_PCT), tick, ROUND_CEILING
         )
@@ -884,22 +935,26 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         "entry_fee": str(fill.get("fee") or "0"),
         "filled_size": clean_decimal(filled_size),
         "notional_usdt": clean_decimal(actual_notional),
+        "tp": clean_decimal(hard_tp),
         "sl": clean_decimal(hard_sl),
-        "protection_status": "PLACING_SL10",
+        "tp_policy": "TP1",
+        "protection_status": "PLACING_TP1_SL10",
     })
 
     try:
-        sl_id, sl_client_id = place_sl_for_position(inst, side, hard_sl)
+        tpsl_id, tpsl_client_id = place_tpsl_for_position(
+            inst, side, hard_tp, hard_sl
+        )
     except Exception as exc:
-        state["position"]["protection_status"] = "SL10_FAILED"
+        state["position"]["protection_status"] = "TP1_SL10_FAILED"
         state["position"]["protection_error"] = str(exc)
         notify(
-            f"CRITICAL {side} {inst}: hard -10% SL could not be placed. "
+            f"CRITICAL {side} {inst}: TP +1% / SL -10% could not be placed. "
             f"Closing position for safety. Error: {exc}",
             "BloFin LIVE SAFETY",
         )
         try:
-            close_tracked_position(state, "SAFETY: SL10 placement failed")
+            close_tracked_position(state, "SAFETY: TP1/SL10 placement failed")
         except Exception as close_exc:
             state["position"]["protection_error"] = (
                 f"{exc}; safety close failed: {close_exc}"
@@ -910,14 +965,14 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
             )
         return
 
-    state["position"]["tpsl_id"] = sl_id
-    state["position"]["tpsl_client_order_id"] = sl_client_id
-    state["position"]["protection_status"] = "SL10_ACTIVE"
+    state["position"]["tpsl_id"] = tpsl_id
+    state["position"]["tpsl_client_order_id"] = tpsl_client_id
+    state["position"]["protection_status"] = "TP1_SL10_ACTIVE"
 
     notify(
         f"OPEN {side} {inst} | 1x isolated | actual entry {fill_price} | "
         f"notional≈{actual_notional:.4f} USDT ({allocation_label}) | "
-        f"hard SL {hard_sl} (-10%) | no TP | "
+        f"TP {hard_tp} (+1%) | hard SL {hard_sl} (-10%) | "
         f"normal exit on opposite larger Volume colour flip | "
         f"signal age {signal_age_ms / 1000:.0f}s",
         "BloFin LIVE OPEN",
@@ -963,6 +1018,103 @@ def sync_all_tracked_positions(state):
             _run_for_tracked_position(state, inst, cancel_tracked_tpsl)
 
     return get_open_positions()
+
+
+def ensure_tp1_for_all_tracked_positions(state):
+    positions = get_tracked_positions(state)
+    if not positions:
+        return []
+
+    _, _, instruments = get_universe()
+    open_by_inst = {
+        str(row.get("instId")): row
+        for row in get_open_positions()
+        if row.get("instId")
+    }
+    updated = []
+
+    for inst in list(positions):
+        pos = positions.get(inst)
+        if not isinstance(pos, dict):
+            continue
+        if pos.get("tp_policy") == "TP1" and str(pos.get("tp") or "").strip():
+            continue
+        row = open_by_inst.get(inst)
+        if not row:
+            continue
+        meta = instruments.get(inst)
+        if not meta:
+            print(f"TP1 MIGRATION {inst}: instrument metadata missing")
+            continue
+
+        entry = d(pos.get("reference_entry") or row.get("averagePrice") or "0")
+        if entry <= 0:
+            print(f"TP1 MIGRATION {inst}: entry price missing")
+            continue
+        tick = d(meta.get("tickSize") or "0.00000001")
+        side = str(pos.get("side") or "")
+        if side == "LONG":
+            tp = price_step(
+                entry * (Decimal("1") + TAKE_PROFIT_PCT), tick, ROUND_CEILING
+            )
+            sl = price_step(
+                entry * (Decimal("1") - HARD_SL_PCT), tick, ROUND_FLOOR
+            )
+        elif side == "SHORT":
+            tp = price_step(
+                entry * (Decimal("1") - TAKE_PROFIT_PCT), tick, ROUND_FLOOR
+            )
+            sl = price_step(
+                entry * (Decimal("1") + HARD_SL_PCT), tick, ROUND_CEILING
+            )
+        else:
+            continue
+
+        old_id = str(pos.get("tpsl_id") or "").strip()
+        if old_id:
+            try:
+                cancel_specific_tpsl(pos)
+                new_id, new_client = place_tpsl_for_position(inst, side, tp, sl)
+            except Exception as exc:
+                print(f"TP1 MIGRATION ERROR {inst}: {exc}")
+                try:
+                    restore_id, restore_client = place_sl_for_position(inst, side, sl)
+                    pos["tpsl_id"] = restore_id
+                    pos["tpsl_client_order_id"] = restore_client
+                    pos["sl"] = clean_decimal(sl)
+                    pos["protection_status"] = "SL10_ACTIVE"
+                except Exception as restore_exc:
+                    pos["protection_status"] = "PROTECTION_MIGRATION_FAILED"
+                    pos["protection_error"] = f"{exc}; restore SL failed: {restore_exc}"
+                    notify(
+                        f"CRITICAL {side} {inst}: TP1 migration failed and SL restore failed: "
+                        f"{restore_exc}",
+                        "BloFin LIVE SAFETY",
+                    )
+                continue
+
+            pos["tpsl_id"] = new_id
+            pos["tpsl_client_order_id"] = new_client
+        else:
+            try:
+                tp_id, tp_client = place_tp_for_position(inst, side, tp)
+                pos["tp_tpsl_id"] = tp_id
+                pos["tp_tpsl_client_order_id"] = tp_client
+            except Exception as exc:
+                print(f"TP1 MIGRATION ERROR {inst}: {exc}")
+                continue
+
+        pos["tp"] = clean_decimal(tp)
+        pos["sl"] = clean_decimal(sl)
+        pos["tp_policy"] = "TP1"
+        pos["protection_status"] = "TP1_SL10_ACTIVE"
+        updated.append(inst)
+        notify(
+            f"{side} {inst} | TP +1% active at {tp} | SL -10% stays at {sl}",
+            "BloFin LIVE TP1",
+        )
+
+    return updated
 
 
 def evaluate_all_tracked_exit_signals(state, expected_close_ms=None):
