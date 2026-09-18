@@ -80,19 +80,19 @@ def send_ntfy(title, message, priority=2, actions=None, click=None):
         print(f"NTFY ERROR: {exc}")
 
 
-def expected_hour_close_ms():
-    return (bot.now_ms() // bot.D1H_MS) * bot.D1H_MS
+def expected_signal_close_ms():
+    return (bot.now_ms() // bot.SIGNAL_MS) * bot.SIGNAL_MS
 
 
-def wait_for_confirmed_hourly_close(top10, expected_close_ms):
+def wait_for_confirmed_signal_close(top10, expected_close_ms):
     pending = set(top10)
     for attempt in range(CANDLE_CONFIRM_ATTEMPTS):
         ready = []
         for inst in list(pending):
             try:
-                bars = bot.fetch_1h(inst)
+                bars = bot.fetch_signal_bars(inst)
                 if bars:
-                    latest_close_ms = int(bars[-1]["ts"] + bot.D1H_MS)
+                    latest_close_ms = int(bars[-1]["ts"] + bot.SIGNAL_MS)
                     if latest_close_ms >= expected_close_ms:
                         ready.append(inst)
             except Exception as exc:
@@ -101,7 +101,7 @@ def wait_for_confirmed_hourly_close(top10, expected_close_ms):
             pending.discard(inst)
         if not pending:
             print(
-                f"Hourly candle {expected_close_ms} confirmed for all TOP10 "
+                f"15m candle {expected_close_ms} confirmed for all TOP10 "
                 f"after {attempt + 1} check(s)."
             )
             return
@@ -109,7 +109,7 @@ def wait_for_confirmed_hourly_close(top10, expected_close_ms):
             time.sleep(CANDLE_CONFIRM_DELAY_SEC)
 
     raise RuntimeError(
-        "Hourly candle not confirmed in time for: " + ", ".join(sorted(pending))
+        "15m candle not confirmed in time for: " + ", ".join(sorted(pending))
     )
 
 
@@ -118,9 +118,9 @@ def build_live_diagnostic(state, top10):
 
     for rank, inst in enumerate(top10, start=1):
         try:
-            bars = bot.fetch_1h(inst)
+            bars = bot.fetch_signal_bars(inst)
             if len(bars) < 2:
-                lines.append(f"{rank}. {inst} — za malo danych 1H")
+                lines.append(f"{rank}. {inst} — za malo danych 15m")
                 continue
 
             i = len(bars) - 1
@@ -153,14 +153,14 @@ def main():
     if not top10:
         raise RuntimeError("BloFin TOP10 is empty")
 
-    expected_close_ms = expected_hour_close_ms()
+    expected_close_ms = expected_signal_close_ms()
     last_scan_close_ms = int(state.get("last_scan_close_ms") or 0)
     if last_scan_close_ms == expected_close_ms:
         print(
             json.dumps(
                 {
                     "duplicate_scan_skipped": True,
-                    "hour_close_ms": expected_close_ms,
+                    "signal_close_ms": expected_close_ms,
                     "top10": top10,
                 },
                 ensure_ascii=False,
@@ -168,11 +168,11 @@ def main():
         )
         return
 
-    # Start just after xx:00 and confirm the closed 1H candle for TOP10
+    # Start just after 15m boundary and confirm the closed 15m candle for TOP10
     # plus the tracked instrument, because exits are based on its Volume flip.
     tracked_inst = (state.get("position") or {}).get("inst")
     confirm_insts = list(dict.fromkeys(top10 + ([tracked_inst] if tracked_inst else [])))
-    wait_for_confirmed_hourly_close(confirm_insts, expected_close_ms)
+    wait_for_confirmed_signal_close(confirm_insts, expected_close_ms)
 
     open_positions = bot.sync_tracked_position(state)
     if state.get("position") and bot.evaluate_tracked_exit_signal(state, expected_close_ms):
@@ -226,7 +226,7 @@ def main():
         json.dumps(
             {
                 "executed": executed,
-                "hour_close_ms": expected_close_ms,
+                "signal_close_ms": expected_close_ms,
                 "top10": top10,
                 "position": state.get("position"),
             },
