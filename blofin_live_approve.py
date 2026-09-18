@@ -194,7 +194,6 @@ def main():
     rank = top10.index(inst) + 1
     state.setdefault("arms", {})[inst] = {
         "direction": side,
-        "used": False,
         "last_cross_close_ms": signal_close_ms,
     }
     candidate = (rank, inst, side, signal_close_ms)
