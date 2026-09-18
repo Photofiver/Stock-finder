@@ -1,0 +1,17 @@
+name: BloFin 10h current-rule backtest
+on:
+  push:
+    paths:
+      - 'backtest_trigger.txt'
+permissions:
+  contents: read
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python blofin_10h_backtest.py
