@@ -252,29 +252,33 @@ def candle_color(bar):
 def volume_ok(bars, i, side):
     if i < 1:
         return False
-    prev, cur = bars[i - 1], bars[i]
-    prev_color = candle_color(prev)
+
+    cur = bars[i]
     cur_color = candle_color(cur)
 
     if side == "LONG":
-        # Buy only when the current GREEN volume bar is higher than
-        # the immediately previous RED volume bar.
-        return (
-            cur_color == "GREEN"
-            and prev_color == "RED"
-            and cur["v"] > prev["v"]
-        )
+        if cur_color != "GREEN":
+            return False
+        target_color = "RED"
+    elif side == "SHORT":
+        if cur_color != "RED":
+            return False
+        target_color = "GREEN"
+    else:
+        return False
 
-    if side == "SHORT":
-        # Sell/short only when the current RED volume bar is higher than
-        # the immediately previous GREEN volume bar.
-        return (
-            cur_color == "RED"
-            and prev_color == "GREEN"
-            and cur["v"] > prev["v"]
-        )
+    # Walk backwards until the most recent opposite-color volume bar.
+    # Intervening bars of the same color (and DOJI bars) are skipped.
+    previous_opposite = None
+    for j in range(i - 1, -1, -1):
+        if candle_color(bars[j]) == target_color:
+            previous_opposite = bars[j]
+            break
 
-    return False
+    if previous_opposite is None:
+        return False
+
+    return cur["v"] > previous_opposite["v"]
 
 
 def rsi_cross(bars, i):
