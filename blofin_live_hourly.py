@@ -455,6 +455,13 @@ def get_available_usdt():
     return Decimal("0")
 
 
+def current_live_bankroll(state):
+    """Starting bankroll compounded by verified realized NET PnL."""
+    realized_net = d(state.get("realized_pnl_usdt", 0))
+    bankroll = MAX_NOTIONAL_USDT + realized_net
+    return max(Decimal("0"), bankroll)
+
+
 def get_open_positions():
     rows = private_request("GET", "/api/v1/account/positions") or []
     out = []
@@ -894,11 +901,12 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
             )
         tracked_exposure += tracked_notional
 
-    remaining_bankroll = MAX_NOTIONAL_USDT - tracked_exposure
+    live_bankroll = current_live_bankroll(state)
+    remaining_bankroll = live_bankroll - tracked_exposure
     if remaining_bankroll <= 0:
         raise RuntimeError(
             f"LIVE bankroll fully used: exposure {tracked_exposure:.4f} USDT "
-            f">= cap {MAX_NOTIONAL_USDT:.4f} USDT"
+            f">= current bankroll {live_bankroll:.4f} USDT"
         )
 
     if cap_usdt is None:
@@ -1333,10 +1341,11 @@ def execute_candidate_batch(state, candidates, tickers, instruments):
             return []
         tracked_exposure += tracked_notional
 
-    remaining_bankroll = MAX_NOTIONAL_USDT - tracked_exposure
+    live_bankroll = current_live_bankroll(state)
+    remaining_bankroll = live_bankroll - tracked_exposure
     if remaining_bankroll <= 0:
         notify(
-            f"No new LIVE order: bankroll cap {MAX_NOTIONAL_USDT:.4f} USDT "
+            f"No new LIVE order: current bankroll {live_bankroll:.4f} USDT "
             f"is already used by {tracked_exposure:.4f} USDT exposure.",
             "BloFin LIVE BLOCKED",
         )
@@ -1346,7 +1355,7 @@ def execute_candidate_batch(state, candidates, tickers, instruments):
     per_trade_cap = batch_budget / Decimal(len(selected))
     allocation_label = (
         f"1/{len(selected)} of remaining LIVE bankroll; "
-        f"total cap {MAX_NOTIONAL_USDT} USDT; max {MAX_OPEN_POSITIONS} positions"
+        f"current bankroll {live_bankroll:.4f} USDT; max {MAX_OPEN_POSITIONS} positions"
     )
     executed = []
     for candidate in selected:
@@ -1391,8 +1400,9 @@ def status(state, top10):
     else:
         pos_text = f"0/{MAX_OPEN_POSITIONS} open"
     t = state.get("trades", {})
+    live_bankroll = current_live_bankroll(state)
     notify(
-        f"LIVE status | available {available:.4f} USDT | "
+        f"LIVE status | bankroll {live_bankroll:.4f} USDT | available {available:.4f} USDT | "
         f"NET realized {d(state.get('realized_pnl_usdt', 0)):+.4f} | "
         f"fees {d(state.get('fees_usdt', 0)):.4f} | trades {t.get('total', 0)} "
         f"(W{t.get('wins', 0)}/L{t.get('losses', 0)}/F{t.get('flat', 0)}/U{t.get('unverified', 0)}) | "
