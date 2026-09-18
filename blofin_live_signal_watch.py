@@ -145,6 +145,11 @@ def build_live_diagnostic(state, top10):
 
 
 def main():
+    # Stop any already-running legacy hourly loop after it refreshes the repo.
+    # The new workflow is a one-shot scheduled scan and is not affected.
+    if os.getenv("GITHUB_WORKFLOW") == "BloFin LIVE 10m loop":
+        raise RuntimeError("Legacy persistent 10m loop disabled; use one-shot scheduled scans.")
+
     if (
         bot.SIGNAL_MINUTES == 10
         and os.getenv("GITHUB_WORKFLOW") == "BloFin LIVE signal watch"
