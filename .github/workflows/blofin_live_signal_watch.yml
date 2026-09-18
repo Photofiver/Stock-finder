@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - 'trigger.txt'
+  schedule:
+    - cron: '1,16,31,46 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -23,7 +25,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Align pre-trigger to the hourly candle close
+      - name: Align pre-trigger to the 15m candle close
         if: github.event_name == 'push'
         shell: bash
         run: |
@@ -32,23 +34,24 @@ jobs:
           SEC=$(date -u +%S)
           MIN=$((10#$MIN))
           SEC=$((10#$SEC))
+          REM=$((MIN % 15))
           WAIT=0
 
-          # A pre-trigger late in the hour waits until 2 seconds after xx:00.
-          # Multiple pre-triggers are deduplicated by workflow concurrency above.
-          if [ "$MIN" -ge 45 ]; then
-            WAIT=$((((60 - MIN) * 60) - SEC + 2))
-          elif [ "$MIN" -eq 0 ] && [ "$SEC" -lt 2 ]; then
-            WAIT=$((2 - SEC))
+          # Align external push triggers to the next closed 15m candle.
+          if [ "$REM" -eq 0 ]; then
+            if [ "$SEC" -lt 2 ]; then
+              WAIT=$((2 - SEC))
+            fi
+          else
+            WAIT=$((((15 - REM) * 60) - SEC + 2))
           fi
 
           if [ "$WAIT" -gt 0 ] && [ "$WAIT" -le 905 ]; then
-            echo "Pre-trigger received at ${MIN}:${SEC}; waiting ${WAIT}s for confirmed hourly close"
+            echo "Pre-trigger received at ${MIN}:${SEC}; waiting ${WAIT}s for confirmed 15m close"
             sleep "$WAIT"
           else
             echo "Running immediately at minute ${MIN}, second ${SEC}"
           fi
-
       - name: Refresh repository state
         shell: bash
         run: |
@@ -61,7 +64,7 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Scan for LIVE signal and execute AUTO after revalidation
+      - name: Scan 15m LIVE signal and execute AUTO after revalidation
         env:
           BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
           BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
