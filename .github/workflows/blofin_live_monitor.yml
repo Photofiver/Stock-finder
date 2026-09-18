@@ -2,6 +2,10 @@ name: BloFin LIVE position monitor
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_live_hourly.py'
+      - 'blofin_live_monitor.py'
   schedule:
     - cron: '3-58/5 * * * *'
 
