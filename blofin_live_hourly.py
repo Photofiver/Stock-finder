@@ -21,7 +21,8 @@ MAX_NOTIONAL_USDT = Decimal(os.getenv("LIVE_MAX_BANKROLL_USDT", "10.6136"))
 LEVERAGE = "1"
 MARGIN_MODE = "isolated"
 TOP_N = 10
-POSITION_FRACTION = Decimal("0.25")
+MAX_OPEN_POSITIONS = 4
+POSITION_FRACTION = Decimal("0.25")  # legacy/default single-entry fraction
 HARD_SL_PCT = Decimal("0.10")
 RSI_PERIOD = 14
 SIGNAL_BAR = "15m"
@@ -170,6 +171,11 @@ def load_state():
             state.setdefault("gross_realized_pnl_usdt", 0.0)
             trades = state.setdefault("trades", {"total": 0, "wins": 0, "losses": 0, "flat": 0})
             trades.setdefault("unverified", 0)
+            positions = state.setdefault("positions", {})
+            legacy = state.get("position")
+            if isinstance(legacy, dict) and legacy.get("inst"):
+                positions.setdefault(str(legacy["inst"]), legacy)
+            state["position"] = None
             return state
     except Exception:
         pass
@@ -177,6 +183,7 @@ def load_state():
         "version": 1,
         "started_at_ms": now_ms(),
         "position": None,
+        "positions": {},
         "arms": {},
         "last_processed_close_ms": {},
         "trades": {"total": 0, "wins": 0, "losses": 0, "flat": 0, "unverified": 0},
@@ -693,7 +700,7 @@ def cancel_tracked_tpsl(state):
         return False
 
     # New positions intentionally keep a hard -10% SL.
-    if pos.get("risk_profile") == "QUARTER_ACCOUNT_SL10":
+    if str(pos.get("risk_profile") or "").endswith("SL10"):
         return False
 
     tpsl_id = str(pos.get("tpsl_id") or "").strip()
@@ -769,7 +776,7 @@ def evaluate_tracked_exit_signal(state, expected_close_ms=None):
     return False
 
 
-def place_live_trade(state, candidate, tickers, instruments):
+def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allocation_label=None):
     _, inst, side, signal_close_ms = candidate
     signal_age_ms = now_ms() - int(signal_close_ms)
     if signal_age_ms < 0 or signal_age_ms > SIGNAL_MAX_AGE_MS:
@@ -780,8 +787,16 @@ def place_live_trade(state, candidate, tickers, instruments):
 
     market_reference = d(tickers[inst]["last"])
     available = get_available_usdt()
-    # New risk profile: use only one quarter of available account equity.
-    cap = min(MAX_NOTIONAL_USDT, available * POSITION_FRACTION)
+    if cap_usdt is None:
+        cap = min(MAX_NOTIONAL_USDT, available * POSITION_FRACTION)
+        allocation_label = allocation_label or "25% of available, capped"
+        risk_profile = "QUARTER_ACCOUNT_SL10"
+        account_fraction = clean_decimal(POSITION_FRACTION)
+    else:
+        cap = min(d(cap_usdt), available)
+        allocation_label = allocation_label or "dynamic equal split of available balance"
+        risk_profile = "DYNAMIC_SPLIT_SL10"
+        account_fraction = ""
     sized = size_for_notional(market_reference, instruments[inst], cap)
     if sized is None:
         raise RuntimeError(f"{inst}: minimum contract/lot exceeds live cap {cap:.4f} USDT")
@@ -823,8 +838,9 @@ def place_live_trade(state, candidate, tickers, instruments):
         "notional_usdt": clean_decimal(estimated_notional),
         "protection_status": "WAITING_FOR_SL10",
         "strategy": "VOLUME_COLOUR_FLIP_15M",
-        "risk_profile": "QUARTER_ACCOUNT_SL10",
-        "account_fraction": clean_decimal(POSITION_FRACTION),
+        "risk_profile": risk_profile,
+        "account_fraction": account_fraction,
+        "allocation_label": allocation_label,
     }
 
     fill = wait_for_order_fill(inst, order_id, client_id)
@@ -900,7 +916,7 @@ def place_live_trade(state, candidate, tickers, instruments):
 
     notify(
         f"OPEN {side} {inst} | 1x isolated | actual entry {fill_price} | "
-        f"notional≈{actual_notional:.4f} USDT (25% of available, capped) | "
+        f"notional≈{actual_notional:.4f} USDT ({allocation_label}) | "
         f"hard SL {hard_sl} (-10%) | no TP | "
         f"normal exit on opposite larger Volume colour flip | "
         f"signal age {signal_age_ms / 1000:.0f}s",
@@ -908,32 +924,169 @@ def place_live_trade(state, candidate, tickers, instruments):
     )
 
 
+def get_tracked_positions(state):
+    positions = state.setdefault("positions", {})
+    legacy = state.get("position")
+    if isinstance(legacy, dict) and legacy.get("inst"):
+        positions.setdefault(str(legacy["inst"]), legacy)
+    state["position"] = None
+    return positions
+
+
+def _run_for_tracked_position(state, inst, func, *args):
+    positions = get_tracked_positions(state)
+    pos = positions.get(inst)
+    if not pos:
+        return None
+    state["position"] = pos
+    try:
+        result = func(state, *args)
+        updated = state.get("position")
+        if isinstance(updated, dict) and updated.get("inst"):
+            positions[inst] = updated
+        else:
+            positions.pop(inst, None)
+        return result
+    finally:
+        state["position"] = None
+
+
+def sync_all_tracked_positions(state):
+    positions = get_tracked_positions(state)
+    open_positions = get_open_positions()
+    open_by_inst = {str(p.get("instId")): p for p in open_positions}
+
+    for inst in list(positions):
+        if inst not in open_by_inst:
+            _run_for_tracked_position(state, inst, record_closed, "external close")
+        else:
+            _run_for_tracked_position(state, inst, cancel_tracked_tpsl)
+
+    return get_open_positions()
+
+
+def evaluate_all_tracked_exit_signals(state, expected_close_ms=None):
+    closed = []
+    for inst in list(get_tracked_positions(state)):
+        result = _run_for_tracked_position(
+            state, inst, evaluate_tracked_exit_signal, expected_close_ms
+        )
+        if result:
+            closed.append(inst)
+    return closed
+
+
+def place_live_trade_multi(
+    state, candidate, tickers, instruments, cap_usdt, allocation_label
+):
+    positions = get_tracked_positions(state)
+    state["position"] = None
+    place_live_trade(
+        state,
+        candidate,
+        tickers,
+        instruments,
+        cap_usdt=cap_usdt,
+        allocation_label=allocation_label,
+    )
+    pos = state.get("position")
+    if isinstance(pos, dict) and pos.get("inst"):
+        positions[str(pos["inst"])] = pos
+    state["position"] = None
+    return pos
+
+
+def execute_candidate_batch(state, candidates, tickers, instruments):
+    positions = get_tracked_positions(state)
+    open_positions = get_open_positions()
+    account_open = {str(p.get("instId")) for p in open_positions if p.get("instId")}
+    tracked = set(positions)
+    untracked = sorted(account_open - tracked)
+    if untracked:
+        notify(
+            "No new LIVE order: account has untracked open position(s): "
+            + ", ".join(untracked[:5]),
+            "BloFin LIVE BLOCKED",
+        )
+        return []
+
+    slots = max(0, MAX_OPEN_POSITIONS - len(account_open))
+    if slots <= 0:
+        return []
+
+    selected = []
+    seen = set(account_open)
+    for candidate in candidates:
+        inst = str(candidate[1])
+        if inst in seen:
+            continue
+        selected.append(candidate)
+        seen.add(inst)
+        if len(selected) >= slots:
+            break
+
+    if not selected:
+        return []
+
+    available = get_available_usdt()
+    if available <= 0:
+        notify("No available USDT for a new LIVE order.", "BloFin LIVE BLOCKED")
+        return []
+
+    per_trade_cap = available / Decimal(len(selected))
+    allocation_label = (
+        f"1/{len(selected)} of currently available balance; "
+        f"max {MAX_OPEN_POSITIONS} positions"
+    )
+    executed = []
+    for candidate in selected:
+        rank, inst, side, signal_close_ms = candidate
+        try:
+            pos = place_live_trade_multi(
+                state,
+                candidate,
+                tickers,
+                instruments,
+                per_trade_cap,
+                allocation_label,
+            )
+            if pos:
+                executed.append({
+                    "inst": inst,
+                    "side": side,
+                    "rank": int(rank),
+                    "signal_close_ms": int(signal_close_ms),
+                    "notional_usdt": pos.get("notional_usdt"),
+                })
+        except Exception as exc:
+            print(f"LIVE ENTRY ERROR {inst}: {type(exc).__name__}: {exc}")
+            notify(
+                f"{inst} {side}: entry failed: {exc}",
+                "BloFin LIVE ENTRY ERROR",
+            )
+    return executed
+
+
 def status(state, top10):
     available = get_available_usdt()
-    pos = state.get("position")
-    if pos:
-        age_h = max(0.0, (now_ms() - int(pos["opened_ms"])) / D1H_MS)
-        risk = pos.get("risk_profile")
-        if risk == "QUARTER_ACCOUNT_SL10":
-            pos_text = (
-                f"OPEN {pos['side']} {pos['inst']} | {age_h:.1f}h | "
-                "volume-flip exit | hard SL -10%"
+    positions = get_tracked_positions(state)
+    if positions:
+        parts = []
+        for pos in list(positions.values())[:MAX_OPEN_POSITIONS]:
+            age_min = max(
+                0.0, (now_ms() - int(pos.get("opened_ms") or now_ms())) / 60000.0
             )
-        else:
-            pos_text = (
-                f"OPEN {pos['side']} {pos['inst']} | {age_h:.1f}h | "
-                "legacy current position: volume-flip exit"
-            )
+            parts.append(f"{pos.get('side')} {pos.get('inst')} {age_min:.0f}m")
+        pos_text = f"{len(positions)}/{MAX_OPEN_POSITIONS} open: " + ", ".join(parts)
     else:
-        pos_text = "no tracked open position"
+        pos_text = f"0/{MAX_OPEN_POSITIONS} open"
     t = state.get("trades", {})
     notify(
-        f"LIVE status | cap {MAX_NOTIONAL_USDT:.4f} USDT | available {available:.4f} USDT | "
+        f"LIVE status | available {available:.4f} USDT | "
         f"NET realized {d(state.get('realized_pnl_usdt', 0)):+.4f} | "
         f"fees {d(state.get('fees_usdt', 0)):.4f} | trades {t.get('total', 0)} "
         f"(W{t.get('wins', 0)}/L{t.get('losses', 0)}/F{t.get('flat', 0)}/U{t.get('unverified', 0)}) | "
-        f"{pos_text} | "
-        f"TOP3: {', '.join(top10[:3]) if top10 else 'none'}",
+        f"{pos_text} | TOP3: {', '.join(top10[:3]) if top10 else 'none'}",
         "BloFin LIVE 15m",
     )
 
@@ -946,28 +1099,18 @@ def main():
     if not top10:
         raise RuntimeError("BloFin TOP10 is empty")
 
-    open_positions = sync_tracked_position(state)
-    if state.get("position") and evaluate_tracked_exit_signal(state):
-        open_positions = get_open_positions()
+    sync_all_tracked_positions(state)
+    evaluate_all_tracked_exit_signals(state)
     candidates = evaluate_signals(state, top10)
-
-    if not state.get("position"):
-        if open_positions:
-            names = ", ".join(str(p.get("instId")) for p in open_positions[:5])
-            notify(
-                f"No new LIVE order: account already has an untracked open position ({names}).",
-                "BloFin LIVE BLOCKED",
-            )
-        elif candidates:
-            place_live_trade(state, candidates[0], tickers, instruments)
+    executed = execute_candidate_batch(state, candidates, tickers, instruments)
 
     status(state, top10)
     state["last_run_ms"] = now_ms()
     state["last_top10"] = top10
     save_state(state)
     print(json.dumps({
-        "cap": str(MAX_NOTIONAL_USDT),
-        "position": state.get("position"),
+        "positions": get_tracked_positions(state),
+        "executed": executed,
         "trades": state.get("trades"),
         "top10": top10,
     }, ensure_ascii=False))
