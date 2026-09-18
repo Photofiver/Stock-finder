@@ -19,19 +19,11 @@ def main():
         print(json.dumps({"position": None, "changed": True}))
         return
 
-    age_ms = bot.now_ms() - int(pos.get("opened_ms") or bot.now_ms())
-    if age_ms >= bot.HOLD_HOURS * bot.D1H_MS and not pos.get("max_hold_alerted"):
-        pos["max_hold_alerted"] = True
-        bot.notify(
-            f"{pos['side']} {pos['inst']} jest otwarta juz {bot.HOLD_HOURS}h. "
-            "Limit czasu zostal osiagniety; pozycja nie zostala automatycznie zamknieta.",
-            "BloFin LIVE 5H",
-        )
+    changed = bot.cancel_tracked_tpsl(state)
+    if changed:
         bot.save_state(state)
-        print(json.dumps({"position": pos, "changed": True}, ensure_ascii=False))
-        return
 
-    print(json.dumps({"position": pos, "changed": False}, ensure_ascii=False))
+    print(json.dumps({"position": pos, "changed": changed}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
