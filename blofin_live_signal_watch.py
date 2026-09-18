@@ -115,30 +115,28 @@ def wait_for_confirmed_hourly_close(top10, expected_close_ms):
 
 def build_live_diagnostic(state, top10):
     lines = ["Brak sygnalu LIVE. Sprawdzono aktualne TOP10 BloFin 24h:"]
-    arms = state.get("arms", {})
 
     for rank, inst in enumerate(top10, start=1):
         try:
             bars = bot.fetch_1h(inst)
-            if len(bars) < 35:
+            if len(bars) < 2:
                 lines.append(f"{rank}. {inst} — za malo danych 1H")
                 continue
 
             i = len(bars) - 1
-            arm = arms.get(inst, {})
-            arm_dir = arm.get("direction")
-            vol_ok = (
-                arm_dir in ("LONG", "SHORT")
-                and bot.volume_ok(bars, i, arm_dir)
-            )
-
-            if arm_dir not in ("LONG", "SHORT"):
-                detail = "RSI arm ✗ | VOL ✗"
-            elif vol_ok:
-                detail = f"RSI arm {arm_dir} ✓ | VOL {arm_dir} ✓ | gotowy"
+            signal = bot.volume_flip_signal(bars, i)
+            prev_color = bot.candle_color(bars[i - 1])
+            cur_color = bot.candle_color(bars[i])
+            if signal:
+                detail = (
+                    f"VOL {prev_color}->{cur_color} ✓ | "
+                    f"{bars[i]['v']:.4f}>{bars[i - 1]['v']:.4f} | {signal}"
+                )
             else:
-                detail = f"RSI arm {arm_dir} ✓ | VOL {arm_dir} ✗"
-
+                detail = (
+                    f"VOL {prev_color}->{cur_color} ✗ | "
+                    f"{bars[i]['v']:.4f} vs {bars[i - 1]['v']:.4f}"
+                )
             lines.append(f"{rank}. {inst} — {detail}")
         except Exception as exc:
             lines.append(f"{rank}. {inst} — blad danych: {type(exc).__name__}")
@@ -170,10 +168,15 @@ def main():
         )
         return
 
-    # Start just after xx:00 and proceed as soon as BloFin confirms the closed 1H candle.
-    wait_for_confirmed_hourly_close(top10, expected_close_ms)
+    # Start just after xx:00 and confirm the closed 1H candle for TOP10
+    # plus the tracked instrument, because exits are based on its Volume flip.
+    tracked_inst = (state.get("position") or {}).get("inst")
+    confirm_insts = list(dict.fromkeys(top10 + ([tracked_inst] if tracked_inst else [])))
+    wait_for_confirmed_hourly_close(confirm_insts, expected_close_ms)
 
     open_positions = bot.sync_tracked_position(state)
+    if state.get("position") and bot.evaluate_tracked_exit_signal(state, expected_close_ms):
+        open_positions = bot.get_open_positions()
     candidates = bot.evaluate_signals(state, top10)
     executed = None
 
