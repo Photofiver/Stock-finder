@@ -1025,7 +1025,7 @@ def ensure_tp1_for_all_tracked_positions(state):
     if not positions:
         return []
 
-    _, _, instruments = get_universe()
+    _, tickers, instruments = get_universe()
     open_by_inst = {
         str(row.get("instId")): row
         for row in get_open_positions()
@@ -1068,6 +1068,26 @@ def ensure_tp1_for_all_tracked_positions(state):
                 entry * (Decimal("1") + HARD_SL_PCT), tick, ROUND_CEILING
             )
         else:
+            continue
+
+        last = d((tickers.get(inst) or {}).get("last") or "0")
+        tp_already_hit = (
+            last > 0
+            and (
+                (side == "LONG" and last >= tp)
+                or (side == "SHORT" and last <= tp)
+            )
+        )
+        if tp_already_hit:
+            notify(
+                f"{side} {inst} | price already reached/passed TP +1% "
+                f"(target {tp}, last {last}); closing now.",
+                "BloFin LIVE TP1",
+            )
+            _run_for_tracked_position(
+                state, inst, close_tracked_position, "TP +1% reached"
+            )
+            updated.append(inst)
             continue
 
         old_id = str(pos.get("tpsl_id") or "").strip()
@@ -1114,6 +1134,7 @@ def ensure_tp1_for_all_tracked_positions(state):
         pos["sl"] = clean_decimal(sl)
         pos["tp_policy"] = "TP1"
         pos["protection_status"] = "TP1_SL10_ACTIVE"
+        pos.pop("protection_error", None)
         updated.append(inst)
         notify(
             f"{side} {inst} | TP +1% active at {tp} | SL -10% stays at {sl}",
