@@ -36,7 +36,7 @@ for inst,b in series.items():
     rows.append({"inst":inst,"corr":c,"same_dir_pct":same,"n":len(ks)})
 rows.sort(key=lambda x:x["corr"],reverse=True)
 by={r["inst"]:r for r in rows}
-top10,_,_=bot.get_universe()
+top10=["ONE-USDT","CNPY-USDT","DRIFT-USDT","UNI-USDT","ARB-USDT","NEAR-USDT","STRK-USDT","INJ-USDT","AR-USDT","RAY-USDT"]
 current=[by[i] for i in top10 if i in by]
 print("SUMMARY "+json.dumps({
  "coins_analyzed":len(rows),
