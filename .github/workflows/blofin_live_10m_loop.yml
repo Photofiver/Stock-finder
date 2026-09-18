@@ -1,0 +1,115 @@
+name: BloFin LIVE 10m loop
+
+on:
+  push:
+    paths:
+      - 'live10_trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: blofin-live-10m-loop
+  cancel-in-progress: true
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install -r requirements.txt
+
+      - name: Run six exact 10m LIVE scans
+        env:
+          BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
+          BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
+          BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
+          BLOFIN_LIVE_ENABLED: 'true'
+          LIVE_MAX_BANKROLL_USDT: '10.6136'
+          LIVE_SIGNAL_MINUTES: '10'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          align_first() {
+            MIN=$(date -u +%M)
+            SEC=$(date -u +%S)
+            MIN=$((10#$MIN))
+            SEC=$((10#$SEC))
+            REM=$((MIN % 10))
+            WAIT=0
+
+            if [ "$REM" -eq 0 ]; then
+              if [ "$SEC" -lt 2 ]; then
+                WAIT=$((2 - SEC))
+              fi
+            elif [ "$REM" -eq 1 ]; then
+              WAIT=0
+            else
+              WAIT=$((((10 - REM) * 60) - SEC + 2))
+            fi
+
+            if [ "$WAIT" -gt 0 ]; then
+              echo "Initial 10m alignment: waiting ${WAIT}s"
+              sleep "$WAIT"
+            fi
+          }
+
+          wait_next() {
+            MIN=$(date -u +%M)
+            SEC=$(date -u +%S)
+            MIN=$((10#$MIN))
+            SEC=$((10#$SEC))
+            REM=$((MIN % 10))
+            WAIT=$((((10 - REM) * 60) - SEC + 2))
+            if [ "$REM" -eq 0 ]; then
+              WAIT=$((600 - SEC + 2))
+            fi
+            echo "Waiting ${WAIT}s for next 10m close"
+            sleep "$WAIT"
+          }
+
+          align_first
+
+          for N in 1 2 3 4 5 6; do
+            echo "=== 10m LIVE scan ${N}/6 ==="
+            git fetch origin main --depth=1
+            git reset --hard origin/main
+
+            python blofin_live_signal_watch.py
+
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add blofin_signal_state.json 2>/dev/null || true
+            git add blofin_pending_signal.json 2>/dev/null || true
+            git add blofin_live_state.json 2>/dev/null || true
+            if ! git diff --cached --quiet; then
+              git commit -m 'Update BloFin 10m LIVE state'
+              git pull --rebase origin main
+              git push origin HEAD:main
+            fi
+
+            if [ "$N" -lt 6 ]; then
+              wait_next
+            fi
+          done
+
+      - name: Notify LIVE 10m failure
+        if: failure()
+        shell: bash
+        run: |
+          curl -fsS --retry 3 --retry-delay 1 --max-time 20 \
+            -H 'Title: BloFin LIVE 10m ERROR' \
+            -H 'Priority: 5' \
+            -d "LIVE 10m loop failed. Sprawdz GitHub Actions run ${GITHUB_RUN_ID}." \
+            'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n' || true
