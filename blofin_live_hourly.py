@@ -23,7 +23,7 @@ MARGIN_MODE = "isolated"
 TOP_N = 10
 MAX_OPEN_POSITIONS = 4
 POSITION_FRACTION = Decimal("0.25")  # legacy/default single-entry fraction
-HARD_SL_PCT = Decimal("0.01")
+HARD_SL_PCT = Decimal("0.005")
 TAKE_PROFIT_PCT = Decimal("0.01")
 RSI_PERIOD = 14
 SIGNAL_BAR = "15m"
@@ -747,8 +747,8 @@ def cancel_tracked_tpsl(state):
     # Managed LIVE positions intentionally keep their broker-side TP/SL protection.
     if (
         pos.get("tp_policy") == "TP1"
-        or pos.get("sl_policy") == "SL1"
-        or str(pos.get("risk_profile") or "").endswith(("SL10", "SL1"))
+        or pos.get("sl_policy") == "SL0_5"
+        or str(pos.get("risk_profile") or "").endswith(("SL050", "SL05"))
     ):
         return False
 
@@ -839,12 +839,12 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
     if cap_usdt is None:
         cap = min(MAX_NOTIONAL_USDT, available * POSITION_FRACTION)
         allocation_label = allocation_label or "25% of available, capped"
-        risk_profile = "QUARTER_ACCOUNT_SL1"
+        risk_profile = "QUARTER_ACCOUNT_SL05"
         account_fraction = clean_decimal(POSITION_FRACTION)
     else:
         cap = min(d(cap_usdt), available)
         allocation_label = allocation_label or "dynamic equal split of available balance"
-        risk_profile = "DYNAMIC_SPLIT_SL1"
+        risk_profile = "DYNAMIC_SPLIT_SL05"
         account_fraction = ""
     sized = size_for_notional(market_reference, instruments[inst], cap)
     if sized is None:
@@ -885,7 +885,7 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         "sl": "",
         "size": clean_decimal(size),
         "notional_usdt": clean_decimal(estimated_notional),
-        "protection_status": "WAITING_FOR_TP1_SL1",
+        "protection_status": "WAITING_FOR_TP1_SL05",
         "strategy": "VOLUME_COLOUR_FLIP_15M",
         "risk_profile": risk_profile,
         "account_fraction": account_fraction,
@@ -942,8 +942,8 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         "tp": clean_decimal(hard_tp),
         "sl": clean_decimal(hard_sl),
         "tp_policy": "TP1",
-        "sl_policy": "SL1",
-        "protection_status": "PLACING_TP1_SL1",
+        "sl_policy": "SL0_5",
+        "protection_status": "PLACING_TP1_SL05",
     })
 
     try:
@@ -951,15 +951,15 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
             inst, side, hard_tp, hard_sl
         )
     except Exception as exc:
-        state["position"]["protection_status"] = "TP1_SL1_FAILED"
+        state["position"]["protection_status"] = "TP1_SL05_FAILED"
         state["position"]["protection_error"] = str(exc)
         notify(
-            f"CRITICAL {side} {inst}: TP +1% / SL -1% could not be placed. "
+            f"CRITICAL {side} {inst}: TP +1% / SL -0.5% could not be placed. "
             f"Closing position for safety. Error: {exc}",
             "BloFin LIVE SAFETY",
         )
         try:
-            close_tracked_position(state, "SAFETY: TP1/SL1 placement failed")
+            close_tracked_position(state, "SAFETY: TP1/SL05 placement failed")
         except Exception as close_exc:
             state["position"]["protection_error"] = (
                 f"{exc}; safety close failed: {close_exc}"
@@ -972,12 +972,12 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
 
     state["position"]["tpsl_id"] = tpsl_id
     state["position"]["tpsl_client_order_id"] = tpsl_client_id
-    state["position"]["protection_status"] = "TP1_SL1_ACTIVE"
+    state["position"]["protection_status"] = "TP1_SL05_ACTIVE"
 
     notify(
         f"OPEN {side} {inst} | 1x isolated | actual entry {fill_price} | "
         f"notional≈{actual_notional:.4f} USDT ({allocation_label}) | "
-        f"TP {hard_tp} (+1%) | hard SL {hard_sl} (-1%) | "
+        f"TP {hard_tp} (+1%) | hard SL {hard_sl} (-0.5%) | "
         f"normal exit on opposite larger Volume colour flip | "
         f"signal age {signal_age_ms / 1000:.0f}s",
         "BloFin LIVE OPEN",
@@ -1044,7 +1044,7 @@ def ensure_tp1_for_all_tracked_positions(state):
             continue
         if (
             pos.get("tp_policy") == "TP1"
-            and pos.get("sl_policy") == "SL1"
+            and pos.get("sl_policy") == "SL0_5"
             and str(pos.get("tp") or "").strip()
             and str(pos.get("sl") or "").strip()
         ):
@@ -1109,12 +1109,12 @@ def ensure_tp1_for_all_tracked_positions(state):
         )
         if sl_already_hit:
             notify(
-                f"{side} {inst} | price already reached/passed SL -1% "
+                f"{side} {inst} | price already reached/passed SL -0.5% "
                 f"(target {sl}, last {last}); closing now.",
-                "BloFin LIVE SL1",
+                "BloFin LIVE SL05",
             )
             _run_for_tracked_position(
-                state, inst, close_tracked_position, "SL -1% reached"
+                state, inst, close_tracked_position, "SL -0.5% reached"
             )
             updated.append(inst)
             continue
@@ -1137,7 +1137,7 @@ def ensure_tp1_for_all_tracked_positions(state):
                     pos["tpsl_id"] = restore_id
                     pos["tpsl_client_order_id"] = restore_client
                     pos["sl"] = clean_decimal(sl)
-                    pos["protection_status"] = "SL1_ACTIVE"
+                    pos["protection_status"] = "SL05_ACTIVE"
                 except Exception as restore_exc:
                     pos["protection_status"] = "PROTECTION_MIGRATION_FAILED"
                     pos["protection_error"] = f"{exc}; restore SL failed: {restore_exc}"
@@ -1162,15 +1162,15 @@ def ensure_tp1_for_all_tracked_positions(state):
         pos["tp"] = clean_decimal(tp)
         pos["sl"] = clean_decimal(sl)
         pos["tp_policy"] = "TP1"
-        pos["sl_policy"] = "SL1"
+        pos["sl_policy"] = "SL0_5"
         old_profile = str(pos.get("risk_profile") or "")
         if old_profile:
-            pos["risk_profile"] = old_profile.replace("SL10", "SL1")
-        pos["protection_status"] = "TP1_SL1_ACTIVE"
+            pos["risk_profile"] = old_profile.replace("SL050", "SL05")
+        pos["protection_status"] = "TP1_SL05_ACTIVE"
         pos.pop("protection_error", None)
         updated.append(inst)
         notify(
-            f"{side} {inst} | TP +1% active at {tp} | SL -1% active at {sl}",
+            f"{side} {inst} | TP +1% active at {tp} | SL -0.5% active at {sl}",
             "BloFin LIVE TP1",
         )
 
