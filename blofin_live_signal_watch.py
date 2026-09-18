@@ -1,16 +1,11 @@
 import json
 import os
 import time
-import uuid
-
 import requests
 
-import blofin_live_approve as approval
 import blofin_live_hourly as bot
 
 SIGNAL_STATE_FILE = os.getenv("SIGNAL_STATE_FILE", "blofin_signal_state.json")
-PENDING_FILE = os.getenv("PENDING_SIGNAL_FILE", "blofin_pending_signal.json")
-APPROVAL_TTL_MS = 2 * 60 * 1000
 CANDLE_CONFIRM_ATTEMPTS = 30
 CANDLE_CONFIRM_DELAY_SEC = 1
 BROKER_ID = os.getenv("BLOFIN_BROKER_ID", "dd3511977f23cc87").strip()
@@ -22,6 +17,8 @@ def private_request_with_broker(method, path, params=None, body=None):
     if method.upper() != "GET" and path in {
         "/api/v1/trade/order",
         "/api/v1/trade/close-position",
+        "/api/v1/trade/order-tpsl",
+        "/api/v1/trade/order-algo",
     }:
         body = dict(body or {})
         body.setdefault("brokerId", BROKER_ID)
@@ -81,23 +78,6 @@ def send_ntfy(title, message, priority=2, actions=None, click=None):
         ).raise_for_status()
     except Exception as exc:
         print(f"NTFY ERROR: {exc}")
-
-
-def notify_signal(pending):
-    inst = pending["inst"]
-    side = pending["side"]
-    rank = pending["rank"]
-    message = (
-        f"SYGNAL {side} {inst} | TOP{rank} | tryb AUTO. "
-        "Bot od razu ponownie sprawdzi sygnal i jesli nadal jest poprawny, "
-        "wykona zlecenie LIVE bez klikania."
-    )
-    print(message)
-    send_ntfy(
-        "BloFin SIGNAL - AUTO",
-        message,
-        priority=5,
-    )
 
 
 def expected_hour_close_ms():
@@ -167,8 +147,11 @@ def build_live_diagnostic(state, top10):
 
 
 def main():
-    state = load_json(SIGNAL_STATE_FILE, default_signal_state())
-    top10, _tickers, _instruments = bot.get_universe()
+    bot.require_live_enabled()
+    bot.require_account_modes()
+
+    state = bot.load_state()
+    top10, tickers, instruments = bot.get_universe()
     if not top10:
         raise RuntimeError("BloFin TOP10 is empty")
 
@@ -187,34 +170,46 @@ def main():
         )
         return
 
+    # Start just after xx:00 and proceed as soon as BloFin confirms the closed 1H candle.
     wait_for_confirmed_hourly_close(top10, expected_close_ms)
 
+    open_positions = bot.sync_tracked_position(state)
     candidates = bot.evaluate_signals(state, top10)
-    created = None
-    if candidates:
-        rank, inst, side, signal_close_ms = candidates[0]
-        if int(signal_close_ms) != expected_close_ms:
-            raise RuntimeError(
-                f"Candidate candle mismatch: got {signal_close_ms}, "
-                f"expected {expected_close_ms}"
-            )
-        now = bot.now_ms()
-        created = {
-            "version": 2,
-            "status": "pending",
-            "signal_id": uuid.uuid4().hex,
-            "inst": inst,
-            "side": side,
-            "rank": int(rank),
-            "signal_close_ms": int(signal_close_ms),
-            "created_at_ms": now,
-            "expires_at_ms": now + APPROVAL_TTL_MS,
-        }
-        save_json(PENDING_FILE, created)
+    executed = None
 
-        notify_signal(created)
-        approval.main()
-    else:
+    if not state.get("position"):
+        if open_positions:
+            names = ", ".join(str(p.get("instId")) for p in open_positions[:5])
+            bot.notify(
+                f"No new LIVE order: account already has an open position ({names}).",
+                "BloFin LIVE BLOCKED",
+            )
+        elif candidates:
+            candidate = candidates[0]
+            rank, inst, side, signal_close_ms = candidate
+            if int(signal_close_ms) != expected_close_ms:
+                raise RuntimeError(
+                    f"Candidate candle mismatch: got {signal_close_ms}, "
+                    f"expected {expected_close_ms}"
+                )
+
+            # No pending approval and no second signal scan:
+            # the validated signal is sent to market immediately.
+            print(
+                f"DIRECT LIVE {side} {inst} | TOP{rank} | "
+                f"signal age {(bot.now_ms() - signal_close_ms) / 1000:.1f}s"
+            )
+            bot.place_live_trade(state, candidate, tickers, instruments)
+            executed = {
+                "inst": inst,
+                "side": side,
+                "rank": int(rank),
+                "signal_close_ms": int(signal_close_ms),
+            }
+    elif candidates:
+        print("Signal found, but an existing tracked LIVE position blocks a new entry.")
+
+    if not candidates:
         diagnostic = build_live_diagnostic(state, top10)
         print(diagnostic)
         send_ntfy("BloFin LIVE check", diagnostic, priority=2)
@@ -222,13 +217,15 @@ def main():
     state["last_scan_close_ms"] = expected_close_ms
     state["last_run_ms"] = bot.now_ms()
     state["last_top10"] = top10
-    save_json(SIGNAL_STATE_FILE, state)
+    bot.save_state(state)
+
     print(
         json.dumps(
             {
-                "pending": created,
+                "executed": executed,
                 "hour_close_ms": expected_close_ms,
                 "top10": top10,
+                "position": state.get("position"),
             },
             ensure_ascii=False,
         )
