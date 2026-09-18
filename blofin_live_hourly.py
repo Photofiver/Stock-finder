@@ -457,9 +457,10 @@ def get_available_usdt():
 
 def current_live_bankroll(state):
     """Starting bankroll compounded only by realized NET PnL since the bankroll reset."""
+    starting_bankroll = d(state.get("bankroll_start_usdt", MAX_NOTIONAL_USDT))
     realized_net = d(state.get("realized_pnl_usdt", 0))
     pnl_baseline = d(state.get("bankroll_pnl_baseline_usdt", 0))
-    bankroll = MAX_NOTIONAL_USDT + (realized_net - pnl_baseline)
+    bankroll = starting_bankroll + (realized_net - pnl_baseline)
     return max(Decimal("0"), bankroll)
 
 
