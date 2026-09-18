@@ -17,7 +17,7 @@ PASSPHRASE = os.getenv("BLOFIN_PASSPHRASE", "").strip()
 NTFY_TOPIC = os.getenv("NTFY_TOPIC", "blofin-nhd0jt7wspfnhtitdlaowk1n").strip()
 STATE_FILE = os.getenv("LIVE_STATE_FILE", "blofin_live_state.json")
 LIVE_ENABLED = os.getenv("BLOFIN_LIVE_ENABLED", "").strip().lower() == "true"
-MAX_NOTIONAL_USDT = Decimal(os.getenv("LIVE_MAX_BANKROLL_USDT", "10.6136"))
+MAX_NOTIONAL_USDT = Decimal(os.getenv("LIVE_MAX_BANKROLL_USDT", "10.64"))
 LEVERAGE = "1"
 MARGIN_MODE = "isolated"
 TOP_N = 10
@@ -456,9 +456,10 @@ def get_available_usdt():
 
 
 def current_live_bankroll(state):
-    """Starting bankroll compounded by verified realized NET PnL."""
+    """Starting bankroll compounded only by realized NET PnL since the bankroll reset."""
     realized_net = d(state.get("realized_pnl_usdt", 0))
-    bankroll = MAX_NOTIONAL_USDT + realized_net
+    pnl_baseline = d(state.get("bankroll_pnl_baseline_usdt", 0))
+    bankroll = MAX_NOTIONAL_USDT + (realized_net - pnl_baseline)
     return max(Decimal("0"), bankroll)
 
 
