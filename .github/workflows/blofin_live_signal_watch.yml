@@ -3,8 +3,10 @@ name: BloFin LIVE signal watch
 on:
   push:
     paths:
-      - 'live15_trigger.txt'
+      - 'live10_trigger.txt'
   workflow_dispatch:
+  schedule:
+    - cron: '*/10 * * * *'
 
 permissions:
   contents: write
@@ -23,7 +25,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Align pre-trigger to the 15m candle close
+      - name: Align pre-trigger to the 10m candle close
         if: github.event_name == 'push'
         shell: bash
         run: |
@@ -32,10 +34,10 @@ jobs:
           SEC=$(date -u +%S)
           MIN=$((10#$MIN))
           SEC=$((10#$SEC))
-          REM=$((MIN % 15))
+          REM=$((MIN % 10))
           WAIT=0
 
-          # Align early external triggers to the next 15m close.
+          # Align early external triggers to the next 10m close.
           # If a trigger arrives up to 1m59s after a close, run immediately
           # and process that just-closed candle instead of skipping to the next one.
           if [ "$REM" -eq 0 ]; then
@@ -45,11 +47,11 @@ jobs:
           elif [ "$REM" -eq 1 ]; then
             WAIT=0
           else
-            WAIT=$((((15 - REM) * 60) - SEC + 2))
+            WAIT=$((((10 - REM) * 60) - SEC + 2))
           fi
 
-          if [ "$WAIT" -gt 0 ] && [ "$WAIT" -le 905 ]; then
-            echo "Pre-trigger received at ${MIN}:${SEC}; waiting ${WAIT}s for confirmed 15m close"
+          if [ "$WAIT" -gt 0 ] && [ "$WAIT" -le 605 ]; then
+            echo "Pre-trigger received at ${MIN}:${SEC}; waiting ${WAIT}s for confirmed 10m close"
             sleep "$WAIT"
           else
             echo "Running immediately at minute ${MIN}, second ${SEC}"
@@ -66,12 +68,14 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Scan 15m LIVE signal and execute AUTO after revalidation
+      - name: Scan 10m LIVE signal and execute AUTO after revalidation
         env:
           BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
           BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
           BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
           BLOFIN_LIVE_ENABLED: 'true'
+          LIVE_SIGNAL_MINUTES: '10'
+          LIVE_SIGNAL_MAX_AGE_MS: '540000'
           LIVE_MAX_BANKROLL_USDT: '10.6136'
         run: python blofin_live_signal_watch.py
 
