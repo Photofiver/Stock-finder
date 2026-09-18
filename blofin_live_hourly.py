@@ -3,7 +3,6 @@ import hashlib
 import hmac
 import json
 import os
-import statistics
 import time
 import uuid
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
@@ -25,9 +24,6 @@ TOP_N = 10
 TP_PCT = Decimal("0.015")
 SL_PCT = Decimal("0.005")
 HOLD_HOURS = 5
-STOCH_K_PERIOD = 14
-STOCH_K_SMOOTH = 3
-STOCH_D_PERIOD = 3
 RSI_PERIOD = 14
 D1H_MS = 60 * 60 * 1000
 HTTP_TIMEOUT = 25
@@ -217,26 +213,6 @@ def parse_candles(raw):
     return sorted(out, key=lambda x: x["ts"])
 
 
-def sma(values, period):
-    out = [None] * len(values)
-    for i in range(period - 1, len(values)):
-        window = values[i - period + 1:i + 1]
-        if any(v is None for v in window):
-            continue
-        out[i] = sum(window) / period
-    return out
-
-
-def stochastic(bars):
-    raw_k = [None] * len(bars)
-    for i in range(STOCH_K_PERIOD - 1, len(bars)):
-        window = bars[i - STOCH_K_PERIOD + 1:i + 1]
-        hh = max(b["h"] for b in window)
-        ll = min(b["l"] for b in window)
-        raw_k[i] = 50.0 if hh == ll else 100.0 * (bars[i]["c"] - ll) / (hh - ll)
-    return sma(raw_k, STOCH_K_SMOOTH), sma(sma(raw_k, STOCH_K_SMOOTH), STOCH_D_PERIOD)
-
-
 def rsi_wilder(bars, period=14):
     out = [None] * len(bars)
     if len(bars) <= period:
@@ -259,11 +235,8 @@ def rsi_wilder(bars, period=14):
 
 
 def decorate(bars):
-    k, stoch_d = stochastic(bars)
     rsi = rsi_wilder(bars, RSI_PERIOD)
     for i, bar in enumerate(bars):
-        bar["k"] = k[i]
-        bar["d"] = stoch_d[i]
         bar["rsi"] = rsi[i]
     return bars
 
@@ -302,22 +275,6 @@ def volume_ok(bars, i, side):
         )
 
     return False
-
-
-def stoch_side(bars, i):
-    if i < 1:
-        return None
-    prev, cur = bars[i - 1], bars[i]
-    if None in (prev.get("k"), prev.get("d"), cur.get("k"), cur.get("d")):
-        return None
-    if prev["k"] <= prev["d"] and cur["k"] > cur["d"]:
-        side = "LONG"
-    elif prev["k"] >= prev["d"] and cur["k"] < cur["d"]:
-        side = "SHORT"
-    else:
-        return None
-
-    return side if volume_ok(bars, i, side) else None
 
 
 def rsi_cross(bars, i):
@@ -427,9 +384,13 @@ def evaluate_signals(state, top10):
         last_done = int(state.setdefault("last_processed_close_ms", {}).get(inst, 0) or 0)
         if close_ms <= last_done:
             continue
-        side = stoch_side(bars, i)
         arm = state["arms"].get(inst, {})
-        if side and arm.get("direction") == side and not arm.get("used", False):
+        side = arm.get("direction")
+        if (
+            side in ("LONG", "SHORT")
+            and not arm.get("used", False)
+            and volume_ok(bars, i, side)
+        ):
             signal_age_ms = scan_now_ms - close_ms
             if 0 <= signal_age_ms <= SIGNAL_MAX_AGE_MS:
                 candidates.append((ranks[inst], inst, side, close_ms))
