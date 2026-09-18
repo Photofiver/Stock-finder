@@ -125,19 +125,22 @@ def build_live_diagnostic(state, top10):
                 continue
 
             i = len(bars) - 1
-            side = bot.stoch_side(bars, i)
             arm = arms.get(inst, {})
             arm_dir = arm.get("direction")
             used = bool(arm.get("used", False))
+            vol_ok = (
+                arm_dir in ("LONG", "SHORT")
+                and bot.volume_ok(bars, i, arm_dir)
+            )
 
-            if side is None:
-                detail = f"STOCH+VOL ✗ | RSI arm {arm_dir or '-'}"
-            elif arm_dir != side:
-                detail = f"STOCH+VOL {side} ✓ | RSI arm {arm_dir or '-'} ✗"
+            if arm_dir not in ("LONG", "SHORT"):
+                detail = "RSI arm ✗ | VOL ✗"
             elif used:
-                detail = f"{side} ✓ | sygnal juz uzyty"
+                detail = f"RSI arm {arm_dir} ✓ | VOL {'✓' if vol_ok else '✗'} | sygnal juz uzyty"
+            elif vol_ok:
+                detail = f"RSI arm {arm_dir} ✓ | VOL {arm_dir} ✓ | gotowy"
             else:
-                detail = f"{side} ✓ | gotowy"
+                detail = f"RSI arm {arm_dir} ✓ | VOL {arm_dir} ✗"
 
             lines.append(f"{rank}. {inst} — {detail}")
         except Exception as exc:
