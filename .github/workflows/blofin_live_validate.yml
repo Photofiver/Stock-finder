@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - 'blofin_live_hourly.py'
+      - 'blofin_live_approve.py'
+      - 'blofin_live_signal_watch.py'
       - '.github/workflows/blofin_live_validate.yml'
   workflow_dispatch:
 
@@ -22,4 +24,4 @@ jobs:
         with:
           python-version: '3.12'
       - name: Validate LIVE bot syntax only
-        run: python -m py_compile blofin_live_hourly.py
+        run: python -m py_compile blofin_live_hourly.py blofin_live_approve.py blofin_live_signal_watch.py
