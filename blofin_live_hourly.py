@@ -34,6 +34,8 @@ RSI_PERIOD = 14
 D1H_MS = 60 * 60 * 1000
 HTTP_TIMEOUT = 25
 MAX_RETRIES = 4
+CLOSE_HISTORY_ATTEMPTS = 8
+CLOSE_HISTORY_DELAY_SEC = 3
 USER_AGENT = "Mozilla/5.0 BloFinStockFinder/1.0"
 
 
@@ -165,6 +167,11 @@ def load_state():
         with open(STATE_FILE, "r", encoding="utf-8") as f:
             state = json.load(f)
         if isinstance(state, dict):
+            state.setdefault("trade_history", [])
+            state.setdefault("fees_usdt", 0.0)
+            state.setdefault("gross_realized_pnl_usdt", 0.0)
+            trades = state.setdefault("trades", {"total": 0, "wins": 0, "losses": 0, "flat": 0})
+            trades.setdefault("unverified", 0)
             return state
     except Exception:
         pass
@@ -174,7 +181,10 @@ def load_state():
         "position": None,
         "arms": {},
         "last_processed_close_ms": {},
-        "trades": {"total": 0, "wins": 0, "losses": 0, "flat": 0},
+        "trades": {"total": 0, "wins": 0, "losses": 0, "flat": 0, "unverified": 0},
+        "trade_history": [],
+        "gross_realized_pnl_usdt": 0.0,
+        "fees_usdt": 0.0,
         "realized_pnl_usdt": 0.0,
     }
 
@@ -461,12 +471,19 @@ def latest_position_history(inst, opened_ms):
     rows = private_request(
         "GET",
         "/api/v1/account/positions-history",
-        params={"instId": inst, "begin": str(max(0, opened_ms - 60000)), "limit": "20"},
+        params={
+            "instId": inst,
+            "begin": str(max(0, opened_ms - 120000)),
+            "end": str(now_ms() + 60000),
+            "limit": "100",
+        },
     ) or []
     candidates = []
     for row in rows if isinstance(rows, list) else []:
         try:
-            if int(row.get("createTime") or 0) >= opened_ms - 60000:
+            create_ms = int(row.get("createTime") or 0)
+            update_ms = int(row.get("updateTime") or 0)
+            if create_ms >= opened_ms - 120000 and update_ms >= opened_ms:
                 candidates.append(row)
         except Exception:
             pass
@@ -476,35 +493,100 @@ def latest_position_history(inst, opened_ms):
     return candidates[0]
 
 
+def history_result_ready(hist):
+    if not isinstance(hist, dict):
+        return False
+    required = ("realizedPnl", "fee", "openAveragePrice", "closeAveragePrice", "updateTime")
+    return all(str(hist.get(key) if hist.get(key) is not None else "").strip() != "" for key in required)
+
+
 def record_closed(state, reason_hint=None):
     pos = state.get("position")
     if not pos:
-        return
-    time.sleep(1)
-    hist = latest_position_history(pos["inst"], int(pos["opened_ms"]))
-    pnl = Decimal("0")
-    fee = Decimal("0")
-    if hist:
-        pnl = d(hist.get("realizedPnl") or "0")
-        fee = d(hist.get("fee") or "0")
-    trades = state.setdefault("trades", {"total": 0, "wins": 0, "losses": 0, "flat": 0})
+        return False
+
+    reason = reason_hint or pos.get("close_reason") or "TP/SL"
+    hist = None
+    for attempt in range(CLOSE_HISTORY_ATTEMPTS):
+        try:
+            candidate = latest_position_history(pos["inst"], int(pos["opened_ms"]))
+            if history_result_ready(candidate):
+                hist = candidate
+                break
+        except Exception as exc:
+            print(f"CLOSE HISTORY attempt {attempt + 1}/{CLOSE_HISTORY_ATTEMPTS}: {exc}")
+        if attempt < CLOSE_HISTORY_ATTEMPTS - 1:
+            time.sleep(CLOSE_HISTORY_DELAY_SEC)
+
+    if not hist:
+        first_pending = not bool(pos.get("result_pending"))
+        pos["result_pending"] = True
+        pos["close_reason"] = reason
+        pos.setdefault("close_detected_ms", now_ms())
+        if first_pending:
+            notify(
+                f"RESULT PENDING {pos['side']} {pos['inst']} | BloFin close history not ready yet. "
+                "The bot will retry and will NOT record a fake 0.0000 PnL.",
+                "BloFin LIVE RESULT PENDING",
+            )
+        return False
+
+    gross_pnl = d(hist.get("realizedPnl") or "0")
+    fee = d(hist.get("fee") or "0")
+    net_pnl = gross_pnl - fee
+    closed_ms = int(hist.get("updateTime") or now_ms())
+    opened_ms = int(pos.get("opened_ms") or closed_ms)
+    hold_minutes = max(0.0, (closed_ms - opened_ms) / 60000.0)
+
+    trades = state.setdefault(
+        "trades",
+        {"total": 0, "wins": 0, "losses": 0, "flat": 0, "unverified": 0},
+    )
+    trades.setdefault("unverified", 0)
     trades["total"] += 1
-    if pnl > 0:
+    if net_pnl > 0:
         result = "WIN"
         trades["wins"] += 1
-    elif pnl < 0:
+    elif net_pnl < 0:
         result = "LOSS"
         trades["losses"] += 1
     else:
         result = "FLAT"
         trades["flat"] += 1
-    state["realized_pnl_usdt"] = float(d(state.get("realized_pnl_usdt", 0)) + pnl)
+
+    state["gross_realized_pnl_usdt"] = float(
+        d(state.get("gross_realized_pnl_usdt", 0)) + gross_pnl
+    )
+    state["fees_usdt"] = float(d(state.get("fees_usdt", 0)) + fee)
+    state["realized_pnl_usdt"] = float(d(state.get("realized_pnl_usdt", 0)) + net_pnl)
+
+    history = state.setdefault("trade_history", [])
+    history.append({
+        "inst": pos["inst"],
+        "side": pos["side"],
+        "opened_ms": opened_ms,
+        "closed_ms": closed_ms,
+        "hold_minutes": round(hold_minutes, 2),
+        "open_price": str(hist.get("openAveragePrice") or pos.get("reference_entry") or ""),
+        "close_price": str(hist.get("closeAveragePrice") or ""),
+        "gross_pnl_usdt": float(gross_pnl),
+        "fee_usdt": float(fee),
+        "net_pnl_usdt": float(net_pnl),
+        "reason": reason,
+        "history_id": str(hist.get("historyId") or ""),
+    })
+    if len(history) > 100:
+        del history[:-100]
+
     notify(
-        f"{result} {pos['side']} {pos['inst']} | reason {reason_hint or 'TP/SL'} | "
-        f"PnL {pnl:+.4f} USDT | fee {fee:+.4f} USDT",
+        f"{result} {pos['side']} {pos['inst']} | {reason} | "
+        f"gross {gross_pnl:+.4f} USDT | fee {fee:.4f} USDT | "
+        f"NET {net_pnl:+.4f} USDT | held {hold_minutes:.1f} min | "
+        f"exit {hist.get('closeAveragePrice')}",
         "BloFin LIVE RESULT",
     )
     state["position"] = None
+    return True
 
 
 def close_tracked_position(state, reason):
@@ -614,8 +696,10 @@ def status(state, top10):
     t = state.get("trades", {})
     notify(
         f"LIVE status | cap {MAX_NOTIONAL_USDT:.4f} USDT | available {available:.4f} USDT | "
-        f"realized {d(state.get('realized_pnl_usdt', 0)):+.4f} | trades {t.get('total', 0)} "
-        f"(W{t.get('wins', 0)}/L{t.get('losses', 0)}/F{t.get('flat', 0)}) | {pos_text} | "
+        f"NET realized {d(state.get('realized_pnl_usdt', 0)):+.4f} | "
+        f"fees {d(state.get('fees_usdt', 0)):.4f} | trades {t.get('total', 0)} "
+        f"(W{t.get('wins', 0)}/L{t.get('losses', 0)}/F{t.get('flat', 0)}/U{t.get('unverified', 0)}) | "
+        f"{pos_text} | "
         f"TOP3: {', '.join(top10[:3]) if top10 else 'none'}",
         "BloFin LIVE 1H",
     )
