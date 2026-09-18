@@ -145,6 +145,13 @@ def build_live_diagnostic(state, top10):
 
 
 def main():
+    if (
+        bot.SIGNAL_MINUTES == 10
+        and os.getenv("GITHUB_WORKFLOW") == "BloFin LIVE signal watch"
+    ):
+        print("10m LIVE is handled by the dedicated loop workflow; duplicate run skipped.")
+        return
+
     bot.require_live_enabled()
     bot.require_account_modes()
 
