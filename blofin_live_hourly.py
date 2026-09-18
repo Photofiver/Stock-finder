@@ -34,6 +34,9 @@ RSI_PERIOD = 14
 D1H_MS = 60 * 60 * 1000
 HTTP_TIMEOUT = 25
 MAX_RETRIES = 4
+SIGNAL_MAX_AGE_MS = int(os.getenv("LIVE_SIGNAL_MAX_AGE_MS", "180000"))
+ENTRY_FILL_ATTEMPTS = 20
+ENTRY_FILL_DELAY_SEC = 0.5
 CLOSE_HISTORY_ATTEMPTS = 8
 CLOSE_HISTORY_DELAY_SEC = 3
 USER_AGENT = "Mozilla/5.0 BloFinStockFinder/1.0"
@@ -393,6 +396,7 @@ def evaluate_signals(state, top10):
             }
 
     candidates = []
+    scan_now_ms = now_ms()
     for inst, bars in data.items():
         i = latest_idx[inst]
         close_ms = bars[i]["ts"] + D1H_MS
@@ -402,7 +406,14 @@ def evaluate_signals(state, top10):
         side = stoch_side(bars, i)
         arm = state["arms"].get(inst, {})
         if side and arm.get("direction") == side and not arm.get("used", False):
-            candidates.append((ranks[inst], inst, side, close_ms))
+            signal_age_ms = scan_now_ms - close_ms
+            if 0 <= signal_age_ms <= SIGNAL_MAX_AGE_MS:
+                candidates.append((ranks[inst], inst, side, close_ms))
+            else:
+                print(
+                    f"STALE SIGNAL {inst} {side}: age={signal_age_ms / 1000:.1f}s "
+                    f"(max {SIGNAL_MAX_AGE_MS / 1000:.0f}s)"
+                )
 
     for inst, bars in data.items():
         i = latest_idx[inst]
@@ -465,6 +476,84 @@ def size_for_notional(last, meta, cap):
     if notional > cap:
         return None
     return size, notional
+
+
+def wait_for_order_fill(inst, order_id, client_order_id=""):
+    last_row = None
+    for attempt in range(ENTRY_FILL_ATTEMPTS):
+        try:
+            params = {"instId": inst}
+            if order_id:
+                params["orderId"] = order_id
+            else:
+                params["clientOrderId"] = client_order_id
+            row = private_request("GET", "/api/v1/trade/order-detail", params=params) or {}
+            if isinstance(row, list):
+                row = row[0] if row else {}
+            if isinstance(row, dict):
+                last_row = row
+                avg = d(row.get("averagePrice") or "0")
+                filled = d(row.get("filledSize") or "0")
+                state = str(row.get("state") or "").lower()
+                if avg > 0 and filled > 0 and state == "filled":
+                    return row
+        except Exception as exc:
+            print(f"ENTRY FILL attempt {attempt + 1}/{ENTRY_FILL_ATTEMPTS}: {exc}")
+        if attempt < ENTRY_FILL_ATTEMPTS - 1:
+            time.sleep(ENTRY_FILL_DELAY_SEC)
+
+    if isinstance(last_row, dict):
+        try:
+            if d(last_row.get("averagePrice") or "0") > 0 and d(last_row.get("filledSize") or "0") > 0:
+                return last_row
+        except Exception:
+            pass
+
+    try:
+        for row in get_open_positions():
+            if row.get("instId") != inst:
+                continue
+            avg = d(row.get("averagePrice") or "0")
+            positions = abs(d(row.get("positions") or "0"))
+            if avg > 0 and positions > 0:
+                return {
+                    "averagePrice": str(avg),
+                    "filledSize": str(positions),
+                    "fee": "0",
+                    "state": "filled",
+                    "source": "position",
+                }
+    except Exception as exc:
+        print(f"ENTRY FILL position fallback: {exc}")
+    return None
+
+
+def place_tpsl_for_position(inst, side, tp, sl):
+    close_side = "sell" if side == "LONG" else "buy"
+    client_id = ("livetpsl" + uuid.uuid4().hex)[:32]
+    data = private_request(
+        "POST",
+        "/api/v1/trade/order-tpsl",
+        body={
+            "instId": inst,
+            "marginMode": MARGIN_MODE,
+            "positionSide": "net",
+            "side": close_side,
+            "tpTriggerPrice": clean_decimal(tp),
+            "tpOrderPrice": "-1",
+            "tpTriggerPriceType": "last",
+            "slTriggerPrice": clean_decimal(sl),
+            "slOrderPrice": "-1",
+            "slTriggerPriceType": "last",
+            "size": "-1",
+            "reduceOnly": "true",
+            "clientOrderId": client_id,
+        },
+    )
+    row = data[0] if isinstance(data, list) and data else (data or {})
+    if str(row.get("code", "0")) != "0":
+        raise RuntimeError(f"TP/SL rejected: {row}")
+    return str(row.get("tpslId") or ""), client_id
 
 
 def latest_position_history(inst, opened_ms):
@@ -623,25 +712,24 @@ def sync_tracked_position(state):
 
 def place_live_trade(state, candidate, tickers, instruments):
     _, inst, side, signal_close_ms = candidate
-    last = d(tickers[inst]["last"])
+    signal_age_ms = now_ms() - int(signal_close_ms)
+    if signal_age_ms < 0 or signal_age_ms > SIGNAL_MAX_AGE_MS:
+        raise RuntimeError(
+            f"{inst}: stale signal ({signal_age_ms / 1000:.1f}s old; "
+            f"max {SIGNAL_MAX_AGE_MS / 1000:.0f}s)"
+        )
+
+    market_reference = d(tickers[inst]["last"])
     available = get_available_usdt()
     # Keep a 2% cash buffer for fees/rounding while never exceeding the requested cap.
     cap = min(MAX_NOTIONAL_USDT, available * Decimal("0.98"))
-    sized = size_for_notional(last, instruments[inst], cap)
+    sized = size_for_notional(market_reference, instruments[inst], cap)
     if sized is None:
         raise RuntimeError(f"{inst}: minimum contract/lot exceeds live cap {cap:.4f} USDT")
-    size, notional = sized
+    size, estimated_notional = sized
     set_one_x(inst)
-    tick = d(instruments[inst].get("tickSize") or "0.00000001")
-    if side == "LONG":
-        order_side = "buy"
-        tp = price_step(last * (Decimal("1") + TP_PCT), tick, ROUND_CEILING)
-        sl = price_step(last * (Decimal("1") - SL_PCT), tick, ROUND_FLOOR)
-    else:
-        order_side = "sell"
-        tp = price_step(last * (Decimal("1") - TP_PCT), tick, ROUND_FLOOR)
-        sl = price_step(last * (Decimal("1") + SL_PCT), tick, ROUND_CEILING)
 
+    order_side = "buy" if side == "LONG" else "sell"
     client_id = ("live" + uuid.uuid4().hex)[:32]
     body = {
         "instId": inst,
@@ -652,38 +740,101 @@ def place_live_trade(state, candidate, tickers, instruments):
         "size": clean_decimal(size),
         "reduceOnly": "false",
         "clientOrderId": client_id,
-        "tpTriggerPrice": clean_decimal(tp),
-        "tpOrderPrice": "-1",
-        "tpTriggerPriceType": "last",
-        "slTriggerPrice": clean_decimal(sl),
-        "slOrderPrice": "-1",
-        "slTriggerPriceType": "last",
     }
     data = private_request("POST", "/api/v1/trade/order", body=body)
     row = data[0] if isinstance(data, list) and data else (data or {})
     if str(row.get("code", "0")) != "0":
         raise RuntimeError(f"Order rejected: {row}")
 
+    order_id = str(row.get("orderId") or "")
+    opened_ms = now_ms()
     state["position"] = {
         "inst": inst,
         "side": side,
-        "opened_ms": now_ms(),
+        "opened_ms": opened_ms,
         "signal_close_ms": signal_close_ms,
-        "order_id": str(row.get("orderId") or ""),
+        "signal_age_ms": signal_age_ms,
+        "order_id": order_id,
         "client_order_id": client_id,
-        "reference_entry": clean_decimal(last),
-        "tp": clean_decimal(tp),
-        "sl": clean_decimal(sl),
+        "requested_reference": clean_decimal(market_reference),
+        "reference_entry": "",
+        "tp": "",
+        "sl": "",
         "size": clean_decimal(size),
-        "notional_usdt": clean_decimal(notional),
+        "notional_usdt": clean_decimal(estimated_notional),
+        "protection_status": "WAITING_FOR_FILL",
     }
     state["arms"][inst]["used"] = True
+
+    fill = wait_for_order_fill(inst, order_id, client_id)
+    if not fill:
+        state["position"]["protection_status"] = "ENTRY_PRICE_UNAVAILABLE"
+        notify(
+            f"CRITICAL {side} {inst}: market order was accepted but actual fill price "
+            "could not be confirmed. Closing the position for safety.",
+            "BloFin LIVE SAFETY",
+        )
+        try:
+            close_tracked_position(state, "PROTECTION FAILURE: no fill price")
+        except Exception as exc:
+            state["position"]["protection_error"] = str(exc)
+            notify(
+                f"CRITICAL {side} {inst}: automatic safety close also failed: {exc}",
+                "BloFin LIVE SAFETY",
+            )
+        return
+
+    fill_price = d(fill.get("averagePrice") or "0")
+    filled_size = d(fill.get("filledSize") or size)
+    tick = d(instruments[inst].get("tickSize") or "0.00000001")
+    if side == "LONG":
+        tp = price_step(fill_price * (Decimal("1") + TP_PCT), tick, ROUND_CEILING)
+        sl = price_step(fill_price * (Decimal("1") - SL_PCT), tick, ROUND_FLOOR)
+    else:
+        tp = price_step(fill_price * (Decimal("1") - TP_PCT), tick, ROUND_FLOOR)
+        sl = price_step(fill_price * (Decimal("1") + SL_PCT), tick, ROUND_CEILING)
+
+    contract_value = d(instruments[inst].get("contractValue") or "0")
+    actual_notional = filled_size * contract_value * fill_price if contract_value > 0 else estimated_notional
+    state["position"].update({
+        "reference_entry": clean_decimal(fill_price),
+        "entry_fee": str(fill.get("fee") or "0"),
+        "filled_size": clean_decimal(filled_size),
+        "notional_usdt": clean_decimal(actual_notional),
+        "tp": clean_decimal(tp),
+        "sl": clean_decimal(sl),
+        "protection_status": "PLACING_TPSL",
+    })
+
+    try:
+        tpsl_id, tpsl_client_id = place_tpsl_for_position(inst, side, tp, sl)
+    except Exception as exc:
+        state["position"]["protection_status"] = "TPSL_FAILED"
+        state["position"]["protection_error"] = str(exc)
+        notify(
+            f"CRITICAL {side} {inst}: TP/SL could not be placed after entry at "
+            f"{fill_price}. Closing the position for safety. Error: {exc}",
+            "BloFin LIVE SAFETY",
+        )
+        try:
+            close_tracked_position(state, "PROTECTION FAILURE: TP/SL rejected")
+        except Exception as close_exc:
+            state["position"]["protection_error"] = f"{exc}; safety close failed: {close_exc}"
+            notify(
+                f"CRITICAL {side} {inst}: safety close failed too: {close_exc}",
+                "BloFin LIVE SAFETY",
+            )
+        return
+
+    state["position"]["protection_status"] = "ACTIVE"
+    state["position"]["tpsl_id"] = tpsl_id
+    state["position"]["tpsl_client_order_id"] = tpsl_client_id
     notify(
-        f"OPEN {side} {inst} | 1x isolated | notional≈{notional:.4f} USDT | "
-        f"ref {last} | TP {tp} (+1.5%) | SL {sl} (-0.5%) | max 5h",
+        f"OPEN {side} {inst} | 1x isolated | actual entry {fill_price} | "
+        f"notional≈{actual_notional:.4f} USDT | TP {tp} (+1.5%) | "
+        f"SL {sl} (-0.5%) | signal age {signal_age_ms / 1000:.0f}s | max 5h",
         "BloFin LIVE OPEN",
     )
-
 
 def status(state, top10):
     available = get_available_usdt()
