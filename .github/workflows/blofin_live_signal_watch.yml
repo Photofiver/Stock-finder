@@ -35,11 +35,15 @@ jobs:
           REM=$((MIN % 15))
           WAIT=0
 
-          # Align external push triggers to the next closed 15m candle.
+          # Align early external triggers to the next 15m close.
+          # If a trigger arrives up to 1m59s after a close, run immediately
+          # and process that just-closed candle instead of skipping to the next one.
           if [ "$REM" -eq 0 ]; then
             if [ "$SEC" -lt 2 ]; then
               WAIT=$((2 - SEC))
             fi
+          elif [ "$REM" -eq 1 ]; then
+            WAIT=0
           else
             WAIT=$((((15 - REM) * 60) - SEC + 2))
           fi
