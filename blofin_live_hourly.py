@@ -748,7 +748,7 @@ def cancel_tracked_tpsl(state):
     if (
         pos.get("tp_policy") == "TP1"
         or pos.get("sl_policy") == "SL0_5"
-        or str(pos.get("risk_profile") or "").endswith(("SL050", "SL05"))
+        or str(pos.get("risk_profile") or "").endswith(("SL10", "SL1", "SL05"))
     ):
         return False
 
@@ -1165,7 +1165,9 @@ def ensure_tp1_for_all_tracked_positions(state):
         pos["sl_policy"] = "SL0_5"
         old_profile = str(pos.get("risk_profile") or "")
         if old_profile:
-            pos["risk_profile"] = old_profile.replace("SL050", "SL05")
+            pos["risk_profile"] = (
+                old_profile.replace("SL10", "SL05").replace("SL1", "SL05")
+            )
         pos["protection_status"] = "TP1_SL05_ACTIVE"
         pos.pop("protection_error", None)
         updated.append(inst)
