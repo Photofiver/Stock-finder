@@ -26,8 +26,17 @@ POSITION_FRACTION = Decimal("0.25")  # legacy/default single-entry fraction
 HARD_SL_PCT = Decimal("0.005")
 TAKE_PROFIT_PCT = Decimal("0.01")
 RSI_PERIOD = 14
-SIGNAL_BAR = "15m"
-SIGNAL_MS = 15 * 60 * 1000
+SIGNAL_MINUTES = int(os.getenv("LIVE_SIGNAL_MINUTES", "15"))
+if SIGNAL_MINUTES == 10:
+    SIGNAL_BAR = "5m"
+    SOURCE_BAR_MS = 5 * 60 * 1000
+    SIGNAL_MS = 10 * 60 * 1000
+elif SIGNAL_MINUTES == 15:
+    SIGNAL_BAR = "15m"
+    SOURCE_BAR_MS = 15 * 60 * 1000
+    SIGNAL_MS = 15 * 60 * 1000
+else:
+    raise RuntimeError("LIVE_SIGNAL_MINUTES must be 10 or 15")
 D1H_MS = SIGNAL_MS  # compatibility alias for older helper names/state code
 HTTP_TIMEOUT = 25
 MAX_RETRIES = 4
@@ -324,12 +333,41 @@ def get_universe():
     return top10, tickers, instruments
 
 
+def aggregate_10m_bars(bars):
+    grouped = {}
+    for bar in bars:
+        bucket = (int(bar["ts"]) // SIGNAL_MS) * SIGNAL_MS
+        grouped.setdefault(bucket, []).append(bar)
+
+    out = []
+    for bucket in sorted(grouped):
+        group = sorted(grouped[bucket], key=lambda x: x["ts"])
+        if len(group) != 2:
+            continue
+        if int(group[0]["ts"]) != bucket:
+            continue
+        if int(group[1]["ts"]) != bucket + SOURCE_BAR_MS:
+            continue
+        out.append({
+            "ts": bucket,
+            "o": group[0]["o"],
+            "h": max(x["h"] for x in group),
+            "l": min(x["l"] for x in group),
+            "c": group[-1]["c"],
+            "v": sum(x["v"] for x in group),
+        })
+    return out
+
+
 def fetch_signal_bars(inst):
     raw = market_get(
         "/api/v1/market/candles",
-        {"instId": inst, "bar": SIGNAL_BAR, "limit": "120"},
+        {"instId": inst, "bar": SIGNAL_BAR, "limit": "240"},
     )
-    return decorate(parse_candles(raw))
+    bars = parse_candles(raw)
+    if SIGNAL_MINUTES == 10:
+        bars = aggregate_10m_bars(bars)
+    return decorate(bars)
 
 
 def fetch_1h(inst):
@@ -886,7 +924,7 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         "size": clean_decimal(size),
         "notional_usdt": clean_decimal(estimated_notional),
         "protection_status": "WAITING_FOR_TP1_SL05",
-        "strategy": "VOLUME_COLOUR_FLIP_15M",
+        "strategy": f"VOLUME_COLOUR_FLIP_{SIGNAL_MINUTES}M",
         "risk_profile": risk_profile,
         "account_fraction": account_fraction,
         "allocation_label": allocation_label,
@@ -1301,7 +1339,7 @@ def status(state, top10):
         f"fees {d(state.get('fees_usdt', 0)):.4f} | trades {t.get('total', 0)} "
         f"(W{t.get('wins', 0)}/L{t.get('losses', 0)}/F{t.get('flat', 0)}/U{t.get('unverified', 0)}) | "
         f"{pos_text} | TOP3: {', '.join(top10[:3]) if top10 else 'none'}",
-        "BloFin LIVE 15m",
+        f"BloFin LIVE {SIGNAL_MINUTES}m",
     )
 
 
