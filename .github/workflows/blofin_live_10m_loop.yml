@@ -1,6 +1,9 @@
 name: BloFin LIVE 10m scan
 
 on:
+  push:
+    paths:
+      - 'live10_trigger.txt'
   schedule:
     - cron: '1,11,21,31,41,51 * * * *'
   workflow_dispatch:
@@ -9,7 +12,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: blofin-live-10m-scan
+  group: blofin-live-10m-loop
   cancel-in-progress: true
 
 jobs:
