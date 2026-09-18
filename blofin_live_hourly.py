@@ -24,7 +24,7 @@ TOP_N = 10
 POSITION_FRACTION = Decimal("0.25")
 HARD_SL_PCT = Decimal("0.10")
 RSI_PERIOD = 14
-D1H_MS = 60 * 60 * 1000
+SIGNAL_BAR = "15m"\nSIGNAL_MS = 15 * 60 * 1000\nD1H_MS = SIGNAL_MS  # compatibility alias for older helper names/state code
 HTTP_TIMEOUT = 25
 MAX_RETRIES = 4
 SIGNAL_MAX_AGE_MS = int(os.getenv("LIVE_SIGNAL_MAX_AGE_MS", "180000"))
@@ -314,9 +314,17 @@ def get_universe():
     return top10, tickers, instruments
 
 
-def fetch_1h(inst):
-    raw = market_get("/api/v1/market/candles", {"instId": inst, "bar": "1H", "limit": "120"})
+def fetch_signal_bars(inst):
+    raw = market_get(
+        "/api/v1/market/candles",
+        {"instId": inst, "bar": SIGNAL_BAR, "limit": "120"},
+    )
     return decorate(parse_candles(raw))
+
+
+def fetch_1h(inst):
+    # Compatibility alias; LIVE strategy now runs on 15m candles.
+    return fetch_signal_bars(inst)
 
 
 def init_arm_from_history(inst, bars, latest_index, state):
@@ -343,13 +351,13 @@ def evaluate_signals(state, top10):
 
     for inst in top10:
         try:
-            bars = fetch_1h(inst)
+            bars = fetch_signal_bars(inst)
             if len(bars) < 2:
                 continue
             data[inst] = bars
             latest_idx[inst] = len(bars) - 1
         except Exception as exc:
-            print(f"1H ERROR {inst}: {exc}")
+            print(f"15m ERROR {inst}: {exc}")
 
     candidates = []
     scan_now_ms = now_ms()
@@ -738,7 +746,7 @@ def evaluate_tracked_exit_signal(state, expected_close_ms=None):
         return False
 
     inst = pos["inst"]
-    bars = fetch_1h(inst)
+    bars = fetch_signal_bars(inst)
     if len(bars) < 2:
         return False
 
@@ -812,7 +820,7 @@ def place_live_trade(state, candidate, tickers, instruments):
         "size": clean_decimal(size),
         "notional_usdt": clean_decimal(estimated_notional),
         "protection_status": "WAITING_FOR_SL10",
-        "strategy": "VOLUME_COLOUR_FLIP",
+        "strategy": "VOLUME_COLOUR_FLIP_15M",
         "risk_profile": "QUARTER_ACCOUNT_SL10",
         "account_fraction": clean_decimal(POSITION_FRACTION),
     }
@@ -924,7 +932,7 @@ def status(state, top10):
         f"(W{t.get('wins', 0)}/L{t.get('losses', 0)}/F{t.get('flat', 0)}/U{t.get('unverified', 0)}) | "
         f"{pos_text} | "
         f"TOP3: {', '.join(top10[:3]) if top10 else 'none'}",
-        "BloFin LIVE 1H",
+        "BloFin LIVE 15m",
     )
 
 
