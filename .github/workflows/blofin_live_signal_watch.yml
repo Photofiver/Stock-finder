@@ -6,7 +6,7 @@ on:
       - 'trigger.txt'
   workflow_dispatch:
   schedule:
-    - cron: '6 * * * *'
+    - cron: '1 * * * *'
 
 permissions:
   contents: write
@@ -36,7 +36,7 @@ jobs:
           SEC=$((10#$SEC))
           WAIT=0
 
-          if [ "$MIN" -ge 50 ]; then
+          if [ "$MIN" -ge 45 ]; then
             WAIT=$((((61 - MIN) * 60) - SEC))
           elif [ "$MIN" -eq 0 ]; then
             WAIT=$((60 - SEC))
@@ -61,7 +61,7 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Scan for LIVE signal and wait for one-tap approval
+      - name: Scan for LIVE signal and execute AUTO after revalidation
         env:
           BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
           BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
