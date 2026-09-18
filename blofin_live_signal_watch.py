@@ -127,7 +127,6 @@ def build_live_diagnostic(state, top10):
             i = len(bars) - 1
             arm = arms.get(inst, {})
             arm_dir = arm.get("direction")
-            used = bool(arm.get("used", False))
             vol_ok = (
                 arm_dir in ("LONG", "SHORT")
                 and bot.volume_ok(bars, i, arm_dir)
@@ -135,8 +134,6 @@ def build_live_diagnostic(state, top10):
 
             if arm_dir not in ("LONG", "SHORT"):
                 detail = "RSI arm ✗ | VOL ✗"
-            elif used:
-                detail = f"RSI arm {arm_dir} ✓ | VOL {'✓' if vol_ok else '✗'} | sygnal juz uzyty"
             elif vol_ok:
                 detail = f"RSI arm {arm_dir} ✓ | VOL {arm_dir} ✓ | gotowy"
             else:
