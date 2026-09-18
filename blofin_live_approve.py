@@ -177,11 +177,18 @@ def main():
 
     i = len(bars) - 1
     current_close_ms = int(bars[i]["ts"] + bot.D1H_MS)
-    current_side = bot.stoch_side(bars, i)
     arm_direction = current_arm_direction(bars, i)
+    volume_matches = (
+        arm_direction in ("LONG", "SHORT")
+        and bot.volume_ok(bars, i, arm_direction)
+    )
 
-    if current_close_ms != signal_close_ms or current_side != side or arm_direction != side:
-        reject(pending, "stale", "Warunki sygnalu zmienily sie przed zatwierdzeniem. Nie wyslano zlecenia.")
+    if (
+        current_close_ms != signal_close_ms
+        or arm_direction != side
+        or not volume_matches
+    ):
+        reject(pending, "stale", "Warunki RSI/Volume zmienily sie przed zatwierdzeniem. Nie wyslano zlecenia.")
         return
 
     rank = top10.index(inst) + 1
