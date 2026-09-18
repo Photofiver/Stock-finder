@@ -170,47 +170,26 @@ def main():
 
     # Start just after 15m boundary and confirm the closed 15m candle for TOP10
     # plus the tracked instrument, because exits are based on its Volume flip.
-    tracked_inst = (state.get("position") or {}).get("inst")
-    confirm_insts = list(dict.fromkeys(top10 + ([tracked_inst] if tracked_inst else [])))
+    tracked_insts = list(bot.get_tracked_positions(state))
+    confirm_insts = list(dict.fromkeys(top10 + tracked_insts))
     wait_for_confirmed_signal_close(confirm_insts, expected_close_ms)
 
-    open_positions = bot.sync_tracked_position(state)
-    if state.get("position") and bot.evaluate_tracked_exit_signal(state, expected_close_ms):
-        open_positions = bot.get_open_positions()
+    bot.sync_all_tracked_positions(state)
+    bot.evaluate_all_tracked_exit_signals(state, expected_close_ms)
     candidates = bot.evaluate_signals(state, top10)
-    executed = None
 
-    if not state.get("position"):
-        if open_positions:
-            names = ", ".join(str(p.get("instId")) for p in open_positions[:5])
-            bot.notify(
-                f"No new LIVE order: account already has an open position ({names}).",
-                "BloFin LIVE BLOCKED",
+    for rank, inst, side, signal_close_ms in candidates:
+        if int(signal_close_ms) != expected_close_ms:
+            raise RuntimeError(
+                f"Candidate candle mismatch: got {signal_close_ms}, "
+                f"expected {expected_close_ms}"
             )
-        elif candidates:
-            candidate = candidates[0]
-            rank, inst, side, signal_close_ms = candidate
-            if int(signal_close_ms) != expected_close_ms:
-                raise RuntimeError(
-                    f"Candidate candle mismatch: got {signal_close_ms}, "
-                    f"expected {expected_close_ms}"
-                )
+        print(
+            f"DIRECT LIVE candidate {side} {inst} | TOP{rank} | "
+            f"signal age {(bot.now_ms() - signal_close_ms) / 1000:.1f}s"
+        )
 
-            # No pending approval and no second signal scan:
-            # the validated signal is sent to market immediately.
-            print(
-                f"DIRECT LIVE {side} {inst} | TOP{rank} | "
-                f"signal age {(bot.now_ms() - signal_close_ms) / 1000:.1f}s"
-            )
-            bot.place_live_trade(state, candidate, tickers, instruments)
-            executed = {
-                "inst": inst,
-                "side": side,
-                "rank": int(rank),
-                "signal_close_ms": int(signal_close_ms),
-            }
-    elif candidates:
-        print("Signal found, but an existing tracked LIVE position blocks a new entry.")
+    executed = bot.execute_candidate_batch(state, candidates, tickers, instruments)
 
     if not candidates:
         diagnostic = build_live_diagnostic(state, top10)
@@ -228,7 +207,7 @@ def main():
                 "executed": executed,
                 "signal_close_ms": expected_close_ms,
                 "top10": top10,
-                "position": state.get("position"),
+                "positions": bot.get_tracked_positions(state),
             },
             ensure_ascii=False,
         )
