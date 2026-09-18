@@ -1,4 +1,4 @@
-name: BloFin LIVE 10m scan
+name: BloFin LIVE 4H scan
 
 on:
   schedule:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: blofin-live-10m-scan
+  group: blofin-live-4h-scan
   cancel-in-progress: false
 
 jobs:
@@ -29,18 +29,18 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Run one 10m LIVE scan
+      - name: Run one 4H LIVE scan
         env:
           BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
           BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
           BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
           BLOFIN_LIVE_ENABLED: 'true'
           LIVE_MAX_BANKROLL_USDT: '10.64'
-          LIVE_SIGNAL_MINUTES: '10'
+          LIVE_SIGNAL_MINUTES: '240'
           LIVE_SIGNAL_MAX_AGE_MS: '540000'
         run: python blofin_live_signal_watch.py
 
-      - name: Save 10m LIVE state
+      - name: Save 4H LIVE state
         if: success()
         shell: bash
         run: |
@@ -51,17 +51,17 @@ jobs:
           git add blofin_pending_signal.json 2>/dev/null || true
           git add blofin_live_state.json 2>/dev/null || true
           if ! git diff --cached --quiet; then
-            git commit -m 'Update BloFin 10m LIVE state'
+            git commit -m 'Update BloFin 4H LIVE state'
             git pull --rebase origin main
             git push origin HEAD:main
           fi
 
-      - name: Notify LIVE 10m failure
+      - name: Notify LIVE 4H failure
         if: failure()
         shell: bash
         run: |
           curl -fsS --retry 3 --retry-delay 1 --max-time 20 \
-            -H 'Title: BloFin LIVE 10m ERROR' \
+            -H 'Title: BloFin LIVE 4H ERROR' \
             -H 'Priority: 5' \
-            -d "LIVE 10m scan failed. Sprawdz GitHub Actions run ${GITHUB_RUN_ID}." \
+            -d "LIVE 4H scan failed. Sprawdz GitHub Actions run ${GITHUB_RUN_ID}." \
             'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n' || true
