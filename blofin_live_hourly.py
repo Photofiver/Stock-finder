@@ -874,14 +874,44 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
 
     market_reference = d(tickers[inst]["last"])
     available = get_available_usdt()
+
+    # HARD SAFETY CAP: MAX_NOTIONAL_USDT is the bankroll for this bot, not the
+    # whole BloFin account. Existing tracked positions consume this bankroll.
+    tracked_positions = get_tracked_positions(state)
+    tracked_exposure = Decimal("0")
+    for tracked_inst, tracked_pos in tracked_positions.items():
+        try:
+            tracked_notional = abs(d(tracked_pos.get("notional_usdt") or "0"))
+        except Exception:
+            raise RuntimeError(
+                f"{tracked_inst}: tracked position notional is invalid; "
+                "new LIVE entries are blocked for safety"
+            )
+        if tracked_notional <= 0:
+            raise RuntimeError(
+                f"{tracked_inst}: tracked position notional is missing; "
+                "new LIVE entries are blocked for safety"
+            )
+        tracked_exposure += tracked_notional
+
+    remaining_bankroll = MAX_NOTIONAL_USDT - tracked_exposure
+    if remaining_bankroll <= 0:
+        raise RuntimeError(
+            f"LIVE bankroll fully used: exposure {tracked_exposure:.4f} USDT "
+            f">= cap {MAX_NOTIONAL_USDT:.4f} USDT"
+        )
+
     if cap_usdt is None:
-        cap = min(MAX_NOTIONAL_USDT, available * POSITION_FRACTION)
-        allocation_label = allocation_label or "25% of available, capped"
+        cap = min(
+            remaining_bankroll,
+            available * POSITION_FRACTION,
+        )
+        allocation_label = allocation_label or "25% of available, within LIVE bankroll cap"
         risk_profile = "QUARTER_ACCOUNT_SL05"
         account_fraction = clean_decimal(POSITION_FRACTION)
     else:
-        cap = min(d(cap_usdt), available)
-        allocation_label = allocation_label or "dynamic equal split of available balance"
+        cap = min(d(cap_usdt), available, remaining_bankroll)
+        allocation_label = allocation_label or "dynamic equal split within LIVE bankroll cap"
         risk_profile = "DYNAMIC_SPLIT_SL05"
         account_fraction = ""
     sized = size_for_notional(market_reference, instruments[inst], cap)
@@ -1285,10 +1315,38 @@ def execute_candidate_batch(state, candidates, tickers, instruments):
         notify("No available USDT for a new LIVE order.", "BloFin LIVE BLOCKED")
         return []
 
-    per_trade_cap = available / Decimal(len(selected))
+    tracked_exposure = Decimal("0")
+    for tracked_inst, tracked_pos in positions.items():
+        try:
+            tracked_notional = abs(d(tracked_pos.get("notional_usdt") or "0"))
+        except Exception:
+            notify(
+                f"No new LIVE order: {tracked_inst} has invalid tracked notional.",
+                "BloFin LIVE BLOCKED",
+            )
+            return []
+        if tracked_notional <= 0:
+            notify(
+                f"No new LIVE order: {tracked_inst} has missing tracked notional.",
+                "BloFin LIVE BLOCKED",
+            )
+            return []
+        tracked_exposure += tracked_notional
+
+    remaining_bankroll = MAX_NOTIONAL_USDT - tracked_exposure
+    if remaining_bankroll <= 0:
+        notify(
+            f"No new LIVE order: bankroll cap {MAX_NOTIONAL_USDT:.4f} USDT "
+            f"is already used by {tracked_exposure:.4f} USDT exposure.",
+            "BloFin LIVE BLOCKED",
+        )
+        return []
+
+    batch_budget = min(available, remaining_bankroll)
+    per_trade_cap = batch_budget / Decimal(len(selected))
     allocation_label = (
-        f"1/{len(selected)} of currently available balance; "
-        f"max {MAX_OPEN_POSITIONS} positions"
+        f"1/{len(selected)} of remaining LIVE bankroll; "
+        f"total cap {MAX_NOTIONAL_USDT} USDT; max {MAX_OPEN_POSITIONS} positions"
     )
     executed = []
     for candidate in selected:
