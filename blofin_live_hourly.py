@@ -1074,6 +1074,12 @@ def ensure_tp1_for_all_tracked_positions(state):
         if old_id:
             try:
                 cancel_specific_tpsl(pos)
+            except Exception as cancel_exc:
+                print(
+                    f"TP1 MIGRATION {inst}: old TP/SL cancel returned {cancel_exc}; "
+                    "continuing with replacement because it may already be cancelled"
+                )
+            try:
                 new_id, new_client = place_tpsl_for_position(inst, side, tp, sl)
             except Exception as exc:
                 print(f"TP1 MIGRATION ERROR {inst}: {exc}")
