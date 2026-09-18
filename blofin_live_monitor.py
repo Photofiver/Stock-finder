@@ -13,6 +13,7 @@ def main():
         return
 
     bot.sync_all_tracked_positions(state)
+    bot.ensure_tp1_for_all_tracked_positions(state)
     after = set(bot.get_tracked_positions(state))
     changed = before != after
 
