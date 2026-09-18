@@ -131,6 +131,21 @@ def main():
         reject(pending, "expired", "Sygnal wygasl po 2 minutach. Nie wyslano zlecenia.")
         return
 
+    signal_close_ms = int(pending.get("signal_close_ms") or 0)
+    signal_age_ms = now - signal_close_ms
+    if (
+        signal_close_ms <= 0
+        or signal_age_ms < 0
+        or signal_age_ms > bot.SIGNAL_MAX_AGE_MS
+    ):
+        reject(
+            pending,
+            "stale",
+            f"Sygnal jest za stary ({signal_age_ms / 1000:.0f}s od zamkniecia swiecy; "
+            f"limit {bot.SIGNAL_MAX_AGE_MS / 1000:.0f}s). Nie wyslano zlecenia.",
+        )
+        return
+
     bot.require_account_modes()
     state = bot.load_state()
     tracked_before = state.get("position")
