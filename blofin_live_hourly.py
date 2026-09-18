@@ -21,9 +21,6 @@ MAX_NOTIONAL_USDT = Decimal(os.getenv("LIVE_MAX_BANKROLL_USDT", "10.6136"))
 LEVERAGE = "1"
 MARGIN_MODE = "isolated"
 TOP_N = 10
-TP_PCT = Decimal("0.006")
-SL_PCT = Decimal("0.005")
-HOLD_HOURS = 5
 RSI_PERIOD = 14
 D1H_MS = 60 * 60 * 1000
 HTTP_TIMEOUT = 25
@@ -249,36 +246,24 @@ def candle_color(bar):
     return "DOJI"
 
 
-def volume_ok(bars, i, side):
+def volume_flip_signal(bars, i):
     if i < 1:
-        return False
+        return None
 
+    prev = bars[i - 1]
     cur = bars[i]
+    prev_color = candle_color(prev)
     cur_color = candle_color(cur)
 
-    if side == "LONG":
-        if cur_color != "GREEN":
-            return False
-        target_color = "RED"
-    elif side == "SHORT":
-        if cur_color != "RED":
-            return False
-        target_color = "GREEN"
-    else:
-        return False
+    if prev_color == "RED" and cur_color == "GREEN" and cur["v"] > prev["v"]:
+        return "LONG"
+    if prev_color == "GREEN" and cur_color == "RED" and cur["v"] > prev["v"]:
+        return "SHORT"
+    return None
 
-    # Walk backwards until the most recent opposite-color volume bar.
-    # Intervening bars of the same color (and DOJI bars) are skipped.
-    previous_opposite = None
-    for j in range(i - 1, -1, -1):
-        if candle_color(bars[j]) == target_color:
-            previous_opposite = bars[j]
-            break
 
-    if previous_opposite is None:
-        return False
-
-    return cur["v"] > previous_opposite["v"]
+def volume_ok(bars, i, side):
+    return volume_flip_signal(bars, i) == side
 
 
 def rsi_cross(bars, i):
@@ -353,30 +338,16 @@ def evaluate_signals(state, top10):
     data = {}
     latest_idx = {}
     ranks = {inst: idx + 1 for idx, inst in enumerate(top10)}
+
     for inst in top10:
         try:
             bars = fetch_1h(inst)
-            if len(bars) < 35:
+            if len(bars) < 2:
                 continue
-            i = len(bars) - 1
             data[inst] = bars
-            latest_idx[inst] = i
-            init_arm_from_history(inst, bars, i, state)
+            latest_idx[inst] = len(bars) - 1
         except Exception as exc:
             print(f"1H ERROR {inst}: {exc}")
-
-    for inst, bars in data.items():
-        i = latest_idx[inst]
-        close_ms = bars[i]["ts"] + D1H_MS
-        last_done = int(state.setdefault("last_processed_close_ms", {}).get(inst, 0) or 0)
-        if close_ms <= last_done:
-            continue
-        cross = rsi_cross(bars, i)
-        if cross:
-            state["arms"][inst] = {
-                "direction": cross,
-                        "last_cross_close_ms": close_ms,
-            }
 
     candidates = []
     scan_now_ms = now_ms()
@@ -386,12 +357,9 @@ def evaluate_signals(state, top10):
         last_done = int(state.setdefault("last_processed_close_ms", {}).get(inst, 0) or 0)
         if close_ms <= last_done:
             continue
-        arm = state["arms"].get(inst, {})
-        side = arm.get("direction")
-        if (
-            side in ("LONG", "SHORT")
-            and volume_ok(bars, i, side)
-        ):
+
+        side = volume_flip_signal(bars, i)
+        if side in ("LONG", "SHORT"):
             signal_age_ms = scan_now_ms - close_ms
             if 0 <= signal_age_ms <= SIGNAL_MAX_AGE_MS:
                 candidates.append((ranks[inst], inst, side, close_ms))
@@ -407,6 +375,7 @@ def evaluate_signals(state, top10):
         state["last_processed_close_ms"][inst] = max(
             int(state["last_processed_close_ms"].get(inst, 0) or 0), close_ms
         )
+
     candidates.sort()
     return candidates
 
@@ -681,19 +650,81 @@ def close_tracked_position(state, reason):
     record_closed(state, reason)
 
 
+def cancel_tracked_tpsl(state):
+    pos = state.get("position")
+    if not pos:
+        return False
+    tpsl_id = str(pos.get("tpsl_id") or "").strip()
+    if not tpsl_id:
+        pos["protection_status"] = "VOLUME_FLIP_ONLY"
+        pos["tp"] = ""
+        pos["sl"] = ""
+        return False
+
+    data = private_request(
+        "POST",
+        "/api/v1/trade/cancel-tpsl",
+        body=[{
+            "instId": pos["inst"],
+            "tpslId": tpsl_id,
+            "clientOrderId": str(pos.get("tpsl_client_order_id") or ""),
+        }],
+    )
+    row = data[0] if isinstance(data, list) and data else (data or {})
+    if str(row.get("code", "0")) != "0":
+        print(f"TPSL CANCEL {pos['inst']}: {row}")
+        return False
+
+    pos["tpsl_id"] = ""
+    pos["tpsl_client_order_id"] = ""
+    pos["tp"] = ""
+    pos["sl"] = ""
+    pos["protection_status"] = "VOLUME_FLIP_ONLY"
+    notify(
+        f"{pos['side']} {pos['inst']} | old TP/SL cancelled | "
+        "position now exits only on an opposite larger Volume colour flip.",
+        "BloFin LIVE STRATEGY",
+    )
+    return True
+
+
 def sync_tracked_position(state):
     open_positions = get_open_positions()
     tracked = state.get("position")
     if tracked:
         matching = [p for p in open_positions if p.get("instId") == tracked.get("inst")]
         if not matching:
-            record_closed(state, "TP/SL or external close")
+            record_closed(state, "external close")
             return get_open_positions()
-        age_ms = now_ms() - int(tracked.get("opened_ms") or now_ms())
-        if age_ms >= HOLD_HOURS * D1H_MS:
-            close_tracked_position(state, "MAX 5H")
-            return get_open_positions()
+        cancel_tracked_tpsl(state)
     return open_positions
+
+
+def evaluate_tracked_exit_signal(state, expected_close_ms=None):
+    pos = state.get("position")
+    if not pos:
+        return False
+
+    inst = pos["inst"]
+    bars = fetch_1h(inst)
+    if len(bars) < 2:
+        return False
+
+    i = len(bars) - 1
+    close_ms = int(bars[i]["ts"] + D1H_MS)
+    if expected_close_ms is not None and close_ms < int(expected_close_ms):
+        return False
+
+    last_checked = int(pos.get("last_exit_signal_close_ms") or 0)
+    if close_ms <= last_checked:
+        return False
+    pos["last_exit_signal_close_ms"] = close_ms
+
+    signal = volume_flip_signal(bars, i)
+    if signal and signal != pos.get("side"):
+        close_tracked_position(state, "OPPOSITE VOLUME FLIP")
+        return True
+    return False
 
 
 def place_live_trade(state, candidate, tickers, instruments):
@@ -707,7 +738,6 @@ def place_live_trade(state, candidate, tickers, instruments):
 
     market_reference = d(tickers[inst]["last"])
     available = get_available_usdt()
-    # Keep a 2% cash buffer for fees/rounding while never exceeding the requested cap.
     cap = min(MAX_NOTIONAL_USDT, available * Decimal("0.98"))
     sized = size_for_notional(market_reference, instruments[inst], cap)
     if sized is None:
@@ -748,7 +778,8 @@ def place_live_trade(state, candidate, tickers, instruments):
         "sl": "",
         "size": clean_decimal(size),
         "notional_usdt": clean_decimal(estimated_notional),
-        "protection_status": "WAITING_FOR_FILL",
+        "protection_status": "VOLUME_FLIP_ONLY",
+        "strategy": "VOLUME_COLOUR_FLIP",
     }
 
     fill = wait_for_order_fill(inst, order_id, client_id)
@@ -760,7 +791,7 @@ def place_live_trade(state, candidate, tickers, instruments):
             "BloFin LIVE SAFETY",
         )
         try:
-            close_tracked_position(state, "PROTECTION FAILURE: no fill price")
+            close_tracked_position(state, "SAFETY: no fill price")
         except Exception as exc:
             state["position"]["protection_error"] = str(exc)
             notify(
@@ -771,62 +802,35 @@ def place_live_trade(state, candidate, tickers, instruments):
 
     fill_price = d(fill.get("averagePrice") or "0")
     filled_size = d(fill.get("filledSize") or size)
-    tick = d(instruments[inst].get("tickSize") or "0.00000001")
-    if side == "LONG":
-        tp = price_step(fill_price * (Decimal("1") + TP_PCT), tick, ROUND_CEILING)
-        sl = price_step(fill_price * (Decimal("1") - SL_PCT), tick, ROUND_FLOOR)
-    else:
-        tp = price_step(fill_price * (Decimal("1") - TP_PCT), tick, ROUND_FLOOR)
-        sl = price_step(fill_price * (Decimal("1") + SL_PCT), tick, ROUND_CEILING)
-
     contract_value = d(instruments[inst].get("contractValue") or "0")
-    actual_notional = filled_size * contract_value * fill_price if contract_value > 0 else estimated_notional
+    actual_notional = (
+        filled_size * contract_value * fill_price
+        if contract_value > 0
+        else estimated_notional
+    )
     state["position"].update({
         "reference_entry": clean_decimal(fill_price),
         "entry_fee": str(fill.get("fee") or "0"),
         "filled_size": clean_decimal(filled_size),
         "notional_usdt": clean_decimal(actual_notional),
-        "tp": clean_decimal(tp),
-        "sl": clean_decimal(sl),
-        "protection_status": "PLACING_TPSL",
+        "protection_status": "VOLUME_FLIP_ONLY",
     })
 
-    try:
-        tpsl_id, tpsl_client_id = place_tpsl_for_position(inst, side, tp, sl)
-    except Exception as exc:
-        state["position"]["protection_status"] = "TPSL_FAILED"
-        state["position"]["protection_error"] = str(exc)
-        notify(
-            f"CRITICAL {side} {inst}: TP/SL could not be placed after entry at "
-            f"{fill_price}. Closing the position for safety. Error: {exc}",
-            "BloFin LIVE SAFETY",
-        )
-        try:
-            close_tracked_position(state, "PROTECTION FAILURE: TP/SL rejected")
-        except Exception as close_exc:
-            state["position"]["protection_error"] = f"{exc}; safety close failed: {close_exc}"
-            notify(
-                f"CRITICAL {side} {inst}: safety close failed too: {close_exc}",
-                "BloFin LIVE SAFETY",
-            )
-        return
-
-    state["position"]["protection_status"] = "ACTIVE"
-    state["position"]["tpsl_id"] = tpsl_id
-    state["position"]["tpsl_client_order_id"] = tpsl_client_id
     notify(
         f"OPEN {side} {inst} | 1x isolated | actual entry {fill_price} | "
-        f"notional≈{actual_notional:.4f} USDT | TP {tp} (+0.6%) | "
-        f"SL {sl} (-0.5%) | signal age {signal_age_ms / 1000:.0f}s | max 5h",
+        f"notional≈{actual_notional:.4f} USDT | no TP/SL | "
+        f"exit only on opposite larger Volume colour flip | "
+        f"signal age {signal_age_ms / 1000:.0f}s",
         "BloFin LIVE OPEN",
     )
+
 
 def status(state, top10):
     available = get_available_usdt()
     pos = state.get("position")
     if pos:
         age_h = max(0.0, (now_ms() - int(pos["opened_ms"])) / D1H_MS)
-        pos_text = f"OPEN {pos['side']} {pos['inst']} | {age_h:.1f}h/5h"
+        pos_text = f"OPEN {pos['side']} {pos['inst']} | {age_h:.1f}h | volume-flip exit"
     else:
         pos_text = "no tracked open position"
     t = state.get("trades", {})
@@ -850,6 +854,8 @@ def main():
         raise RuntimeError("BloFin TOP10 is empty")
 
     open_positions = sync_tracked_position(state)
+    if state.get("position") and evaluate_tracked_exit_signal(state):
+        open_positions = get_open_positions()
     candidates = evaluate_signals(state, top10)
 
     if not state.get("position"):
