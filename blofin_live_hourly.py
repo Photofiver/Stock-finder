@@ -21,7 +21,7 @@ MAX_NOTIONAL_USDT = Decimal(os.getenv("LIVE_MAX_BANKROLL_USDT", "10.6136"))
 LEVERAGE = "1"
 MARGIN_MODE = "isolated"
 TOP_N = 10
-TP_PCT = Decimal("0.015")
+TP_PCT = Decimal("0.006")
 SL_PCT = Decimal("0.005")
 HOLD_HOURS = 5
 RSI_PERIOD = 14
@@ -816,7 +816,7 @@ def place_live_trade(state, candidate, tickers, instruments):
     state["position"]["tpsl_client_order_id"] = tpsl_client_id
     notify(
         f"OPEN {side} {inst} | 1x isolated | actual entry {fill_price} | "
-        f"notional≈{actual_notional:.4f} USDT | TP {tp} (+1.5%) | "
+        f"notional≈{actual_notional:.4f} USDT | TP {tp} (+0.6%) | "
         f"SL {sl} (-0.5%) | signal age {signal_age_ms / 1000:.0f}s | max 5h",
         "BloFin LIVE OPEN",
     )
