@@ -24,7 +24,9 @@ TOP_N = 10
 POSITION_FRACTION = Decimal("0.25")
 HARD_SL_PCT = Decimal("0.10")
 RSI_PERIOD = 14
-SIGNAL_BAR = "15m"\nSIGNAL_MS = 15 * 60 * 1000\nD1H_MS = SIGNAL_MS  # compatibility alias for older helper names/state code
+SIGNAL_BAR = "15m"
+SIGNAL_MS = 15 * 60 * 1000
+D1H_MS = SIGNAL_MS  # compatibility alias for older helper names/state code
 HTTP_TIMEOUT = 25
 MAX_RETRIES = 4
 SIGNAL_MAX_AGE_MS = int(os.getenv("LIVE_SIGNAL_MAX_AGE_MS", "180000"))
