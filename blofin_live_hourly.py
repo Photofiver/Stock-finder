@@ -345,7 +345,6 @@ def init_arm_from_history(inst, bars, latest_index, state):
             last_cross_close = bars[i]["ts"] + D1H_MS
     arms[inst] = {
         "direction": direction,
-        "used": False,
         "last_cross_close_ms": last_cross_close,
     }
 
@@ -376,8 +375,7 @@ def evaluate_signals(state, top10):
         if cross:
             state["arms"][inst] = {
                 "direction": cross,
-                "used": False,
-                "last_cross_close_ms": close_ms,
+                        "last_cross_close_ms": close_ms,
             }
 
     candidates = []
@@ -392,7 +390,6 @@ def evaluate_signals(state, top10):
         side = arm.get("direction")
         if (
             side in ("LONG", "SHORT")
-            and not arm.get("used", False)
             and volume_ok(bars, i, side)
         ):
             signal_age_ms = scan_now_ms - close_ms
@@ -753,7 +750,6 @@ def place_live_trade(state, candidate, tickers, instruments):
         "notional_usdt": clean_decimal(estimated_notional),
         "protection_status": "WAITING_FOR_FILL",
     }
-    state["arms"][inst]["used"] = True
 
     fill = wait_for_order_fill(inst, order_id, client_id)
     if not fill:
