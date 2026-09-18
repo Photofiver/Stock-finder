@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import uuid
 
 import requests
@@ -10,6 +11,8 @@ import blofin_live_hourly as bot
 SIGNAL_STATE_FILE = os.getenv("SIGNAL_STATE_FILE", "blofin_signal_state.json")
 PENDING_FILE = os.getenv("PENDING_SIGNAL_FILE", "blofin_pending_signal.json")
 APPROVAL_TTL_MS = 2 * 60 * 1000
+CANDLE_CONFIRM_ATTEMPTS = 30
+CANDLE_CONFIRM_DELAY_SEC = 1
 BROKER_ID = os.getenv("BLOFIN_BROKER_ID", "dd3511977f23cc87").strip()
 
 _original_private_request = bot.private_request
@@ -97,6 +100,39 @@ def notify_signal(pending):
     )
 
 
+def expected_hour_close_ms():
+    return (bot.now_ms() // bot.D1H_MS) * bot.D1H_MS
+
+
+def wait_for_confirmed_hourly_close(top10, expected_close_ms):
+    pending = set(top10)
+    for attempt in range(CANDLE_CONFIRM_ATTEMPTS):
+        ready = []
+        for inst in list(pending):
+            try:
+                bars = bot.fetch_1h(inst)
+                if bars:
+                    latest_close_ms = int(bars[-1]["ts"] + bot.D1H_MS)
+                    if latest_close_ms >= expected_close_ms:
+                        ready.append(inst)
+            except Exception as exc:
+                print(f"CANDLE CONFIRM {inst}: {type(exc).__name__}: {exc}")
+        for inst in ready:
+            pending.discard(inst)
+        if not pending:
+            print(
+                f"Hourly candle {expected_close_ms} confirmed for all TOP10 "
+                f"after {attempt + 1} check(s)."
+            )
+            return
+        if attempt < CANDLE_CONFIRM_ATTEMPTS - 1:
+            time.sleep(CANDLE_CONFIRM_DELAY_SEC)
+
+    raise RuntimeError(
+        "Hourly candle not confirmed in time for: " + ", ".join(sorted(pending))
+    )
+
+
 def build_live_diagnostic(state, top10):
     lines = ["Brak sygnalu LIVE. Sprawdzono aktualne TOP10 BloFin 24h:"]
     arms = state.get("arms", {})
@@ -136,10 +172,32 @@ def main():
     if not top10:
         raise RuntimeError("BloFin TOP10 is empty")
 
+    expected_close_ms = expected_hour_close_ms()
+    last_scan_close_ms = int(state.get("last_scan_close_ms") or 0)
+    if last_scan_close_ms == expected_close_ms:
+        print(
+            json.dumps(
+                {
+                    "duplicate_scan_skipped": True,
+                    "hour_close_ms": expected_close_ms,
+                    "top10": top10,
+                },
+                ensure_ascii=False,
+            )
+        )
+        return
+
+    wait_for_confirmed_hourly_close(top10, expected_close_ms)
+
     candidates = bot.evaluate_signals(state, top10)
     created = None
     if candidates:
         rank, inst, side, signal_close_ms = candidates[0]
+        if int(signal_close_ms) != expected_close_ms:
+            raise RuntimeError(
+                f"Candidate candle mismatch: got {signal_close_ms}, "
+                f"expected {expected_close_ms}"
+            )
         now = bot.now_ms()
         created = {
             "version": 2,
@@ -161,10 +219,20 @@ def main():
         print(diagnostic)
         send_ntfy("BloFin LIVE check", diagnostic, priority=2)
 
+    state["last_scan_close_ms"] = expected_close_ms
     state["last_run_ms"] = bot.now_ms()
     state["last_top10"] = top10
     save_json(SIGNAL_STATE_FILE, state)
-    print(json.dumps({"pending": created, "top10": top10}, ensure_ascii=False))
+    print(
+        json.dumps(
+            {
+                "pending": created,
+                "hour_close_ms": expected_close_ms,
+                "top10": top10,
+            },
+            ensure_ascii=False,
+        )
+    )
 
 
 if __name__ == "__main__":
