@@ -4,9 +4,6 @@ on:
   push:
     paths:
       - 'live10_trigger.txt'
-  schedule:
-    - cron: '5 0,4,8,12,16,20 * * *'
-      timezone: 'Europe/London'
   workflow_dispatch:
 
 permissions:
@@ -25,6 +22,32 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Align to next UK 4H close
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import time
+          from datetime import datetime, timedelta
+          from zoneinfo import ZoneInfo
+
+          tz = ZoneInfo("Europe/London")
+          now = datetime.now(tz)
+          next_hour = ((now.hour // 4) + 1) * 4
+          if next_hour >= 24:
+              target = (now + timedelta(days=1)).replace(hour=0, minute=0, second=2, microsecond=0)
+          else:
+              target = now.replace(hour=next_hour, minute=0, second=2, microsecond=0)
+
+          wait = (target - datetime.now(tz)).total_seconds()
+          if 0 < wait <= 600:
+              print(f"Waiting {wait:.1f}s for UK 4H close at {target.isoformat()}")
+              time.sleep(wait)
+          else:
+              print("Trigger not in pre-close window; running immediately")
+          PY
 
       - uses: actions/setup-python@v5
         with:
