@@ -3,7 +3,9 @@ name: BloFin LIVE position monitor
 on:
   workflow_dispatch:
   schedule:
-    - cron: '3 */4 * * *'
+    - cron: '9 */4 * * *'
+      timezone: 'Europe/London'
+    - cron: '19 */4 * * *'
       timezone: 'Europe/London'
 
 permissions:
