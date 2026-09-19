@@ -5,8 +5,10 @@ import json
 import os
 import time
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -36,8 +38,9 @@ elif SIGNAL_MINUTES == 15:
     SOURCE_BAR_MS = 15 * 60 * 1000
     SIGNAL_MS = 15 * 60 * 1000
 elif SIGNAL_MINUTES == 240:
-    SIGNAL_BAR = "4H"
-    SOURCE_BAR_MS = 4 * 60 * 60 * 1000
+    # Build 4H candles in UK local time from closed 1H BloFin candles.
+    SIGNAL_BAR = "1H"
+    SOURCE_BAR_MS = 60 * 60 * 1000
     SIGNAL_MS = 4 * 60 * 60 * 1000
 else:
     raise RuntimeError("LIVE_SIGNAL_MINUTES must be 10, 15 or 240")
@@ -51,6 +54,7 @@ ENTRY_FILL_DELAY_SEC = 0.5
 CLOSE_HISTORY_ATTEMPTS = 8
 CLOSE_HISTORY_DELAY_SEC = 3
 USER_AGENT = "Mozilla/5.0 BloFinStockFinder/1.0"
+UK_TZ = ZoneInfo("Europe/London")
 
 
 def now_ms():
@@ -364,6 +368,52 @@ def aggregate_10m_bars(bars):
     return out
 
 
+def aggregate_4h_uk_bars(bars):
+    grouped = {}
+    for bar in bars:
+        dt_local = datetime.fromtimestamp(
+            int(bar["ts"]) / 1000, tz=timezone.utc
+        ).astimezone(UK_TZ)
+        key = (dt_local.year, dt_local.month, dt_local.day, dt_local.hour // 4)
+        grouped.setdefault(key, []).append(bar)
+
+    out = []
+    ordered_groups = sorted(
+        grouped.values(), key=lambda group: min(int(x["ts"]) for x in group)
+    )
+    for raw_group in ordered_groups:
+        group = sorted(raw_group, key=lambda x: int(x["ts"]))
+        if any(
+            int(group[i]["ts"]) != int(group[i - 1]["ts"]) + SOURCE_BAR_MS
+            for i in range(1, len(group))
+        ):
+            continue
+
+        close_ms = int(group[-1]["ts"]) + SOURCE_BAR_MS
+        close_local = datetime.fromtimestamp(
+            close_ms / 1000, tz=timezone.utc
+        ).astimezone(UK_TZ)
+
+        # Only completed UK-local 00/04/08/12/16/20 -> next-boundary candles.
+        if close_local.minute != 0 or close_local.second != 0 or close_local.hour % 4 != 0:
+            continue
+
+        out.append({
+            "ts": int(group[0]["ts"]),
+            "close_ms": close_ms,
+            "o": group[0]["o"],
+            "h": max(x["h"] for x in group),
+            "l": min(x["l"] for x in group),
+            "c": group[-1]["c"],
+            "v": sum(x["v"] for x in group),
+        })
+    return out
+
+
+def bar_close_ms(bar):
+    return int(bar.get("close_ms", int(bar["ts"]) + SIGNAL_MS))
+
+
 def fetch_signal_bars(inst):
     raw = market_get(
         "/api/v1/market/candles",
@@ -372,6 +422,8 @@ def fetch_signal_bars(inst):
     bars = parse_candles(raw)
     if SIGNAL_MINUTES == 10:
         bars = aggregate_10m_bars(bars)
+    elif SIGNAL_MINUTES == 240:
+        bars = aggregate_4h_uk_bars(bars)
     return decorate(bars)
 
 
@@ -390,7 +442,7 @@ def init_arm_from_history(inst, bars, latest_index, state):
         cross = rsi_cross(bars, i)
         if cross:
             direction = cross
-            last_cross_close = bars[i]["ts"] + D1H_MS
+            last_cross_close = bar_close_ms(bars[i])
     arms[inst] = {
         "direction": direction,
         "last_cross_close_ms": last_cross_close,
@@ -416,7 +468,7 @@ def evaluate_signals(state, top10):
     scan_now_ms = now_ms()
     for inst, bars in data.items():
         i = latest_idx[inst]
-        close_ms = bars[i]["ts"] + D1H_MS
+        close_ms = bar_close_ms(bars[i])
         last_done = int(state.setdefault("last_processed_close_ms", {}).get(inst, 0) or 0)
         if close_ms <= last_done:
             continue
@@ -434,7 +486,7 @@ def evaluate_signals(state, top10):
 
     for inst, bars in data.items():
         i = latest_idx[inst]
-        close_ms = bars[i]["ts"] + D1H_MS
+        close_ms = bar_close_ms(bars[i])
         state["last_processed_close_ms"][inst] = max(
             int(state["last_processed_close_ms"].get(inst, 0) or 0), close_ms
         )
@@ -861,7 +913,7 @@ def evaluate_tracked_exit_signal(state, expected_close_ms=None):
         return False
 
     i = len(bars) - 1
-    close_ms = int(bars[i]["ts"] + D1H_MS)
+    close_ms = bar_close_ms(bars[i])
     if expected_close_ms is not None and close_ms < int(expected_close_ms):
         return False
 
