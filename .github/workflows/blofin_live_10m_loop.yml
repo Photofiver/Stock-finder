@@ -1,8 +1,12 @@
 name: BloFin LIVE 4H scan
 
 on:
+  push:
+    paths:
+      - 'live10_trigger.txt'
   schedule:
-    - cron: '1,11,21,31,41,51 * * * *'
+    - cron: '5 0,4,8,12,16,20 * * *'
+      timezone: 'Europe/London'
   workflow_dispatch:
 
 permissions:
