@@ -1,6 +1,9 @@
 import json
 import os
 import time
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
 import requests
 
 import blofin_live_hourly as bot
@@ -9,6 +12,7 @@ SIGNAL_STATE_FILE = os.getenv("SIGNAL_STATE_FILE", "blofin_signal_state.json")
 CANDLE_CONFIRM_ATTEMPTS = 30
 CANDLE_CONFIRM_DELAY_SEC = 1
 BROKER_ID = os.getenv("BLOFIN_BROKER_ID", "dd3511977f23cc87").strip()
+UK_TZ = ZoneInfo("Europe/London")
 
 _original_private_request = bot.private_request
 
@@ -81,7 +85,12 @@ def send_ntfy(title, message, priority=2, actions=None, click=None):
 
 
 def expected_signal_close_ms():
-    return (bot.now_ms() // bot.SIGNAL_MS) * bot.SIGNAL_MS
+    now_local = datetime.now(timezone.utc).astimezone(UK_TZ)
+    boundary_hour = (now_local.hour // 4) * 4
+    boundary_local = now_local.replace(
+        hour=boundary_hour, minute=0, second=0, microsecond=0
+    )
+    return int(boundary_local.astimezone(timezone.utc).timestamp() * 1000)
 
 
 def wait_for_confirmed_signal_close(top10, expected_close_ms):
@@ -92,7 +101,7 @@ def wait_for_confirmed_signal_close(top10, expected_close_ms):
             try:
                 bars = bot.fetch_signal_bars(inst)
                 if bars:
-                    latest_close_ms = int(bars[-1]["ts"] + bot.SIGNAL_MS)
+                    latest_close_ms = bot.bar_close_ms(bars[-1])
                     if latest_close_ms >= expected_close_ms:
                         ready.append(inst)
             except Exception as exc:
