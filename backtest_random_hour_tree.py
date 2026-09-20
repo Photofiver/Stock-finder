@@ -138,7 +138,7 @@ def load1m(inst):
         for r in raw:
             if len(r)>=9 and str(r[8])=="1":
                 ts=int(r[0])
-                if START <= ts <= END:
+                if START <= ts <= END+60*60000:
                     rows.append({"ts":ts,"o":float(r[1]),"h":float(r[2]),"l":float(r[3]),"c":float(r[4])})
         return inst,sorted(rows,key=lambda x:x["ts"])
     except Exception:
@@ -232,13 +232,13 @@ for t in SCANS:
       "bankroll":bankroll,
     })
 
-# Close remaining at end-of-hour market price, same as finalizing a one-hour test.
-process_interval(last_event,END+60000)
+# TEST 1 stopped scanning after the hour, but exchange-side TP/SL remained active.
+# Therefore do not force-close positions at 14:00; let their TP/SL settle for up to 60m.
+process_interval(last_event,END+60*60000)
 for inst in list(positions):
-    # Prefer 14:00 5m close if available.
-    i=maps.get(inst,{}).get(END)
-    px=series[inst][i]["c"] if i is not None else positions[inst]["entry"]
-    close_pos(inst,px,END,"END OF TEST")
+    bars=m1.get(inst,[])
+    px=next((x["c"] for x in reversed(bars) if x["ts"] <= END+60*60000),positions[inst]["entry"])
+    close_pos(inst,px,END+60*60000,"60M SETTLEMENT")
 
 wins=sum(x["result"]=="WIN" for x in history)
 losses=sum(x["result"]=="LOSS" for x in history)
