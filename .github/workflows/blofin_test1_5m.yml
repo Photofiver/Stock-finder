@@ -1,0 +1,74 @@
+name: BloFin TEST 1 - 5m Volume
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'test1_trigger.txt'
+  schedule:
+    - cron: '*/5 * * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: blofin-test1-5m
+  cancel-in-progress: false
+
+jobs:
+  test1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Refresh repository state
+        shell: bash
+        run: |
+          git fetch origin main --depth=1
+          git reset --hard origin/main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install -r requirements.txt
+
+      - name: TEST 1 - run 5m LIVE Volume strategy
+        env:
+          BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
+          BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
+          BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
+          BLOFIN_LIVE_ENABLED: 'true'
+          LIVE_MAX_BANKROLL_USDT: '10.00'
+          LIVE_MAX_DRAWDOWN_PCT: '0.10'
+          LIVE_SIGNAL_MINUTES: '5'
+          LIVE_SIGNAL_MAX_AGE_MS: '300000'
+        run: python blofin_live_hourly.py
+
+      - name: Save TEST 1 state
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add blofin_live_state.json 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m 'Update TEST 1 5m LIVE state'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Notify TEST 1 failure
+        if: failure()
+        shell: bash
+        run: |
+          curl -fsS --retry 3 --retry-delay 1 --max-time 20 \
+            -H 'Title: BloFin TEST 1 ERROR' \
+            -H 'Priority: 5' \
+            -d "TEST 1 5m run failed. Sprawdz GitHub Actions run ${GITHUB_RUN_ID}." \
+            'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n' || true
