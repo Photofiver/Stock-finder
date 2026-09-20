@@ -5,9 +5,6 @@ on:
     paths:
       - 'live10_trigger.txt'
   workflow_dispatch:
-  schedule:
-    # Run shortly before every hour; the gate below only allows UK 4H boundaries.
-    - cron: '55 * * * *'
 
 permissions:
   contents: write
