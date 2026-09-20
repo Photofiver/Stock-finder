@@ -1,0 +1,1232 @@
+{
+  "total": 30,
+  "has_profitable_direction_fixed_tp_sl": 18,
+  "no_profitable_direction_fixed_tp_sl": [
+    2,
+    4,
+    5,
+    9,
+    10,
+    12,
+    17,
+    20,
+    22,
+    25,
+    26,
+    30
+  ],
+  "decision_tree_correct": 18,
+  "decision_tree_total": 18,
+  "features_used": [
+    "adx",
+    "atr_pct",
+    "candle_body_pct",
+    "candle_dir",
+    "di_diff",
+    "ema_gap",
+    "macd_hist",
+    "obv3",
+    "ret1",
+    "ret3",
+    "rsi",
+    "stoch_diff",
+    "vol_ratio_gr",
+    "vol_vs_avg"
+  ],
+  "tree": {
+    "feature": "di_diff",
+    "threshold": 18.98987216739516,
+    "le": {
+      "feature": "candle_body_pct",
+      "threshold": 0.0046352186710947865,
+      "le": {
+        "leaf": "SHORT",
+        "count": 6,
+        "trade_numbers": [
+          1,
+          7,
+          13,
+          19,
+          23,
+          28
+        ]
+      },
+      "gt": {
+        "feature": "adx",
+        "threshold": 25.321436854684613,
+        "le": {
+          "leaf": "LONG",
+          "count": 4,
+          "trade_numbers": [
+            3,
+            6,
+            11,
+            29
+          ]
+        },
+        "gt": {
+          "leaf": "SHORT",
+          "count": 2,
+          "trade_numbers": [
+            8,
+            15
+          ]
+        }
+      }
+    },
+    "gt": {
+      "leaf": "LONG",
+      "count": 6,
+      "trade_numbers": [
+        14,
+        16,
+        18,
+        21,
+        24,
+        27
+      ]
+    }
+  },
+  "rows": [
+    {
+      "n": 1,
+      "inst": "AVAX-USDT",
+      "opened_ms": 1789914169376,
+      "entry": 10.711,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 58.810417106609556,
+        "macd_hist": -0.006792369175168511,
+        "stoch_diff": -8.490270067145559,
+        "adx": 32.09225516156433,
+        "di_diff": 7.0347792186106375,
+        "ema_gap": 0.009833225924785083,
+        "ret1": 0.0016945961212577743,
+        "ret3": -0.012345679012345623,
+        "obv3": -1324.0,
+        "vol_ratio_gr": 1.180341524364848,
+        "vol_vs_avg": 0.27273995871367596,
+        "atr_pct": 0.011882587039174735,
+        "candle_body_pct": 0.001694596121257831,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789914240000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789914600000,
+        "why": "TP"
+      },
+      "desired": "SHORT"
+    },
+    {
+      "n": 2,
+      "inst": "EPIC-USDT",
+      "opened_ms": 1789915213108,
+      "entry": 0.5613,
+      "original_side": "LONG",
+      "features": {
+        "rsi": 72.48960187598342,
+        "macd_hist": 0.004601285271939509,
+        "stoch_diff": -0.0014231862595863731,
+        "adx": 43.93076012880488,
+        "di_diff": 32.4839986901137,
+        "ema_gap": 0.04291420216380937,
+        "ret1": 0.006051975792096931,
+        "ret3": 0.009285714285714342,
+        "obv3": 17771.0,
+        "vol_ratio_gr": 0.03568202348690153,
+        "vol_vs_avg": 0.09130309159202543,
+        "atr_pct": 0.021690839902079956,
+        "candle_body_pct": 0.006051975792096956,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789915380000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789915260000,
+        "why": "SL"
+      },
+      "desired": null
+    },
+    {
+      "n": 3,
+      "inst": "M-USDT",
+      "opened_ms": 1789915214220,
+      "entry": 1.524,
+      "original_side": "LONG",
+      "features": {
+        "rsi": 51.507312226178605,
+        "macd_hist": -0.0043288009626564206,
+        "stoch_diff": 0.7070431086824698,
+        "adx": 21.523194872601376,
+        "di_diff": 2.530430561488103,
+        "ema_gap": 0.001183765470922138,
+        "ret1": 0.002763703362505643,
+        "ret3": 0.0017749145411516398,
+        "obv3": 148.0,
+        "vol_ratio_gr": 0.8242677824267782,
+        "vol_vs_avg": 0.72346676459787,
+        "atr_pct": 0.012164602133201955,
+        "candle_body_pct": 0.005277392967873875,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789915320000,
+        "why": "TP"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789915320000,
+        "why": "SL"
+      },
+      "desired": "LONG"
+    },
+    {
+      "n": 4,
+      "inst": "ONE-USDT",
+      "opened_ms": 1789915211965,
+      "entry": 0.0038619,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 50.905835191155326,
+        "macd_hist": 1.3819710880588198e-05,
+        "stoch_diff": 7.592727023087022,
+        "adx": 24.794508544656114,
+        "di_diff": -6.358161918640995,
+        "ema_gap": -0.005205699600885461,
+        "ret1": 0.0021907216494845283,
+        "ret3": 0.017372648543994007,
+        "obv3": 4133306.0,
+        "vol_ratio_gr": 1.2117307057070872,
+        "vol_vs_avg": 1.944340115860245,
+        "atr_pct": 0.03533926550848045,
+        "candle_body_pct": 0.0027592965083295183,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789915200000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789915200000,
+        "why": "BOTH=>SL"
+      },
+      "desired": null
+    },
+    {
+      "n": 5,
+      "inst": "AVAX-USDT",
+      "opened_ms": 1789915514009,
+      "entry": 10.86,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 67.47454766165748,
+        "macd_hist": 0.0033749625927150806,
+        "stoch_diff": 9.991972957873074,
+        "adx": 30.421810303743715,
+        "di_diff": 14.396739341686498,
+        "ema_gap": 0.010456783697677885,
+        "ret1": 0.004065416243185904,
+        "ret3": 0.020758970505354135,
+        "obv3": 46328.0,
+        "vol_ratio_gr": 13.440326167531504,
+        "vol_vs_avg": 2.9947804829705,
+        "atr_pct": 0.012317378693194186,
+        "candle_body_pct": 0.004065416243185852,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789915500000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789915680000,
+        "why": "SL"
+      },
+      "desired": null
+    },
+    {
+      "n": 6,
+      "inst": "ONE-USDT",
+      "opened_ms": 1789915512200,
+      "entry": 0.0037581,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 43.9463389702389,
+        "macd_hist": 8.004829124798027e-06,
+        "stoch_diff": -1.3648336411769293,
+        "adx": 25.03155454165928,
+        "di_diff": -14.258681202843672,
+        "ema_gap": -0.0069274531707420595,
+        "ret1": -0.03260897518323258,
+        "ret3": -0.03409937090769022,
+        "obv3": -5119151.0,
+        "vol_ratio_gr": 1.0758841074792476,
+        "vol_vs_avg": 1.6848552552809373,
+        "atr_pct": 0.03747199296578502,
+        "candle_body_pct": 0.034719014626635784,
+        "candle_dir": -1
+      },
+      "long": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789915620000,
+        "why": "TP"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789915620000,
+        "why": "SL"
+      },
+      "desired": "LONG"
+    },
+    {
+      "n": 7,
+      "inst": "M-USDT",
+      "opened_ms": 1789915812884,
+      "entry": 1.5457,
+      "original_side": "LONG",
+      "features": {
+        "rsi": 60.38695214621742,
+        "macd_hist": -0.0013733817299722475,
+        "stoch_diff": 14.654369839973654,
+        "adx": 21.618401064148888,
+        "di_diff": 11.82592352293619,
+        "ema_gap": 0.003450350254478929,
+        "ret1": 0.003953337653920919,
+        "ret3": 0.019345923537540166,
+        "obv3": 663.0,
+        "vol_ratio_gr": 0.6778242677824268,
+        "vol_vs_avg": 0.6581352833638026,
+        "atr_pct": 0.01185237480131683,
+        "candle_body_pct": 0.00395333765392093,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789915800000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789916100000,
+        "why": "TP"
+      },
+      "desired": "SHORT"
+    },
+    {
+      "n": 8,
+      "inst": "ONE-USDT",
+      "opened_ms": 1789915811759,
+      "entry": 0.0036688,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 39.59694748146109,
+        "macd_hist": -1.6955161743334156e-06,
+        "stoch_diff": -10.831062032481576,
+        "adx": 25.611319167709944,
+        "di_diff": -16.067271546102447,
+        "ema_gap": -0.01077202173087588,
+        "ret1": -0.025148204269346386,
+        "ret3": -0.054871134020618606,
+        "obv3": -6115735.0,
+        "vol_ratio_gr": 1.0285995141438609,
+        "vol_vs_avg": 1.708722664098331,
+        "atr_pct": 0.040161341086867135,
+        "candle_body_pct": 0.023460801022582082,
+        "candle_dir": -1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789915800000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789915980000,
+        "why": "TP"
+      },
+      "desired": "SHORT"
+    },
+    {
+      "n": 9,
+      "inst": "ONE-USDT",
+      "opened_ms": 1789916111819,
+      "entry": 0.0036457,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 38.069972281994225,
+        "macd_hist": -9.5535801311107e-06,
+        "stoch_diff": -14.504259118610321,
+        "adx": 26.267604568819024,
+        "di_diff": -16.6989804220176,
+        "ema_gap": -0.014432568709341842,
+        "ret1": -0.009707943606664604,
+        "ret3": -0.06609232351806604,
+        "obv3": -15249095.0,
+        "vol_ratio_gr": 2.8854813033738074,
+        "vol_vs_avg": 0.5942838107821935,
+        "atr_pct": 0.03900166211122877,
+        "candle_body_pct": 0.010517424593335262,
+        "candle_dir": -1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789916100000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789916160000,
+        "why": "SL"
+      },
+      "desired": null
+    },
+    {
+      "n": 10,
+      "inst": "ONE-USDT",
+      "opened_ms": 1789916412013,
+      "entry": 0.0036729,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 41.33439826055861,
+        "macd_hist": -1.0507219532910391e-05,
+        "stoch_diff": -8.157426737802524,
+        "adx": 26.875923473312756,
+        "di_diff": -16.14380479789823,
+        "ema_gap": -0.01548082135136164,
+        "ret1": 0.013135068153655505,
+        "ret3": -0.021931573490709066,
+        "obv3": 1608575.0,
+        "vol_ratio_gr": 4.4895666623274195,
+        "vol_vs_avg": 2.3962210383193994,
+        "atr_pct": 0.03696356686604964,
+        "candle_body_pct": 0.01252167212483143,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789916400000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789916400000,
+        "why": "BOTH=>SL"
+      },
+      "desired": null
+    },
+    {
+      "n": 11,
+      "inst": "M-USDT",
+      "opened_ms": 1789916113724,
+      "entry": 1.5332,
+      "original_side": "LONG",
+      "features": {
+        "rsi": 54.97461582780015,
+        "macd_hist": -0.001257221317334467,
+        "stoch_diff": 11.333738109694274,
+        "adx": 21.815658950088828,
+        "di_diff": 11.219554355565801,
+        "ema_gap": 0.003397309319553621,
+        "ret1": -0.007681879801174851,
+        "ret3": 0.008727606798346166,
+        "obv3": 299.0,
+        "vol_ratio_gr": 0.9700598802395209,
+        "vol_vs_avg": 0.6747474747474748,
+        "atr_pct": 0.011690396298001463,
+        "candle_body_pct": 0.008066077305285009,
+        "candle_dir": -1
+      },
+      "long": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789916880000,
+        "why": "TP"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789916400000,
+        "why": "SL"
+      },
+      "desired": "LONG"
+    },
+    {
+      "n": 12,
+      "inst": "M-USDT",
+      "opened_ms": 1789916712512,
+      "entry": 1.5397,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 55.8046186171671,
+        "macd_hist": -0.0009534744594291641,
+        "stoch_diff": -4.634689334142806,
+        "adx": 21.015599650156712,
+        "di_diff": 7.784789532944487,
+        "ema_gap": 0.003432627557064638,
+        "ret1": 0.00012992918859233704,
+        "ret3": -0.006197146730359426,
+        "obv3": 325.0,
+        "vol_ratio_gr": 1.622754491017964,
+        "vol_vs_avg": 1.1744312026002166,
+        "atr_pct": 0.010997841443633373,
+        "candle_body_pct": 0.00012992918859234718,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789916760000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789916880000,
+        "why": "SL"
+      },
+      "desired": null
+    },
+    {
+      "n": 13,
+      "inst": "ONE-USDT",
+      "opened_ms": 1789916711352,
+      "entry": 0.0036735,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 40.968731440959026,
+        "macd_hist": -1.0582094811221003e-05,
+        "stoch_diff": -1.4169179618031436,
+        "adx": 26.844258763044763,
+        "di_diff": -12.128649141518327,
+        "ema_gap": -0.016193500429743435,
+        "ret1": -0.0020384866275278135,
+        "ret3": 0.0012543972076026755,
+        "obv3": 4742257.0,
+        "vol_ratio_gr": 1.472132672066052,
+        "vol_vs_avg": 0.7564888556388085,
+        "atr_pct": 0.03708583071163328,
+        "candle_body_pct": 0.0016094713295870177,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789916700000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789916700000,
+        "why": "TP"
+      },
+      "desired": "SHORT"
+    },
+    {
+      "n": 14,
+      "inst": "AVAX-USDT",
+      "opened_ms": 1789917013742,
+      "entry": 11.121,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 71.64377776183235,
+        "macd_hist": 0.014280855475345744,
+        "stoch_diff": 1.8811427608635825,
+        "adx": 33.64368643823715,
+        "di_diff": 23.575768984438344,
+        "ema_gap": 0.012670626021337617,
+        "ret1": 0.01678591084204739,
+        "ret3": 0.021658986175115302,
+        "obv3": 9182.0,
+        "vol_ratio_gr": 2.0957708049113233,
+        "vol_vs_avg": 0.7743607063105206,
+        "atr_pct": 0.012133902887394717,
+        "candle_body_pct": 0.016785910842047478,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789917000000,
+        "why": "TP"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789917000000,
+        "why": "SL"
+      },
+      "desired": "LONG"
+    },
+    {
+      "n": 15,
+      "inst": "ONE-USDT",
+      "opened_ms": 1789917011478,
+      "entry": 0.003652,
+      "original_side": "LONG",
+      "features": {
+        "rsi": 37.5400931469483,
+        "macd_hist": -1.4187991454911136e-05,
+        "stoch_diff": -1.1366272326606577,
+        "adx": 26.890734043400602,
+        "di_diff": -12.178940108530174,
+        "ema_gap": -0.01853604350530913,
+        "ret1": -0.019582209875534495,
+        "ret3": -0.008729175271926293,
+        "obv3": 1384517.0,
+        "vol_ratio_gr": 0.6062056507119886,
+        "vol_vs_avg": 1.192403721498754,
+        "atr_pct": 0.03691841180045376,
+        "candle_body_pct": 0.01878049445307608,
+        "candle_dir": -1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789917060000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789917060000,
+        "why": "TP"
+      },
+      "desired": "SHORT"
+    },
+    {
+      "n": 16,
+      "inst": "SAGA-USDT",
+      "opened_ms": 1789917012584,
+      "entry": 0.03124,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 72.95986204722054,
+        "macd_hist": 0.000309787633904292,
+        "stoch_diff": 3.018100743794463,
+        "adx": 28.33419308378102,
+        "di_diff": 40.015042463610314,
+        "ema_gap": 0.016191384780449125,
+        "ret1": 0.08508439545297963,
+        "ret3": 0.10448807854137443,
+        "obv3": 230671.0,
+        "vol_ratio_gr": 19.105320205943457,
+        "vol_vs_avg": 9.282938379265625,
+        "atr_pct": 0.022444851919487193,
+        "candle_body_pct": 0.08098833218943037,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789917060000,
+        "why": "TP"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789917000000,
+        "why": "SL"
+      },
+      "desired": "LONG"
+    },
+    {
+      "n": 17,
+      "inst": "ONE-USDT",
+      "opened_ms": 1789917311755,
+      "entry": 0.0036962,
+      "original_side": "LONG",
+      "features": {
+        "rsi": 46.05367841624165,
+        "macd_hist": -7.162565692121811e-06,
+        "stoch_diff": 1.1849532204438233,
+        "adx": 26.31706601359894,
+        "di_diff": -8.306416668172051,
+        "ema_gap": -0.01622735634257344,
+        "ret1": 0.034974165231401955,
+        "ret3": 0.012638617090671822,
+        "obv3": -8335888.0,
+        "vol_ratio_gr": 0.1459155297704532,
+        "vol_vs_avg": 0.17810782400019826,
+        "atr_pct": 0.03573222462134884,
+        "candle_body_pct": 0.023909638057548102,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789917300000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789917300000,
+        "why": "BOTH=>SL"
+      },
+      "desired": null
+    },
+    {
+      "n": 18,
+      "inst": "SAGA-USDT",
+      "opened_ms": 1789917313936,
+      "entry": 0.03074,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 66.40942798388858,
+        "macd_hist": 0.00035388097732644497,
+        "stoch_diff": 1.3681423847631464,
+        "adx": 31.043309050500277,
+        "di_diff": 36.251692102124885,
+        "ema_gap": 0.021198145856022865,
+        "ret1": -0.019682539682539635,
+        "ret3": 0.036589459550184555,
+        "obv3": 118437.0,
+        "vol_ratio_gr": 2.579231041252576,
+        "vol_vs_avg": 3.153399805428768,
+        "atr_pct": 0.024105215728545078,
+        "candle_body_pct": 0.02123613312202854,
+        "candle_dir": -1
+      },
+      "long": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789917420000,
+        "why": "TP"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789917300000,
+        "why": "SL"
+      },
+      "desired": "LONG"
+    },
+    {
+      "n": 19,
+      "inst": "M-USDT",
+      "opened_ms": 1789917312866,
+      "entry": 1.5597,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 62.24357611746515,
+        "macd_hist": 0.0010823802187423896,
+        "stoch_diff": 9.80524968497626,
+        "adx": 22.389296622985306,
+        "di_diff": 14.403975350351974,
+        "ema_gap": 0.005654370784223373,
+        "ret1": -0.0007691814627267535,
+        "ret3": 0.012733060482037262,
+        "obv3": 583.0,
+        "vol_ratio_gr": 1.0179640718562875,
+        "vol_vs_avg": 0.7166947723440136,
+        "atr_pct": 0.011264382268950981,
+        "candle_body_pct": 0.003993044374315698,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789917360000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789917660000,
+        "why": "TP"
+      },
+      "desired": "SHORT"
+    },
+    {
+      "n": 20,
+      "inst": "ONE-USDT",
+      "opened_ms": 1789917612312,
+      "entry": 0.0036523,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 41.96344967728469,
+        "macd_hist": -7.195393589619224e-06,
+        "stoch_diff": -0.2454960179385992,
+        "adx": 25.784380372080243,
+        "di_diff": -7.838975061989505,
+        "ema_gap": -0.016708608988344364,
+        "ret1": -0.022438736344847943,
+        "ret3": -0.008061660811068405,
+        "obv3": -5344451.0,
+        "vol_ratio_gr": 1.7759405902595657,
+        "vol_vs_avg": 0.1019074030270006,
+        "atr_pct": 0.03596547798952163,
+        "candle_body_pct": 0.02094086021505379,
+        "candle_dir": -1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789917840000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789917600000,
+        "why": "SL"
+      },
+      "desired": null
+    },
+    {
+      "n": 21,
+      "inst": "SAGA-USDT",
+      "opened_ms": 1789917614523,
+      "entry": 0.03082,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 65.89561436280155,
+        "macd_hist": 0.0003589710529715886,
+        "stoch_diff": 8.014715693562849,
+        "adx": 33.49199863839252,
+        "di_diff": 33.64681219787086,
+        "ema_gap": 0.02419790517657905,
+        "ret1": -0.0016191709844559643,
+        "ret3": 0.0620048225973131,
+        "obv3": 114210.0,
+        "vol_ratio_gr": 13.826317165642568,
+        "vol_vs_avg": 0.5717777698872927,
+        "atr_pct": 0.023948838803179554,
+        "candle_body_pct": 0.0022653721682848096,
+        "candle_dir": -1
+      },
+      "long": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789917660000,
+        "why": "TP"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789917660000,
+        "why": "SL"
+      },
+      "desired": "LONG"
+    },
+    {
+      "n": 22,
+      "inst": "M-USDT",
+      "opened_ms": 1789917613403,
+      "entry": 1.5499,
+      "original_side": "LONG",
+      "features": {
+        "rsi": 58.10291938945482,
+        "macd_hist": 0.0008604361129458098,
+        "stoch_diff": 5.29430622043634,
+        "adx": 23.279727786742264,
+        "di_diff": 15.812973687313637,
+        "ema_gap": 0.005589326051819166,
+        "ret1": -0.0051318237218551666,
+        "ret3": 0.007405001623903784,
+        "obv3": 58.0,
+        "vol_ratio_gr": 0.6692913385826772,
+        "vol_vs_avg": 1.0433353871431505,
+        "atr_pct": 0.011411834267131528,
+        "candle_body_pct": 0.0073604710701485315,
+        "candle_dir": -1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789918140000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789918140000,
+        "why": "SL"
+      },
+      "desired": null
+    },
+    {
+      "n": 23,
+      "inst": "ONE-USDT",
+      "opened_ms": 1789917911665,
+      "entry": 0.0036606,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 42.77528321850917,
+        "macd_hist": -5.507581704608961e-06,
+        "stoch_diff": -3.9600880476820137,
+        "adx": 25.290558279664122,
+        "di_diff": -7.581285195414626,
+        "ema_gap": -0.016399440689352285,
+        "ret1": 0.0034046291974410003,
+        "ret3": 0.01519528862714603,
+        "obv3": 2284002.0,
+        "vol_ratio_gr": 4.093854341235017,
+        "vol_vs_avg": 0.419516353244841,
+        "atr_pct": 0.03444028457855182,
+        "candle_body_pct": 0.002991546821824657,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789917900000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789918140000,
+        "why": "TP"
+      },
+      "desired": "SHORT"
+    },
+    {
+      "n": 24,
+      "inst": "SAGA-USDT",
+      "opened_ms": 1789917912789,
+      "entry": 0.03119,
+      "original_side": "LONG",
+      "features": {
+        "rsi": 67.72432410406017,
+        "macd_hist": 0.00036341852712301614,
+        "stoch_diff": 1.3086247823313215,
+        "adx": 35.848116499381206,
+        "di_diff": 33.17157683276,
+        "ema_gap": 0.02713083136336092,
+        "ret1": 0.011028219266947747,
+        "ret3": -0.010476190476190528,
+        "obv3": -88162.0,
+        "vol_ratio_gr": 0.5976598248137012,
+        "vol_vs_avg": 0.336189145462568,
+        "atr_pct": 0.023485162258371342,
+        "candle_body_pct": 0.008737864077669884,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789917960000,
+        "why": "TP"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789917900000,
+        "why": "SL"
+      },
+      "desired": "LONG"
+    },
+    {
+      "n": 25,
+      "inst": "AVAX-USDT",
+      "opened_ms": 1789918213961,
+      "entry": 11.174,
+      "original_side": "LONG",
+      "features": {
+        "rsi": 66.22199692757533,
+        "macd_hist": 0.01415368309175416,
+        "stoch_diff": -2.8588435898096094,
+        "adx": 35.9964744423906,
+        "di_diff": 12.099004330213752,
+        "ema_gap": 0.014147425389651858,
+        "ret1": 0.008173644537281088,
+        "ret3": -0.0005401998739532621,
+        "obv3": 1061.0,
+        "vol_ratio_gr": 0.2825658276302053,
+        "vol_vs_avg": 0.24009935145577482,
+        "atr_pct": 0.013018612702315807,
+        "candle_body_pct": 0.007441691623559374,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789918260000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789918500000,
+        "why": "SL"
+      },
+      "desired": null
+    },
+    {
+      "n": 26,
+      "inst": "ONE-USDT",
+      "opened_ms": 1789918211558,
+      "entry": 0.0036302,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 41.58306191074456,
+        "macd_hist": -5.114666645306549e-06,
+        "stoch_diff": -11.244500385624445,
+        "adx": 24.88874852732598,
+        "di_diff": -7.761756137335789,
+        "ema_gap": -0.016580089683061683,
+        "ret1": -0.006457791763579301,
+        "ret3": -0.02544488284080848,
+        "obv3": 80609.0,
+        "vol_ratio_gr": 1.4010523535300763,
+        "vol_vs_avg": 0.30030192630876046,
+        "atr_pct": 0.03308715794178429,
+        "candle_body_pct": 0.006648063033486568,
+        "candle_dir": -1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789918320000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789918320000,
+        "why": "BOTH=>SL"
+      },
+      "desired": null
+    },
+    {
+      "n": 27,
+      "inst": "SAGA-USDT",
+      "opened_ms": 1789918212799,
+      "entry": 0.03149,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 69.43728035219189,
+        "macd_hist": 0.0003657636061077846,
+        "stoch_diff": 2.086995717827378,
+        "adx": 38.1187032484612,
+        "di_diff": 33.179804747003075,
+        "ema_gap": 0.029907755111488132,
+        "ret1": 0.010587102983638186,
+        "ret3": 0.020077720207253957,
+        "obv3": 17915.0,
+        "vol_ratio_gr": 1.573408288665185,
+        "vol_vs_avg": 0.8478919827180803,
+        "atr_pct": 0.022735652141178887,
+        "candle_body_pct": 0.010911424903722723,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789918260000,
+        "why": "TP"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789918200000,
+        "why": "SL"
+      },
+      "desired": "LONG"
+    },
+    {
+      "n": 28,
+      "inst": "M-USDT",
+      "opened_ms": 1789918513550,
+      "entry": 1.5476,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 57.25532203492665,
+        "macd_hist": -0.00021034730729811886,
+        "stoch_diff": -4.063593721497469,
+        "adx": 24.568574297126833,
+        "di_diff": 11.799544077382606,
+        "ema_gap": 0.0046068107119090485,
+        "ret1": 0.0011627155868483285,
+        "ret3": -0.0006447868979301274,
+        "obv3": 334.0,
+        "vol_ratio_gr": 1.0112359550561798,
+        "vol_vs_avg": 0.740588356305287,
+        "atr_pct": 0.010698318849427891,
+        "candle_body_pct": 0.00116271558684841,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789918620000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789918680000,
+        "why": "TP"
+      },
+      "desired": "SHORT"
+    },
+    {
+      "n": 29,
+      "inst": "ONE-USDT",
+      "opened_ms": 1789918511275,
+      "entry": 0.0036712,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 43.30639214861074,
+        "macd_hist": -2.510968710362605e-06,
+        "stoch_diff": -9.164735037366254,
+        "adx": 24.873514632698196,
+        "di_diff": -9.8299544594266,
+        "ema_gap": -0.015710004601861005,
+        "ret1": 0.006582390041036668,
+        "ret3": 0.0034869992586694654,
+        "obv3": 5999960.0,
+        "vol_ratio_gr": 3.977036043582701,
+        "vol_vs_avg": 1.179585787982543,
+        "atr_pct": 0.032252499694102744,
+        "candle_body_pct": 0.006776486144014119,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "WIN",
+        "gross": 0.01,
+        "net": 0.0088,
+        "exit_ms": 1789918500000,
+        "why": "TP"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789918500000,
+        "why": "SL"
+      },
+      "desired": "LONG"
+    },
+    {
+      "n": 30,
+      "inst": "SAGA-USDT",
+      "opened_ms": 1789918512390,
+      "entry": 0.03237,
+      "original_side": "SHORT",
+      "features": {
+        "rsi": 73.43946987418647,
+        "macd_hist": 0.00040029590104597725,
+        "stoch_diff": 5.54540266939388,
+        "adx": 40.66919721740175,
+        "di_diff": 39.36755786424859,
+        "ema_gap": 0.03443327139289343,
+        "ret1": 0.027619047619047654,
+        "ret3": 0.04995134609146956,
+        "obv3": 245914.0,
+        "vol_ratio_gr": 13.903843639691463,
+        "vol_vs_avg": 5.452306004429498,
+        "atr_pct": 0.023368748740638854,
+        "candle_body_pct": 0.0230720606826802,
+        "candle_dir": 1
+      },
+      "long": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789918560000,
+        "why": "SL"
+      },
+      "short": {
+        "result": "LOSS",
+        "gross": -0.005,
+        "net": -0.0062,
+        "exit_ms": 1789918500000,
+        "why": "SL"
+      },
+      "desired": null
+    }
+  ]
+}
