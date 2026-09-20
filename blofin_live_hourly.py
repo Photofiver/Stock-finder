@@ -29,7 +29,12 @@ HARD_SL_PCT = Decimal("0.005")
 TAKE_PROFIT_PCT = Decimal("0.01")
 RSI_PERIOD = 14
 SIGNAL_MINUTES = int(os.getenv("LIVE_SIGNAL_MINUTES", "240"))
-if SIGNAL_MINUTES == 10:
+MAX_DRAWDOWN_PCT = Decimal(os.getenv("LIVE_MAX_DRAWDOWN_PCT", "0.10"))
+if SIGNAL_MINUTES == 5:
+    SIGNAL_BAR = "5m"
+    SOURCE_BAR_MS = 5 * 60 * 1000
+    SIGNAL_MS = 5 * 60 * 1000
+elif SIGNAL_MINUTES == 10:
     SIGNAL_BAR = "5m"
     SOURCE_BAR_MS = 5 * 60 * 1000
     SIGNAL_MS = 10 * 60 * 1000
@@ -43,7 +48,7 @@ elif SIGNAL_MINUTES == 240:
     SOURCE_BAR_MS = 60 * 60 * 1000
     SIGNAL_MS = 4 * 60 * 60 * 1000
 else:
-    raise RuntimeError("LIVE_SIGNAL_MINUTES must be 10, 15 or 240")
+    raise RuntimeError("LIVE_SIGNAL_MINUTES must be 5, 10, 15 or 240")
 SIGNAL_LABEL = "4H" if SIGNAL_MINUTES == 240 else f"{SIGNAL_MINUTES}m"
 D1H_MS = SIGNAL_MS  # compatibility alias for older helper names/state code
 HTTP_TIMEOUT = 25
@@ -522,6 +527,29 @@ def current_live_bankroll(state):
     return max(Decimal("0"), bankroll)
 
 
+def risk_stop_active(state):
+    """Hard cumulative-loss stop: block all new entries at 10% drawdown."""
+    if bool(state.get("risk_stop_triggered")):
+        return True
+    starting_bankroll = d(state.get("bankroll_start_usdt", MAX_NOTIONAL_USDT))
+    if starting_bankroll <= 0:
+        return True
+    bankroll = current_live_bankroll(state)
+    threshold = starting_bankroll * (Decimal("1") - MAX_DRAWDOWN_PCT)
+    if bankroll <= threshold:
+        state["risk_stop_triggered"] = True
+        state["risk_stop_triggered_ms"] = now_ms()
+        state["risk_stop_bankroll_usdt"] = clean_decimal(bankroll)
+        state["risk_stop_threshold_usdt"] = clean_decimal(threshold)
+        notify(
+            f"HARD STOP: bankroll {bankroll:.4f} USDT <= {threshold:.4f} USDT "
+            f"({MAX_DRAWDOWN_PCT * 100:.1f}% max drawdown). No new trades.",
+            "BloFin LIVE HARD STOP",
+        )
+        return True
+    return False
+
+
 def get_open_positions():
     rows = private_request("GET", "/api/v1/account/positions") or []
     out = []
@@ -931,6 +959,9 @@ def evaluate_tracked_exit_signal(state, expected_close_ms=None):
 
 
 def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allocation_label=None):
+    if risk_stop_active(state):
+        raise RuntimeError("HARD STOP active: 10% drawdown limit reached")
+
     _, inst, side, signal_close_ms = candidate
     signal_age_ms = now_ms() - int(signal_close_ms)
     if signal_age_ms < 0 or signal_age_ms > SIGNAL_MAX_AGE_MS:
@@ -1347,6 +1378,10 @@ def place_live_trade_multi(
 
 
 def execute_candidate_batch(state, candidates, tickers, instruments):
+    if risk_stop_active(state):
+        print("HARD STOP active: skipping all new entries.")
+        return []
+
     positions = get_tracked_positions(state)
     open_positions = get_open_positions()
     account_open = {str(p.get("instId")) for p in open_positions if p.get("instId")}
@@ -1481,8 +1516,13 @@ def main():
 
     sync_all_tracked_positions(state)
     evaluate_all_tracked_exit_signals(state)
-    candidates = evaluate_signals(state, top10)
-    executed = execute_candidate_batch(state, candidates, tickers, instruments)
+
+    if risk_stop_active(state):
+        candidates = []
+        executed = []
+    else:
+        candidates = evaluate_signals(state, top10)
+        executed = execute_candidate_batch(state, candidates, tickers, instruments)
 
     status(state, top10)
     state["last_run_ms"] = now_ms()
