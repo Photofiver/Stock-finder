@@ -134,17 +134,16 @@ def build_live_diagnostic(state, top10):
 
             i = len(bars) - 1
             signal = bot.volume_flip_signal(bars, i)
-            prev_color = bot.candle_color(bars[i - 1])
-            cur_color = bot.candle_color(bars[i])
-            if signal:
+            green_v, red_v = bot.last_green_red_volume(bars, i)
+            if green_v is None or red_v is None:
+                detail = "VOL brak ostatniego GREEN lub RED"
+            elif signal:
                 detail = (
-                    f"VOL {prev_color}->{cur_color} ✓ | "
-                    f"{bars[i]['v']:.4f}>{bars[i - 1]['v']:.4f} | {signal}"
+                    f"VOL GREEN {green_v:.4f} vs RED {red_v:.4f} | {signal}"
                 )
             else:
                 detail = (
-                    f"VOL {prev_color}->{cur_color} ✗ | "
-                    f"{bars[i]['v']:.4f} vs {bars[i - 1]['v']:.4f}"
+                    f"VOL GREEN {green_v:.4f} = RED {red_v:.4f} | brak sygnalu"
                 )
             lines.append(f"{rank}. {inst} — {detail}")
         except Exception as exc:
