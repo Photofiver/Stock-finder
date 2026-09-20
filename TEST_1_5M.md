@@ -12,10 +12,11 @@ GitHub schedule: every 5 minutes (`*/5 * * * *`). GitHub may start a scheduled j
 - Universe: current TOP10 linear USDT swaps selected by the bot's existing 24h-change ranking.
 - Timeframe: native confirmed 5-minute candles.
 - Indicators: only candle colour + Volume.
-- Existing signal logic is unchanged:
-  - previous RED -> current GREEN and current Volume > previous Volume => SHORT;
-  - previous GREEN -> current RED and current Volume > previous Volume => LONG;
-  - otherwise no new entry.
+- Volume comparison:
+  - compare the latest GREEN candle Volume with the latest RED candle Volume, regardless of how many candles are between them;
+  - latest GREEN Volume > latest RED Volume => SHORT;
+  - latest RED Volume > latest GREEN Volume => LONG;
+  - exact equality => no new entry.
 - Exit: opposite Volume flip, or exchange protection.
 - TP: +1%.
 - SL: -0.5%.
