@@ -76,7 +76,7 @@ for tp in TPS:
 grid.sort(key=lambda x:(x[0],x[1]),reverse=True)
 best=grid[0]
 all30=[x for x in grid if x[0]==30]
-chosen=(sorted(all30,key=lambda x:(x[2],x[3]))[0] if all30 else best)
+chosen=(sorted(all30,key=lambda x:(-x[2],x[3]))[0] if all30 else best)
 possible,margin,tp,sl,labels=chosen
 
 usable=[(n,t,feat_by_n[n],labels[n]) for n,t in enumerate(trades,1) if labels[n]]
