@@ -1,0 +1,79 @@
+name: BloFin TEST 1 - reliable 5m hour
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'test1_hour_trigger.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: blofin-test1-reliable-5m
+  cancel-in-progress: false
+
+jobs:
+  test1_hour:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Refresh repository state
+        shell: bash
+        run: |
+          git fetch origin main --depth=1
+          git reset --hard origin/main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install -r requirements.txt
+
+      - name: TEST 1 - twelve aligned 5m scans
+        env:
+          BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
+          BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
+          BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
+          BLOFIN_LIVE_ENABLED: 'true'
+          LIVE_MAX_BANKROLL_USDT: '10.00'
+          LIVE_MAX_DRAWDOWN_PCT: '0.10'
+          LIVE_SIGNAL_MINUTES: '5'
+          LIVE_SIGNAL_MAX_AGE_MS: '300000'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          for N in $(seq 1 12); do
+            NOW=$(date +%s)
+            TARGET=$(( ((NOW / 300) + 1) * 300 + 5 ))
+            WAIT=$(( TARGET - NOW ))
+            echo "TEST 1 scan $N/12: waiting ${WAIT}s for next confirmed 5m close"
+            sleep "$WAIT"
+
+            python blofin_test1_5m.py
+
+            git add blofin_live_state.json 2>/dev/null || true
+            if ! git diff --cached --quiet; then
+              git commit -m "TEST 1 5m state scan $N"
+              git pull --rebase origin main
+              git push origin HEAD:main
+            fi
+          done
+
+      - name: Notify TEST 1 failure
+        if: failure()
+        shell: bash
+        run: |
+          curl -fsS --retry 3 --retry-delay 1 --max-time 20 \
+            -H 'Title: BloFin TEST 1 ERROR' \
+            -H 'Priority: 5' \
+            -d "Reliable TEST 1 5m loop failed. Sprawdz GitHub Actions run ${GITHUB_RUN_ID}." \
+            'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n' || true
