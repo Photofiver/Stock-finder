@@ -281,19 +281,38 @@ def candle_color(bar):
     return "DOJI"
 
 
+def last_green_red_volume(bars, i):
+    """Return the latest GREEN and latest RED candle volumes at or before index i."""
+    last_green = None
+    last_red = None
+
+    for j in range(i, -1, -1):
+        color = candle_color(bars[j])
+        if color == "GREEN" and last_green is None:
+            last_green = bars[j]["v"]
+        elif color == "RED" and last_red is None:
+            last_red = bars[j]["v"]
+
+        if last_green is not None and last_red is not None:
+            break
+
+    return last_green, last_red
+
+
 def volume_flip_signal(bars, i):
-    if i < 1:
+    if i < 0:
         return None
 
-    prev = bars[i - 1]
-    cur = bars[i]
-    prev_color = candle_color(prev)
-    cur_color = candle_color(cur)
+    green_v, red_v = last_green_red_volume(bars, i)
+    if green_v is None or red_v is None:
+        return None
 
-    # Reversed volume-colour direction: RED→GREEN opens SHORT; GREEN→RED opens LONG.
-    if prev_color == "RED" and cur_color == "GREEN" and cur["v"] > prev["v"]:
+    # Keep the existing TEST 1 direction mapping; only the comparison method changes.
+    # Compare the latest GREEN Volume with the latest RED Volume, regardless of
+    # how many candles are between them.
+    if green_v > red_v:
         return "SHORT"
-    if prev_color == "GREEN" and cur_color == "RED" and cur["v"] > prev["v"]:
+    if red_v > green_v:
         return "LONG"
     return None
 
