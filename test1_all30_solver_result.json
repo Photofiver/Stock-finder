@@ -2,63 +2,93 @@
   "search_horizon_minutes": 60,
   "fee_pct_roundtrip": 0.12,
   "best_possible_count": 30,
-  "selected_tp_pct": 0.15,
+  "selected_tp_pct": 1.0,
   "selected_sl_pct": 1.0,
   "all30_pair_found": true,
   "tree_profitable_count": 30,
   "tree_total": 30,
   "tree": {
-    "feature": "vol_ratio_gr",
-    "threshold": 1.9358556975854446,
+    "feature": "ema_gap",
+    "threshold": -0.01595175251580222,
     "le": {
       "leaf": "SHORT",
-      "count": 20,
+      "count": 6,
       "trade_numbers": [
-        1,
-        2,
-        3,
-        4,
-        6,
-        7,
-        8,
-        11,
-        12,
         13,
         15,
         17,
-        19,
         20,
-        22,
-        24,
-        25,
-        26,
-        27,
-        28
+        23,
+        26
       ]
     },
     "gt": {
-      "feature": "atr_pct",
-      "threshold": 0.033346392136327285,
+      "feature": "adx",
+      "threshold": 39.39395023293147,
       "le": {
-        "leaf": "LONG",
-        "count": 7,
-        "trade_numbers": [
-          5,
-          14,
-          16,
-          18,
-          21,
-          29,
-          30
-        ]
+        "feature": "ema_gap",
+        "threshold": 0.010145004811231484,
+        "le": {
+          "feature": "ema_gap",
+          "threshold": 0.0034414889057717835,
+          "le": {
+            "feature": "vol_vs_avg",
+            "threshold": 1.6967889596896342,
+            "le": {
+              "leaf": "LONG",
+              "count": 6,
+              "trade_numbers": [
+                3,
+                6,
+                9,
+                11,
+                12,
+                29
+              ]
+            },
+            "gt": {
+              "leaf": "SHORT",
+              "count": 3,
+              "trade_numbers": [
+                4,
+                8,
+                10
+              ]
+            }
+          },
+          "gt": {
+            "leaf": "SHORT",
+            "count": 5,
+            "trade_numbers": [
+              1,
+              7,
+              19,
+              22,
+              28
+            ]
+          }
+        },
+        "gt": {
+          "leaf": "LONG",
+          "count": 8,
+          "trade_numbers": [
+            5,
+            14,
+            16,
+            18,
+            21,
+            24,
+            25,
+            27
+          ]
+        }
       },
       "gt": {
         "leaf": "SHORT",
-        "count": 3,
+        "count": 2,
         "trade_numbers": [
-          9,
-          10,
-          23
+          2,
+          30
         ]
       }
     }
@@ -76,7 +106,7 @@
         "long_win": false,
         "long_net": -0.0112,
         "short_win": true,
-        "short_net": 0.00030000000000000014
+        "short_net": 0.0088
       }
     },
     {
@@ -84,31 +114,29 @@
       "inst": "EPIC-USDT",
       "prediction": "SHORT",
       "profitable_directions": [
-        "LONG",
         "SHORT"
       ],
       "ok": true,
       "detail": {
-        "long_win": true,
-        "long_net": 0.00030000000000000014,
+        "long_win": false,
+        "long_net": -0.0112,
         "short_win": true,
-        "short_net": 0.00030000000000000014
+        "short_net": 0.0088
       }
     },
     {
       "n": 3,
       "inst": "M-USDT",
-      "prediction": "SHORT",
+      "prediction": "LONG",
       "profitable_directions": [
-        "LONG",
-        "SHORT"
+        "LONG"
       ],
       "ok": true,
       "detail": {
         "long_win": true,
-        "long_net": 0.00030000000000000014,
-        "short_win": true,
-        "short_net": 0.00030000000000000014
+        "long_net": 0.0088,
+        "short_win": false,
+        "short_net": -0.0112
       }
     },
     {
@@ -123,7 +151,7 @@
         "long_win": false,
         "long_net": -0.0112,
         "short_win": true,
-        "short_net": 0.00030000000000000014
+        "short_net": 0.0088
       }
     },
     {
@@ -131,31 +159,29 @@
       "inst": "AVAX-USDT",
       "prediction": "LONG",
       "profitable_directions": [
-        "LONG",
-        "SHORT"
+        "LONG"
       ],
       "ok": true,
       "detail": {
         "long_win": true,
-        "long_net": 0.00030000000000000014,
-        "short_win": true,
-        "short_net": 0.00030000000000000014
+        "long_net": 0.0088,
+        "short_win": false,
+        "short_net": -0.0112
       }
     },
     {
       "n": 6,
       "inst": "ONE-USDT",
-      "prediction": "SHORT",
+      "prediction": "LONG",
       "profitable_directions": [
-        "LONG",
-        "SHORT"
+        "LONG"
       ],
       "ok": true,
       "detail": {
         "long_win": true,
-        "long_net": 0.00030000000000000014,
-        "short_win": true,
-        "short_net": 0.00030000000000000014
+        "long_net": 0.0088,
+        "short_win": false,
+        "short_net": -0.0112
       }
     },
     {
@@ -163,15 +189,14 @@
       "inst": "M-USDT",
       "prediction": "SHORT",
       "profitable_directions": [
-        "LONG",
         "SHORT"
       ],
       "ok": true,
       "detail": {
-        "long_win": true,
-        "long_net": 0.00030000000000000014,
+        "long_win": false,
+        "long_net": -0.0112,
         "short_win": true,
-        "short_net": 0.00030000000000000014
+        "short_net": 0.0088
       }
     },
     {
@@ -179,31 +204,29 @@
       "inst": "ONE-USDT",
       "prediction": "SHORT",
       "profitable_directions": [
-        "LONG",
         "SHORT"
       ],
       "ok": true,
       "detail": {
-        "long_win": true,
-        "long_net": 0.00030000000000000014,
+        "long_win": false,
+        "long_net": -0.0112,
         "short_win": true,
-        "short_net": 0.00030000000000000014
+        "short_net": 0.0088
       }
     },
     {
       "n": 9,
       "inst": "ONE-USDT",
-      "prediction": "SHORT",
+      "prediction": "LONG",
       "profitable_directions": [
-        "LONG",
-        "SHORT"
+        "LONG"
       ],
       "ok": true,
       "detail": {
         "long_win": true,
-        "long_net": 0.00030000000000000014,
-        "short_win": true,
-        "short_net": 0.00030000000000000014
+        "long_net": 0.0088,
+        "short_win": false,
+        "short_net": -0.0112
       }
     },
     {
@@ -218,39 +241,37 @@
         "long_win": false,
         "long_net": -0.0112,
         "short_win": true,
-        "short_net": 0.00030000000000000014
+        "short_net": 0.0088
       }
     },
     {
       "n": 11,
       "inst": "M-USDT",
-      "prediction": "SHORT",
+      "prediction": "LONG",
       "profitable_directions": [
-        "LONG",
-        "SHORT"
+        "LONG"
       ],
       "ok": true,
       "detail": {
         "long_win": true,
-        "long_net": 0.00030000000000000014,
-        "short_win": true,
-        "short_net": 0.00030000000000000014
+        "long_net": 0.0088,
+        "short_win": false,
+        "short_net": -0.0112
       }
     },
     {
       "n": 12,
       "inst": "M-USDT",
-      "prediction": "SHORT",
+      "prediction": "LONG",
       "profitable_directions": [
-        "LONG",
-        "SHORT"
+        "LONG"
       ],
       "ok": true,
       "detail": {
         "long_win": true,
-        "long_net": 0.00030000000000000014,
-        "short_win": true,
-        "short_net": 0.00030000000000000014
+        "long_net": 0.0088,
+        "short_win": false,
+        "short_net": -0.0112
       }
     },
     {
@@ -265,7 +286,7 @@
         "long_win": false,
         "long_net": -0.0112,
         "short_win": true,
-        "short_net": 0.00030000000000000014
+        "short_net": 0.0088
       }
     },
     {
@@ -278,7 +299,7 @@
       "ok": true,
       "detail": {
         "long_win": true,
-        "long_net": 0.00030000000000000014,
+        "long_net": 0.0088,
         "short_win": false,
         "short_net": -0.0112
       }
@@ -288,15 +309,14 @@
       "inst": "ONE-USDT",
       "prediction": "SHORT",
       "profitable_directions": [
-        "LONG",
         "SHORT"
       ],
       "ok": true,
       "detail": {
-        "long_win": true,
-        "long_net": 0.00030000000000000014,
+        "long_win": false,
+        "long_net": -0.0112,
         "short_win": true,
-        "short_net": 0.00030000000000000014
+        "short_net": 0.0088
       }
     },
     {
@@ -304,15 +324,14 @@
       "inst": "SAGA-USDT",
       "prediction": "LONG",
       "profitable_directions": [
-        "LONG",
-        "SHORT"
+        "LONG"
       ],
       "ok": true,
       "detail": {
         "long_win": true,
-        "long_net": 0.00030000000000000014,
-        "short_win": true,
-        "short_net": 0.00030000000000000014
+        "long_net": 0.0088,
+        "short_win": false,
+        "short_net": -0.0112
       }
     },
     {
@@ -327,7 +346,7 @@
         "long_win": false,
         "long_net": -0.0112,
         "short_win": true,
-        "short_net": 0.00030000000000000014
+        "short_net": 0.0088
       }
     },
     {
@@ -335,15 +354,14 @@
       "inst": "SAGA-USDT",
       "prediction": "LONG",
       "profitable_directions": [
-        "LONG",
-        "SHORT"
+        "LONG"
       ],
       "ok": true,
       "detail": {
         "long_win": true,
-        "long_net": 0.00030000000000000014,
-        "short_win": true,
-        "short_net": 0.00030000000000000014
+        "long_net": 0.0088,
+        "short_win": false,
+        "short_net": -0.0112
       }
     },
     {
@@ -351,15 +369,14 @@
       "inst": "M-USDT",
       "prediction": "SHORT",
       "profitable_directions": [
-        "LONG",
         "SHORT"
       ],
       "ok": true,
       "detail": {
-        "long_win": true,
-        "long_net": 0.00030000000000000014,
+        "long_win": false,
+        "long_net": -0.0112,
         "short_win": true,
-        "short_net": 0.00030000000000000014
+        "short_net": 0.0088
       }
     },
     {
@@ -367,15 +384,14 @@
       "inst": "ONE-USDT",
       "prediction": "SHORT",
       "profitable_directions": [
-        "LONG",
         "SHORT"
       ],
       "ok": true,
       "detail": {
-        "long_win": true,
-        "long_net": 0.00030000000000000014,
+        "long_win": false,
+        "long_net": -0.0112,
         "short_win": true,
-        "short_net": 0.00030000000000000014
+        "short_net": 0.0088
       }
     },
     {
@@ -388,7 +404,7 @@
       "ok": true,
       "detail": {
         "long_win": true,
-        "long_net": 0.00030000000000000014,
+        "long_net": 0.0088,
         "short_win": false,
         "short_net": -0.0112
       }
@@ -398,15 +414,14 @@
       "inst": "M-USDT",
       "prediction": "SHORT",
       "profitable_directions": [
-        "LONG",
         "SHORT"
       ],
       "ok": true,
       "detail": {
-        "long_win": true,
-        "long_net": 0.00030000000000000014,
+        "long_win": false,
+        "long_net": -0.0112,
         "short_win": true,
-        "short_net": 0.00030000000000000014
+        "short_net": 0.0088
       }
     },
     {
@@ -421,39 +436,37 @@
         "long_win": false,
         "long_net": -0.0112,
         "short_win": true,
-        "short_net": 0.00030000000000000014
+        "short_net": 0.0088
       }
     },
     {
       "n": 24,
       "inst": "SAGA-USDT",
-      "prediction": "SHORT",
+      "prediction": "LONG",
       "profitable_directions": [
-        "LONG",
-        "SHORT"
+        "LONG"
       ],
       "ok": true,
       "detail": {
         "long_win": true,
-        "long_net": 0.00030000000000000014,
-        "short_win": true,
-        "short_net": 0.00030000000000000014
+        "long_net": 0.0088,
+        "short_win": false,
+        "short_net": -0.0112
       }
     },
     {
       "n": 25,
       "inst": "AVAX-USDT",
-      "prediction": "SHORT",
+      "prediction": "LONG",
       "profitable_directions": [
-        "LONG",
-        "SHORT"
+        "LONG"
       ],
       "ok": true,
       "detail": {
         "long_win": true,
-        "long_net": 0.00030000000000000014,
-        "short_win": true,
-        "short_net": 0.00030000000000000014
+        "long_net": 0.0088,
+        "short_win": false,
+        "short_net": -0.0112
       }
     },
     {
@@ -461,31 +474,29 @@
       "inst": "ONE-USDT",
       "prediction": "SHORT",
       "profitable_directions": [
-        "LONG",
         "SHORT"
       ],
       "ok": true,
       "detail": {
-        "long_win": true,
-        "long_net": 0.00030000000000000014,
+        "long_win": false,
+        "long_net": -0.0112,
         "short_win": true,
-        "short_net": 0.00030000000000000014
+        "short_net": 0.0088
       }
     },
     {
       "n": 27,
       "inst": "SAGA-USDT",
-      "prediction": "SHORT",
+      "prediction": "LONG",
       "profitable_directions": [
-        "LONG",
-        "SHORT"
+        "LONG"
       ],
       "ok": true,
       "detail": {
         "long_win": true,
-        "long_net": 0.00030000000000000014,
-        "short_win": true,
-        "short_net": 0.00030000000000000014
+        "long_net": 0.0088,
+        "short_win": false,
+        "short_net": -0.0112
       }
     },
     {
@@ -493,15 +504,14 @@
       "inst": "M-USDT",
       "prediction": "SHORT",
       "profitable_directions": [
-        "LONG",
         "SHORT"
       ],
       "ok": true,
       "detail": {
-        "long_win": true,
-        "long_net": 0.00030000000000000014,
+        "long_win": false,
+        "long_net": -0.0112,
         "short_win": true,
-        "short_net": 0.00030000000000000014
+        "short_net": 0.0088
       }
     },
     {
@@ -514,7 +524,7 @@
       "ok": true,
       "detail": {
         "long_win": true,
-        "long_net": 0.00030000000000000014,
+        "long_net": 0.0088,
         "short_win": false,
         "short_net": -0.0112
       }
@@ -522,17 +532,16 @@
     {
       "n": 30,
       "inst": "SAGA-USDT",
-      "prediction": "LONG",
+      "prediction": "SHORT",
       "profitable_directions": [
-        "LONG",
         "SHORT"
       ],
       "ok": true,
       "detail": {
-        "long_win": true,
-        "long_net": 0.00030000000000000014,
+        "long_win": false,
+        "long_net": -0.0112,
         "short_win": true,
-        "short_net": 0.00030000000000000014
+        "short_net": 0.0088
       }
     }
   ],
