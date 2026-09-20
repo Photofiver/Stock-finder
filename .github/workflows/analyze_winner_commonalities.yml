@@ -1,0 +1,36 @@
+name: Compare winner commonalities
+
+on:
+  push:
+    paths:
+      - 'winner_commonalities_trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Compare winners
+        run: python analyze_winner_commonalities.py
+      - name: Save result
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add winner_commonalities_result.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Save winner commonality analysis'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
