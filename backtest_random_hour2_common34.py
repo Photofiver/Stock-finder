@@ -4,12 +4,12 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import blofin_live_hourly as bot
 
-OUT="random_hour2_common34_result.json"
+OUT="random_hour3_common37_result.json"
 UK=ZoneInfo("Europe/London")
 
 # Druga niezależna godzina z ubiegłego tygodnia.
-START_UK=datetime(2026,9,16,10,0,tzinfo=UK)
-END_UK=datetime(2026,9,16,11,0,tzinfo=UK)
+START_UK=datetime(2026,9,15,18,0,tzinfo=UK)
+END_UK=datetime(2026,9,15,19,0,tzinfo=UK)
 START=int(START_UK.timestamp()*1000)
 END=int(END_UK.timestamp()*1000)
 
@@ -250,7 +250,7 @@ flat=sum(x["result"]=="FLAT" for x in history)
 result={
  "period_uk":f"{START_UK.isoformat()} to {END_UK.isoformat()}",
  "scans":len(SCANS),
- "strategy":"Frozen TEST1 direction tree + common34 filters",
+ "strategy":"Frozen TEST1 direction tree + common37 filters",
  "trades":len(history),"wins":wins,"losses":losses,"flat":flat,
  "win_rate_pct":100*wins/len(history) if history else 0,
  "starting_bankroll_usdt":START_BANKROLL,
