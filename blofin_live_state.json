@@ -88,8 +88,8 @@
       "used": false
     }
   },
-  "bankroll_pnl_baseline_usdt": -1.937635749679349,
-  "bankroll_start_usdt": 10.64,
+  "bankroll_pnl_baseline_usdt": -2.218405749679349,
+  "bankroll_start_usdt": 10,
   "fees_usdt": -0.59819946672,
   "gross_realized_pnl_usdt": -2.816605216399349,
   "last_processed_close_ms": {
@@ -486,5 +486,17 @@
     "unverified": 4,
     "wins": 7
   },
-  "version": 2
+  "version": 2,
+  "risk_stop_triggered": false,
+  "test1": {
+    "name": "TEST 1 - 5m Volume",
+    "status": "armed",
+    "starting_bankroll_usdt": 10,
+    "max_drawdown_pct": 10,
+    "stop_threshold_usdt": 9,
+    "signal_minutes": 5,
+    "signal_source": "BloFin native 5m confirmed candles",
+    "strategy": "existing VOLUME_COLOUR_FLIP logic",
+    "started_from_realized_pnl_baseline_usdt": -2.218405749679349
+  }
 }
