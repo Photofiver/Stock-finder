@@ -5,6 +5,9 @@ on:
     paths:
       - 'live10_trigger.txt'
   workflow_dispatch:
+  schedule:
+    # Run shortly before every hour; the gate below only allows UK 4H boundaries.
+    - cron: '55 * * * *'
 
 permissions:
   contents: write
@@ -16,47 +19,66 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Align to next UK 4H close
-        if: github.event_name == 'push'
+      - name: Gate and align to UK 4H close
+        id: gate
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
-          import time
+          import os, time
           from datetime import datetime, timedelta
           from zoneinfo import ZoneInfo
 
           tz = ZoneInfo("Europe/London")
+          event = os.environ.get("GITHUB_EVENT_NAME", "")
           now = datetime.now(tz)
-          next_hour = ((now.hour // 4) + 1) * 4
-          if next_hour >= 24:
-              target = (now + timedelta(days=1)).replace(hour=0, minute=0, second=2, microsecond=0)
+
+          # Manual dispatch is always allowed. Scheduled/push pre-triggers are
+          # accepted only around a UK 4H boundary (00/04/08/12/16/20).
+          if event == "workflow_dispatch":
+              run = True
+              target = now
           else:
-              target = now.replace(hour=next_hour, minute=0, second=2, microsecond=0)
+              this_boundary = now.replace(minute=0, second=2, microsecond=0)
+              if now.hour % 4 == 0 and now.minute <= 10:
+                  target = this_boundary
+                  run = True
+              else:
+                  target = (now + timedelta(hours=1)).replace(minute=0, second=2, microsecond=0)
+                  run = target.hour % 4 == 0 and 0 <= (target - now).total_seconds() <= 900
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              fh.write(f"run={'true' if run else 'false'}\n")
+
+          if not run:
+              print(f"Not a UK 4H boundary window: {now.isoformat()}; exiting cleanly.")
+              raise SystemExit(0)
 
           wait = (target - datetime.now(tz)).total_seconds()
-          if 0 < wait <= 600:
+          if wait > 0:
               print(f"Waiting {wait:.1f}s for UK 4H close at {target.isoformat()}")
               time.sleep(wait)
-          else:
-              print("Trigger not in pre-close window; running immediately")
+          print(f"UK 4H gate open at {datetime.now(tz).isoformat()}")
           PY
 
       - uses: actions/setup-python@v5
+        if: steps.gate.outputs.run == 'true'
         with:
           python-version: '3.12'
           cache: 'pip'
 
-      - run: pip install -r requirements.txt
+      - if: steps.gate.outputs.run == 'true'
+        run: pip install -r requirements.txt
 
       - name: Run one 4H LIVE scan
+        if: steps.gate.outputs.run == 'true'
         env:
           BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
           BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
@@ -68,7 +90,7 @@ jobs:
         run: python blofin_live_signal_watch.py
 
       - name: Save 4H LIVE state
-        if: success()
+        if: steps.gate.outputs.run == 'true' && success()
         shell: bash
         run: |
           set -euo pipefail
