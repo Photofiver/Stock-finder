@@ -285,10 +285,11 @@ def volume_flip_signal(bars, i):
     prev_color = candle_color(prev)
     cur_color = candle_color(cur)
 
+    # Reversed volume-colour direction: RED→GREEN opens SHORT; GREEN→RED opens LONG.
     if prev_color == "RED" and cur_color == "GREEN" and cur["v"] > prev["v"]:
-        return "LONG"
-    if prev_color == "GREEN" and cur_color == "RED" and cur["v"] > prev["v"]:
         return "SHORT"
+    if prev_color == "GREEN" and cur_color == "RED" and cur["v"] > prev["v"]:
+        return "LONG"
     return None
 
 
