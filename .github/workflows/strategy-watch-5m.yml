@@ -1,0 +1,40 @@
+name: Strategy watch 5m
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: strategy-watch-5m
+  cancel-in-progress: false
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Search for exact candidates
+        run: python3 strategy_watch_5m.py
+
+      - name: Commit only when a new strict candidate was found
+        shell: bash
+        run: |
+          if git diff --quiet -- strategy_watch_candidates.json; then
+            echo "No new candidate."
+            exit 0
+          fi
+          git config user.name "strategy-watch-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add strategy_watch_candidates.json
+          git commit -m "strategy watch: add candidate"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
