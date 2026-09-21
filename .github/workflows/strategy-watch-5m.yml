@@ -26,19 +26,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Search for exact candidates
-        run: python3 strategy_watch_5m.py
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-      - name: Commit only when a new strict candidate was found
+      - name: Search for exact candidates
+        run: python strategy_watch_5m.py
+
+      - name: Commit watcher state
         shell: bash
         run: |
-          if git diff --quiet -- strategy_watch_candidates.json; then
-            echo "No new candidate."
-            exit 0
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add strategy_watch_candidates.json strategy_watch_history.jsonl strategy_watch_state.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'strategy watch: save scan'
+            git pull --rebase origin main
+            git push origin HEAD:main
           fi
-          git config user.name "strategy-watch-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add strategy_watch_candidates.json
-          git commit -m "strategy watch: add candidate"
-          git pull --rebase origin "${GITHUB_REF_NAME}"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
