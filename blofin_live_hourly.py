@@ -351,44 +351,21 @@ def short_entry_metrics(bars, i):
     if any(value is None for value in needed):
         return None
 
-    ma5 = volume_ma(bars, i, VOL_MA_FAST)
-    ma10 = volume_ma(bars, i, VOL_MA_SLOW)
-    if ma5 is None or ma10 is None:
-        return None
-
-    start = max(0, i - RECENT_SPIKE_LOOKBACK)
-    prior_indices = list(range(start, i))
-    if not prior_indices:
-        return None
-    spike_index = max(prior_indices, key=lambda j: float(bars[j]["v"]))
-    spike_v = float(bars[spike_index]["v"])
-    spike_ma5 = volume_ma(bars, spike_index, VOL_MA_FAST)
-    spike_ma10 = volume_ma(bars, spike_index, VOL_MA_SLOW)
-    recent_spike = (
-        spike_ma5 is not None
-        and spike_ma10 is not None
-        and spike_v > spike_ma5
-        and spike_v > spike_ma10
-    )
-
     macd_cross_down = (
         float(prev["macd_dif"]) >= float(prev["macd_dea"])
         and float(cur["macd_dif"]) < float(cur["macd_dea"])
         and float(prev["macd_hist"]) >= 0
         and float(cur["macd_hist"]) < 0
     )
-    volume_declining = float(cur["v"]) < float(prev["v"])
-    volume_below_mas = float(cur["v"]) < ma5 and float(cur["v"]) < ma10
+    red_candle = float(cur["c"]) < float(cur["o"])
+    volume_higher_than_prev = float(cur["v"]) > float(prev["v"])
 
     return {
         "macd_cross_down": macd_cross_down,
-        "volume_declining": volume_declining,
-        "volume_below_mas": volume_below_mas,
-        "recent_spike": recent_spike,
+        "red_candle": red_candle,
+        "volume_higher_than_prev": volume_higher_than_prev,
         "volume": float(cur["v"]),
-        "volume_ma5": ma5,
-        "volume_ma10": ma10,
-        "spike_volume": spike_v,
+        "prev_volume": float(prev["v"]),
         "macd_dif": float(cur["macd_dif"]),
         "macd_dea": float(cur["macd_dea"]),
         "macd_hist": float(cur["macd_hist"]),
@@ -400,9 +377,8 @@ def short_entry_signal(bars, i):
     return bool(
         metrics
         and metrics["macd_cross_down"]
-        and metrics["volume_declining"]
-        and metrics["volume_below_mas"]
-        and metrics["recent_spike"]
+        and metrics["red_candle"]
+        and metrics["volume_higher_than_prev"]
     )
 
 
@@ -422,45 +398,21 @@ def long_entry_metrics(bars, i):
     if any(value is None for value in needed):
         return None
 
-    ma5 = volume_ma(bars, i, VOL_MA_FAST)
-    ma10 = volume_ma(bars, i, VOL_MA_SLOW)
-    if ma5 is None or ma10 is None:
-        return None
-
-    start = max(0, i - RECENT_SPIKE_LOOKBACK)
-    prior_indices = list(range(start, i))
-    if not prior_indices:
-        return None
-
-    trough_index = min(prior_indices, key=lambda j: float(bars[j]["v"]))
-    trough_v = float(bars[trough_index]["v"])
-    trough_ma5 = volume_ma(bars, trough_index, VOL_MA_FAST)
-    trough_ma10 = volume_ma(bars, trough_index, VOL_MA_SLOW)
-    recent_trough = (
-        trough_ma5 is not None
-        and trough_ma10 is not None
-        and trough_v < trough_ma5
-        and trough_v < trough_ma10
-    )
-
     macd_cross_up = (
         float(prev["macd_dif"]) <= float(prev["macd_dea"])
         and float(cur["macd_dif"]) > float(cur["macd_dea"])
         and float(prev["macd_hist"]) <= 0
         and float(cur["macd_hist"]) > 0
     )
-    volume_rising = float(cur["v"]) > float(prev["v"])
-    volume_above_mas = float(cur["v"]) > ma5 and float(cur["v"]) > ma10
+    green_candle = float(cur["c"]) > float(cur["o"])
+    volume_higher_than_prev = float(cur["v"]) > float(prev["v"])
 
     return {
         "macd_cross_up": macd_cross_up,
-        "volume_rising": volume_rising,
-        "volume_above_mas": volume_above_mas,
-        "recent_trough": recent_trough,
+        "green_candle": green_candle,
+        "volume_higher_than_prev": volume_higher_than_prev,
         "volume": float(cur["v"]),
-        "volume_ma5": ma5,
-        "volume_ma10": ma10,
-        "trough_volume": trough_v,
+        "prev_volume": float(prev["v"]),
         "macd_dif": float(cur["macd_dif"]),
         "macd_dea": float(cur["macd_dea"]),
         "macd_hist": float(cur["macd_hist"]),
@@ -472,9 +424,8 @@ def long_entry_signal(bars, i):
     return bool(
         metrics
         and metrics["macd_cross_up"]
-        and metrics["volume_rising"]
-        and metrics["volume_above_mas"]
-        and metrics["recent_trough"]
+        and metrics["green_candle"]
+        and metrics["volume_higher_than_prev"]
     )
 
 
