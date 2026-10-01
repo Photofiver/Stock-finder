@@ -64,20 +64,19 @@ def default_signal_state():
 
 
 def send_ntfy(title, message, priority=2, actions=None, click=None):
-    payload = {
-        "topic": bot.NTFY_TOPIC,
-        "message": message,
-        "title": title,
-        "priority": priority,
+    headers = {
+        "Title": title,
+        "Priority": str(priority),
     }
     if actions:
-        payload["actions"] = actions
+        headers["Actions"] = actions
     if click:
-        payload["click"] = click
+        headers["Click"] = click
     try:
         requests.post(
-            "https://ntfy.sh/",
-            json=payload,
+            f"https://ntfy.sh/{bot.NTFY_TOPIC}",
+            data=message.encode("utf-8"),
+            headers=headers,
             timeout=bot.HTTP_TIMEOUT,
         ).raise_for_status()
     except Exception as exc:
@@ -197,6 +196,12 @@ def main():
         diagnostic = build_live_diagnostic(state, top7)
         print(diagnostic)
         send_ntfy("BloFin LIVE check", diagnostic, priority=2)
+    else:
+        send_ntfy(
+            "BloFin LIVE check",
+            f"Skan {bot.SIGNAL_LABEL} wykonany. Kandydaci: {len(candidates)}, wykonane: {len(executed)}.",
+            priority=2,
+        )
 
     state["last_scan_close_ms"] = expected_close_ms
     state["last_run_ms"] = bot.now_ms()
