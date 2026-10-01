@@ -358,14 +358,24 @@ def short_entry_metrics(bars, i):
         and float(cur["macd_hist"]) < 0
     )
     red_candle = float(cur["c"]) < float(cur["o"])
-    volume_higher_than_prev = float(cur["v"]) > float(prev["v"])
+
+    last_green_volume = None
+    for j in range(i - 1, -1, -1):
+        if candle_color(bars[j]) == "GREEN":
+            last_green_volume = float(bars[j]["v"])
+            break
+
+    volume_higher_than_last_green = (
+        last_green_volume is not None
+        and float(cur["v"]) > last_green_volume
+    )
 
     return {
         "macd_cross_down": macd_cross_down,
         "red_candle": red_candle,
-        "volume_higher_than_prev": volume_higher_than_prev,
+        "volume_higher_than_last_green": volume_higher_than_last_green,
         "volume": float(cur["v"]),
-        "prev_volume": float(prev["v"]),
+        "last_green_volume": last_green_volume,
         "macd_dif": float(cur["macd_dif"]),
         "macd_dea": float(cur["macd_dea"]),
         "macd_hist": float(cur["macd_hist"]),
@@ -378,7 +388,7 @@ def short_entry_signal(bars, i):
         metrics
         and metrics["macd_cross_down"]
         and metrics["red_candle"]
-        and metrics["volume_higher_than_prev"]
+        and metrics["volume_higher_than_last_green"]
     )
 
 
@@ -405,14 +415,24 @@ def long_entry_metrics(bars, i):
         and float(cur["macd_hist"]) > 0
     )
     green_candle = float(cur["c"]) > float(cur["o"])
-    volume_higher_than_prev = float(cur["v"]) > float(prev["v"])
+
+    last_red_volume = None
+    for j in range(i - 1, -1, -1):
+        if candle_color(bars[j]) == "RED":
+            last_red_volume = float(bars[j]["v"])
+            break
+
+    volume_higher_than_last_red = (
+        last_red_volume is not None
+        and float(cur["v"]) > last_red_volume
+    )
 
     return {
         "macd_cross_up": macd_cross_up,
         "green_candle": green_candle,
-        "volume_higher_than_prev": volume_higher_than_prev,
+        "volume_higher_than_last_red": volume_higher_than_last_red,
         "volume": float(cur["v"]),
-        "prev_volume": float(prev["v"]),
+        "last_red_volume": last_red_volume,
         "macd_dif": float(cur["macd_dif"]),
         "macd_dea": float(cur["macd_dea"]),
         "macd_hist": float(cur["macd_hist"]),
@@ -425,7 +445,7 @@ def long_entry_signal(bars, i):
         metrics
         and metrics["macd_cross_up"]
         and metrics["green_candle"]
-        and metrics["volume_higher_than_prev"]
+        and metrics["volume_higher_than_last_red"]
     )
 
 
