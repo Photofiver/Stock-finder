@@ -118,27 +118,37 @@ def wait_for_confirmed_signal_close(top7, expected_close_ms):
 
 
 def build_live_diagnostic(state, top7):
-    lines = [f"Brak sygnalu LIVE. Sprawdzono aktualne TOP{bot.TOP_N} BloFin 24h:"]
+    lines = [
+        f"{bot.SIGNAL_LABEL} TOP{bot.TOP_N} — BRAK WEJSCIA",
+        "SHORT wymaga 4/4: MACD↓ + VOL↓ + VOL<MA5/MA10 + spike",
+        "",
+    ]
 
     for rank, inst in enumerate(top7, start=1):
         try:
             bars = bot.fetch_signal_bars(inst)
             if len(bars) < 40:
-                lines.append(f"{rank}. {inst} — za malo danych {bot.SIGNAL_LABEL}")
+                lines.append(f"{rank}. {inst} — brak danych")
                 continue
 
             i = len(bars) - 1
             m = bot.short_entry_metrics(bars, i)
             if not m:
-                lines.append(f"{rank}. {inst} — brak kompletnych danych MACD/Volume")
+                lines.append(f"{rank}. {inst} — brak danych MACD/Volume")
                 continue
-            detail = (
-                f"MACD↓ {'OK' if m['macd_cross_down'] else 'NIE'} | "
-                f"VOL↓ {'OK' if m['volume_declining'] else 'NIE'} | "
-                f"VOL<MA5/MA10 {'OK' if m['volume_below_mas'] else 'NIE'} | "
-                f"recent spike {'OK' if m['recent_spike'] else 'NIE'}"
-            )
-            lines.append(f"{rank}. {inst} — {detail}")
+
+            checks = [
+                ("MACD↓", m["macd_cross_down"]),
+                ("VOL↓", m["volume_declining"]),
+                ("VOL<MA5/10", m["volume_below_mas"]),
+                ("spike", m["recent_spike"]),
+            ]
+            ok_count = sum(1 for _, ok in checks if ok)
+            missing = ", ".join(name for name, ok in checks if not ok)
+            if ok_count == 4:
+                lines.append(f"{rank}. {inst} — 4/4 GOTOWY SHORT")
+            else:
+                lines.append(f"{rank}. {inst} — {ok_count}/4 | brak: {missing}")
         except Exception as exc:
             lines.append(f"{rank}. {inst} — blad danych: {type(exc).__name__}")
 
