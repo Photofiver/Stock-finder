@@ -1,16 +1,18 @@
-name: BloFin LIVE 4H scan
+name: BloFin LIVE 15m scan
 
 on:
+  schedule:
+    - cron: '2,17,32,47 * * * *'
   push:
     paths:
-      - 'live10_trigger.txt'
+      - 'live15_trigger.txt'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: blofin-live-4h-scan
+  group: blofin-live-15m-scan
   cancel-in-progress: false
 
 jobs:
@@ -23,71 +25,26 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Gate and align to UK 4H close
-        id: gate
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import os, time
-          from datetime import datetime, timedelta
-          from zoneinfo import ZoneInfo
-
-          tz = ZoneInfo("Europe/London")
-          event = os.environ.get("GITHUB_EVENT_NAME", "")
-          now = datetime.now(tz)
-
-          # Manual dispatch is always allowed. Scheduled/push pre-triggers are
-          # accepted only around a UK 4H boundary (00/04/08/12/16/20).
-          if event == "workflow_dispatch":
-              run = True
-              target = now
-          else:
-              this_boundary = now.replace(minute=0, second=2, microsecond=0)
-              if now.hour % 4 == 0 and now.minute <= 10:
-                  target = this_boundary
-                  run = True
-              else:
-                  target = (now + timedelta(hours=1)).replace(minute=0, second=2, microsecond=0)
-                  run = target.hour % 4 == 0 and 0 <= (target - now).total_seconds() <= 900
-
-          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
-              fh.write(f"run={'true' if run else 'false'}\n")
-
-          if not run:
-              print(f"Not a UK 4H boundary window: {now.isoformat()}; exiting cleanly.")
-              raise SystemExit(0)
-
-          wait = (target - datetime.now(tz)).total_seconds()
-          if wait > 0:
-              print(f"Waiting {wait:.1f}s for UK 4H close at {target.isoformat()}")
-              time.sleep(wait)
-          print(f"UK 4H gate open at {datetime.now(tz).isoformat()}")
-          PY
-
       - uses: actions/setup-python@v5
-        if: steps.gate.outputs.run == 'true'
         with:
           python-version: '3.12'
           cache: 'pip'
 
-      - if: steps.gate.outputs.run == 'true'
-        run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt
 
-      - name: Run one 4H LIVE scan
-        if: steps.gate.outputs.run == 'true'
+      - name: Run one 15m LIVE scan
         env:
           BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
           BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
           BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
           BLOFIN_LIVE_ENABLED: 'true'
           LIVE_MAX_BANKROLL_USDT: '10.64'
-          LIVE_SIGNAL_MINUTES: '240'
-          LIVE_SIGNAL_MAX_AGE_MS: '14400000'
+          LIVE_SIGNAL_MINUTES: '15'
+          LIVE_SIGNAL_MAX_AGE_MS: '840000'
         run: python blofin_live_signal_watch.py
 
-      - name: Save 4H LIVE state
-        if: steps.gate.outputs.run == 'true' && success()
+      - name: Save 15m LIVE state
+        if: success()
         shell: bash
         run: |
           set -euo pipefail
@@ -97,17 +54,17 @@ jobs:
           git add blofin_pending_signal.json 2>/dev/null || true
           git add blofin_live_state.json 2>/dev/null || true
           if ! git diff --cached --quiet; then
-            git commit -m 'Update BloFin 4H LIVE state'
+            git commit -m 'Update BloFin 15m LIVE state'
             git pull --rebase origin main
             git push origin HEAD:main
           fi
 
-      - name: Notify LIVE 4H failure
+      - name: Notify LIVE 15m failure
         if: failure()
         shell: bash
         run: |
           curl -fsS --retry 3 --retry-delay 1 --max-time 20 \
-            -H 'Title: BloFin LIVE 4H ERROR' \
+            -H 'Title: BloFin LIVE 15m ERROR' \
             -H 'Priority: 5' \
-            -d "LIVE 4H scan failed. Sprawdz GitHub Actions run ${GITHUB_RUN_ID}." \
+            -d "LIVE 15m scan failed. Sprawdz GitHub Actions run ${GITHUB_RUN_ID}." \
             'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n' || true
