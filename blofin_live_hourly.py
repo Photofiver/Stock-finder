@@ -402,6 +402,78 @@ def short_entry_signal(bars, i):
     )
 
 
+def long_entry_metrics(bars, i):
+    if i < 1:
+        return None
+    prev = bars[i - 1]
+    cur = bars[i]
+    needed = (
+        prev.get("macd_dif"),
+        prev.get("macd_dea"),
+        prev.get("macd_hist"),
+        cur.get("macd_dif"),
+        cur.get("macd_dea"),
+        cur.get("macd_hist"),
+    )
+    if any(value is None for value in needed):
+        return None
+
+    ma5 = volume_ma(bars, i, VOL_MA_FAST)
+    ma10 = volume_ma(bars, i, VOL_MA_SLOW)
+    if ma5 is None or ma10 is None:
+        return None
+
+    start = max(0, i - RECENT_SPIKE_LOOKBACK)
+    prior_indices = list(range(start, i))
+    if not prior_indices:
+        return None
+
+    trough_index = min(prior_indices, key=lambda j: float(bars[j]["v"]))
+    trough_v = float(bars[trough_index]["v"])
+    trough_ma5 = volume_ma(bars, trough_index, VOL_MA_FAST)
+    trough_ma10 = volume_ma(bars, trough_index, VOL_MA_SLOW)
+    recent_trough = (
+        trough_ma5 is not None
+        and trough_ma10 is not None
+        and trough_v < trough_ma5
+        and trough_v < trough_ma10
+    )
+
+    macd_cross_up = (
+        float(prev["macd_dif"]) <= float(prev["macd_dea"])
+        and float(cur["macd_dif"]) > float(cur["macd_dea"])
+        and float(prev["macd_hist"]) <= 0
+        and float(cur["macd_hist"]) > 0
+    )
+    volume_rising = float(cur["v"]) > float(prev["v"])
+    volume_above_mas = float(cur["v"]) > ma5 and float(cur["v"]) > ma10
+
+    return {
+        "macd_cross_up": macd_cross_up,
+        "volume_rising": volume_rising,
+        "volume_above_mas": volume_above_mas,
+        "recent_trough": recent_trough,
+        "volume": float(cur["v"]),
+        "volume_ma5": ma5,
+        "volume_ma10": ma10,
+        "trough_volume": trough_v,
+        "macd_dif": float(cur["macd_dif"]),
+        "macd_dea": float(cur["macd_dea"]),
+        "macd_hist": float(cur["macd_hist"]),
+    }
+
+
+def long_entry_signal(bars, i):
+    metrics = long_entry_metrics(bars, i)
+    return bool(
+        metrics
+        and metrics["macd_cross_up"]
+        and metrics["volume_rising"]
+        and metrics["volume_above_mas"]
+        and metrics["recent_trough"]
+    )
+
+
 def candle_color(bar):
     if bar["c"] > bar["o"]:
         return "GREEN"
@@ -627,13 +699,19 @@ def evaluate_signals(state, top10):
         if close_ms <= last_done:
             continue
 
+        side = None
         if short_entry_signal(bars, i):
+            side = "SHORT"
+        elif long_entry_signal(bars, i):
+            side = "LONG"
+
+        if side:
             signal_age_ms = scan_now_ms - close_ms
             if 0 <= signal_age_ms <= SIGNAL_MAX_AGE_MS:
-                candidates.append((ranks[inst], inst, "SHORT", close_ms))
+                candidates.append((ranks[inst], inst, side, close_ms))
             else:
                 print(
-                    f"STALE SIGNAL {inst} SHORT: age={signal_age_ms / 1000:.1f}s "
+                    f"STALE SIGNAL {inst} {side}: age={signal_age_ms / 1000:.1f}s "
                     f"(max {SIGNAL_MAX_AGE_MS / 1000:.0f}s)"
                 )
 
@@ -1179,7 +1257,7 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         "size": clean_decimal(size),
         "notional_usdt": clean_decimal(estimated_notional),
         "protection_status": "WAITING_FOR_TP1_SL1",
-        "strategy": f"MACD_VOL_SHORT_{SIGNAL_LABEL}",
+        "strategy": f"MACD_VOL_{side}_{SIGNAL_LABEL}",
         "risk_profile": risk_profile,
         "account_fraction": account_fraction,
         "allocation_label": allocation_label,
