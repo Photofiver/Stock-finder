@@ -166,7 +166,11 @@ def private_request(method, path, params=None, body=None):
     response.raise_for_status()
     payload = response.json()
     if str(payload.get("code")) != "0":
-        raise RuntimeError(f"BloFin API {path}: {payload.get('code')} {payload.get('msg')}")
+        detail = payload.get("data")
+        raise RuntimeError(
+            f"BloFin API {path}: {payload.get('code')} {payload.get('msg')} | "
+            f"details={json.dumps(detail, ensure_ascii=False)}"
+        )
     return payload.get("data")
 
 
