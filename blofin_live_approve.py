@@ -168,17 +168,18 @@ def main():
 
     i = len(bars) - 1
     current_close_ms = bot.bar_close_ms(bars[i])
-    entry_ok = bot.short_entry_signal(bars, i)
+    if side == "SHORT":
+        entry_ok = bot.short_entry_signal(bars, i)
+    elif side == "LONG":
+        entry_ok = bot.long_entry_signal(bars, i)
+    else:
+        entry_ok = False
 
-    if (
-        current_close_ms != signal_close_ms
-        or side != "SHORT"
-        or not entry_ok
-    ):
+    if current_close_ms != signal_close_ms or not entry_ok:
         reject(
             pending,
             "stale",
-            "Warunki SHORT MACD/Volume zmienily sie przed zatwierdzeniem. Nie wyslano zlecenia.",
+            f"Warunki {side or 'UNKNOWN'} MACD/Volume zmienily sie przed zatwierdzeniem. Nie wyslano zlecenia.",
         )
         return
 
