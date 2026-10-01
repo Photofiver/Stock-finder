@@ -1,24 +1,23 @@
-name: BloFin LIVE 15m scan
+name: BloFin LIVE 15m continuous
 
 on:
-  schedule:
-    - cron: '0,15,30,45 * * * *'
+  workflow_dispatch:
   push:
     paths:
       - 'live15_trigger.txt'
-  workflow_dispatch:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
-  group: blofin-live-15m-scan
+  group: blofin-live-15m-continuous
   cancel-in-progress: false
 
 jobs:
-  scan:
+  live:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 355
 
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +31,7 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Run one 15m LIVE scan
+      - name: Run LIVE continuously on 15m candle closes
         env:
           BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
           BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
@@ -41,30 +40,60 @@ jobs:
           LIVE_MAX_BANKROLL_USDT: '10.64'
           LIVE_SIGNAL_MINUTES: '15'
           LIVE_SIGNAL_MAX_AGE_MS: '840000'
-        run: python blofin_live_signal_watch.py
-
-      - name: Save 15m LIVE state
-        if: success()
         shell: bash
         run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add blofin_signal_state.json 2>/dev/null || true
-          git add blofin_pending_signal.json 2>/dev/null || true
-          git add blofin_live_state.json 2>/dev/null || true
-          if ! git diff --cached --quiet; then
-            git commit -m 'Update BloFin 15m LIVE state'
-            git pull --rebase origin main
-            git push origin HEAD:main
-          fi
+          set -u
 
-      - name: Notify LIVE 15m failure
-        if: failure()
+          persist_state() {
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add blofin_signal_state.json 2>/dev/null || true
+            git add blofin_pending_signal.json 2>/dev/null || true
+            git add blofin_live_state.json 2>/dev/null || true
+            if ! git diff --cached --quiet; then
+              git commit -m 'Update BloFin 15m LIVE state [skip ci]' || true
+              git pull --rebase origin main || true
+              git push origin HEAD:main || true
+            fi
+          }
+
+          run_scan() {
+            echo "LIVE 15m scan at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            if ! python blofin_live_signal_watch.py; then
+              curl -fsS --retry 2 --max-time 20 \
+                -H 'Title: BloFin LIVE 15m ERROR' \
+                -H 'Priority: 5' \
+                -d "LIVE 15m scan failed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')." \
+                'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n' || true
+            fi
+            persist_state
+          }
+
+          END=$(( $(date +%s) + 20700 ))
+
+          # On startup process the latest closed 15m candle immediately.
+          run_scan
+
+          while [ "$(date +%s)" -lt "$END" ]; do
+            NOW=$(date +%s)
+            NEXT=$(( ((NOW / 900) + 1) * 900 + 2 ))
+            WAIT=$(( NEXT - NOW ))
+            if [ "$WAIT" -gt 0 ]; then
+              echo "Waiting ${WAIT}s for next 15m candle close"
+              sleep "$WAIT"
+            fi
+            run_scan
+          done
+
+      - name: Restart continuous LIVE loop
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          curl -fsS --retry 3 --retry-delay 1 --max-time 20 \
-            -H 'Title: BloFin LIVE 15m ERROR' \
-            -H 'Priority: 5' \
-            -d "LIVE 15m scan failed. Sprawdz GitHub Actions run ${GITHUB_RUN_ID}." \
-            'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n' || true
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/blofin_live_10m_loop.yml/dispatches" \
+            -d '{"ref":"main"}'
