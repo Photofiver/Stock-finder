@@ -35,7 +35,9 @@ jobs:
           BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
           BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
           BLOFIN_LIVE_ENABLED: 'true'
-          LIVE_MAX_BANKROLL_USDT: '10.6136'
+          LIVE_SIGNAL_MINUTES: '15'
+          LIVE_SIGNAL_MAX_AGE_MS: '840000'
+          LIVE_MAX_BANKROLL_USDT: '10.64'
         run: python blofin_live_approve.py
 
       - name: Save LIVE approval state
