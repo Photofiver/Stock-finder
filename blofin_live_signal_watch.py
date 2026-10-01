@@ -85,16 +85,12 @@ def send_ntfy(title, message, priority=2, actions=None, click=None):
 
 
 def expected_signal_close_ms():
-    now_local = datetime.now(timezone.utc).astimezone(UK_TZ)
-    boundary_hour = (now_local.hour // 4) * 4
-    boundary_local = now_local.replace(
-        hour=boundary_hour, minute=0, second=0, microsecond=0
-    )
-    return int(boundary_local.astimezone(timezone.utc).timestamp() * 1000)
+    now = bot.now_ms()
+    return (now // bot.SIGNAL_MS) * bot.SIGNAL_MS
 
 
-def wait_for_confirmed_signal_close(top10, expected_close_ms):
-    pending = set(top10)
+def wait_for_confirmed_signal_close(top7, expected_close_ms):
+    pending = set(top7)
     for attempt in range(CANDLE_CONFIRM_ATTEMPTS):
         ready = []
         for inst in list(pending):
@@ -110,7 +106,7 @@ def wait_for_confirmed_signal_close(top10, expected_close_ms):
             pending.discard(inst)
         if not pending:
             print(
-                f"{bot.SIGNAL_LABEL} candle {expected_close_ms} confirmed for all TOP10 "
+                f"{bot.SIGNAL_LABEL} candle {expected_close_ms} confirmed for all TOP{bot.TOP_N} "
                 f"after {attempt + 1} check(s)."
             )
             return
@@ -122,29 +118,27 @@ def wait_for_confirmed_signal_close(top10, expected_close_ms):
     )
 
 
-def build_live_diagnostic(state, top10):
-    lines = ["Brak sygnalu LIVE. Sprawdzono aktualne TOP10 BloFin 24h:"]
+def build_live_diagnostic(state, top7):
+    lines = [f"Brak sygnalu LIVE. Sprawdzono aktualne TOP{bot.TOP_N} BloFin 24h:"]
 
-    for rank, inst in enumerate(top10, start=1):
+    for rank, inst in enumerate(top7, start=1):
         try:
             bars = bot.fetch_signal_bars(inst)
-            if len(bars) < 2:
+            if len(bars) < 40:
                 lines.append(f"{rank}. {inst} — za malo danych {bot.SIGNAL_LABEL}")
                 continue
 
             i = len(bars) - 1
-            signal = bot.volume_flip_signal(bars, i)
-            green_v, red_v = bot.last_green_red_volume(bars, i)
-            if green_v is None or red_v is None:
-                detail = "VOL brak ostatniego GREEN lub RED"
-            elif signal:
-                detail = (
-                    f"VOL GREEN {green_v:.4f} vs RED {red_v:.4f} | {signal}"
-                )
-            else:
-                detail = (
-                    f"VOL GREEN {green_v:.4f} = RED {red_v:.4f} | brak sygnalu"
-                )
+            m = bot.short_entry_metrics(bars, i)
+            if not m:
+                lines.append(f"{rank}. {inst} — brak kompletnych danych MACD/Volume")
+                continue
+            detail = (
+                f"MACD↓ {'OK' if m['macd_cross_down'] else 'NIE'} | "
+                f"VOL↓ {'OK' if m['volume_declining'] else 'NIE'} | "
+                f"VOL<MA5/MA10 {'OK' if m['volume_below_mas'] else 'NIE'} | "
+                f"recent spike {'OK' if m['recent_spike'] else 'NIE'}"
+            )
             lines.append(f"{rank}. {inst} — {detail}")
         except Exception as exc:
             lines.append(f"{rank}. {inst} — blad danych: {type(exc).__name__}")
@@ -153,25 +147,13 @@ def build_live_diagnostic(state, top10):
 
 
 def main():
-    # Stop any already-running legacy hourly loop after it refreshes the repo.
-    # The new workflow is a one-shot scheduled scan and is not affected.
-    if os.getenv("GITHUB_WORKFLOW") == "BloFin LIVE 10m loop":
-        raise RuntimeError("Legacy persistent 10m loop disabled; use one-shot scheduled scans.")
-
-    if (
-        bot.SIGNAL_MINUTES == 10
-        and os.getenv("GITHUB_WORKFLOW") == "BloFin LIVE signal watch"
-    ):
-        print("10m LIVE is handled by the dedicated loop workflow; duplicate run skipped.")
-        return
-
     bot.require_live_enabled()
     bot.require_account_modes()
 
     state = bot.load_state()
-    top10, tickers, instruments = bot.get_universe()
-    if not top10:
-        raise RuntimeError("BloFin TOP10 is empty")
+    top7, tickers, instruments = bot.get_universe()
+    if not top7:
+        raise RuntimeError("BloFin TOP7 is empty")
 
     expected_close_ms = expected_signal_close_ms()
     last_scan_close_ms = int(state.get("last_scan_close_ms") or 0)
@@ -181,22 +163,22 @@ def main():
                 {
                     "duplicate_scan_skipped": True,
                     "signal_close_ms": expected_close_ms,
-                    "top10": top10,
+                    "top7": top7,
                 },
                 ensure_ascii=False,
             )
         )
         return
 
-    # Start just after the signal boundary and confirm the closed signal candle for TOP10
+    # Start just after the signal boundary and confirm the closed signal candle for TOP7
     # plus the tracked instrument, because exits are based on its Volume flip.
     tracked_insts = list(bot.get_tracked_positions(state))
-    confirm_insts = list(dict.fromkeys(top10 + tracked_insts))
+    confirm_insts = list(dict.fromkeys(top7 + tracked_insts))
     wait_for_confirmed_signal_close(confirm_insts, expected_close_ms)
 
     bot.sync_all_tracked_positions(state)
-    bot.evaluate_all_tracked_exit_signals(state, expected_close_ms)
-    candidates = bot.evaluate_signals(state, top10)
+    bot.ensure_tp1_for_all_tracked_positions(state)
+    candidates = bot.evaluate_signals(state, top7)
 
     for rank, inst, side, signal_close_ms in candidates:
         if int(signal_close_ms) != expected_close_ms:
@@ -212,13 +194,13 @@ def main():
     executed = bot.execute_candidate_batch(state, candidates, tickers, instruments)
 
     if not candidates:
-        diagnostic = build_live_diagnostic(state, top10)
+        diagnostic = build_live_diagnostic(state, top7)
         print(diagnostic)
         send_ntfy("BloFin LIVE check", diagnostic, priority=2)
 
     state["last_scan_close_ms"] = expected_close_ms
     state["last_run_ms"] = bot.now_ms()
-    state["last_top10"] = top10
+    state["last_top7"] = top7
     bot.save_state(state)
 
     print(
@@ -226,7 +208,7 @@ def main():
             {
                 "executed": executed,
                 "signal_close_ms": expected_close_ms,
-                "top10": top10,
+                "top7": top7,
                 "positions": bot.get_tracked_positions(state),
             },
             ensure_ascii=False,
