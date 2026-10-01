@@ -120,7 +120,8 @@ def wait_for_confirmed_signal_close(top7, expected_close_ms):
 def build_live_diagnostic(state, top7):
     lines = [
         f"{bot.SIGNAL_LABEL} TOP{bot.TOP_N} — BRAK WEJSCIA",
-        "SHORT wymaga 4/4: MACD↓ + VOL↓ + VOL<MA5/MA10 + spike",
+        "SHORT 4/4: MACD↓ + VOL↓ + VOL<MA5/10 + spike",
+        "LONG 4/4: MACD↑ + VOL↑ + VOL>MA5/10 + trough",
         "",
     ]
 
@@ -132,23 +133,37 @@ def build_live_diagnostic(state, top7):
                 continue
 
             i = len(bars) - 1
-            m = bot.short_entry_metrics(bars, i)
-            if not m:
+            s = bot.short_entry_metrics(bars, i)
+            l = bot.long_entry_metrics(bars, i)
+            if not s or not l:
                 lines.append(f"{rank}. {inst} — brak danych MACD/Volume")
                 continue
 
-            checks = [
-                ("MACD↓", m["macd_cross_down"]),
-                ("VOL↓", m["volume_declining"]),
-                ("VOL<MA5/10", m["volume_below_mas"]),
-                ("spike", m["recent_spike"]),
+            s_checks = [
+                ("MACD↓", s["macd_cross_down"]),
+                ("VOL↓", s["volume_declining"]),
+                ("VOL<MA", s["volume_below_mas"]),
+                ("spike", s["recent_spike"]),
             ]
-            ok_count = sum(1 for _, ok in checks if ok)
-            missing = ", ".join(name for name, ok in checks if not ok)
-            if ok_count == 4:
-                lines.append(f"{rank}. {inst} — 4/4 GOTOWY SHORT")
-            else:
-                lines.append(f"{rank}. {inst} — {ok_count}/4 | brak: {missing}")
+            l_checks = [
+                ("MACD↑", l["macd_cross_up"]),
+                ("VOL↑", l["volume_rising"]),
+                ("VOL>MA", l["volume_above_mas"]),
+                ("trough", l["recent_trough"]),
+            ]
+
+            s_ok = sum(1 for _, ok in s_checks if ok)
+            l_ok = sum(1 for _, ok in l_checks if ok)
+            s_missing = ", ".join(name for name, ok in s_checks if not ok)
+            l_missing = ", ".join(name for name, ok in l_checks if not ok)
+
+            lines.append(f"{rank}. {inst}")
+            lines.append(
+                f"   S {s_ok}/4" + ("" if s_ok == 4 else f" | brak: {s_missing}")
+            )
+            lines.append(
+                f"   L {l_ok}/4" + ("" if l_ok == 4 else f" | brak: {l_missing}")
+            )
         except Exception as exc:
             lines.append(f"{rank}. {inst} — blad danych: {type(exc).__name__}")
 
