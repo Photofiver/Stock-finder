@@ -104,15 +104,6 @@ def reject(pending, status, message):
     print(message)
 
 
-def current_arm_direction(bars, latest_index):
-    direction = None
-    for i in range(1, latest_index + 1):
-        cross = bot.rsi_cross(bars, i)
-        if cross:
-            direction = cross
-    return direction
-
-
 def main():
     bot.require_live_enabled()
 
@@ -161,41 +152,37 @@ def main():
         reject(pending, "blocked", f"Na koncie jest juz otwarta pozycja ({names}). Nowe zlecenie nie zostalo wyslane.")
         return
 
-    top10, tickers, instruments = bot.get_universe()
+    top7, tickers, instruments = bot.get_universe()
     inst = str(pending.get("inst") or "")
     side = str(pending.get("side") or "")
     signal_close_ms = int(pending.get("signal_close_ms") or 0)
 
-    if inst not in top10 or inst not in tickers or inst not in instruments:
-        reject(pending, "stale", "Sygnal nie jest juz w aktualnym TOP10. Nie wyslano zlecenia.")
+    if inst not in top7 or inst not in tickers or inst not in instruments:
+        reject(pending, "stale", "Sygnal nie jest juz w aktualnym TOP7. Nie wyslano zlecenia.")
         return
 
-    bars = bot.fetch_1h(inst)
-    if len(bars) < 35:
+    bars = bot.fetch_signal_bars(inst)
+    if len(bars) < 40:
         reject(pending, "stale", "Za malo danych do ponownego sprawdzenia sygnalu. Nie wyslano zlecenia.")
         return
 
     i = len(bars) - 1
-    current_close_ms = int(bars[i]["ts"] + bot.D1H_MS)
-    arm_direction = current_arm_direction(bars, i)
-    volume_matches = (
-        arm_direction in ("LONG", "SHORT")
-        and bot.volume_ok(bars, i, arm_direction)
-    )
+    current_close_ms = bot.bar_close_ms(bars[i])
+    entry_ok = bot.short_entry_signal(bars, i)
 
     if (
         current_close_ms != signal_close_ms
-        or arm_direction != side
-        or not volume_matches
+        or side != "SHORT"
+        or not entry_ok
     ):
-        reject(pending, "stale", "Warunki RSI/Volume zmienily sie przed zatwierdzeniem. Nie wyslano zlecenia.")
+        reject(
+            pending,
+            "stale",
+            "Warunki SHORT MACD/Volume zmienily sie przed zatwierdzeniem. Nie wyslano zlecenia.",
+        )
         return
 
-    rank = top10.index(inst) + 1
-    state.setdefault("arms", {})[inst] = {
-        "direction": side,
-        "last_cross_close_ms": signal_close_ms,
-    }
+    rank = top7.index(inst) + 1
     candidate = (rank, inst, side, signal_close_ms)
     bot.place_live_trade(state, candidate, tickers, instruments)
 
@@ -206,7 +193,7 @@ def main():
         save_pending(stored)
 
     state["last_run_ms"] = bot.now_ms()
-    state["last_top10"] = top10
+    state["last_top7"] = top7
     bot.save_state(state)
 
     print(json.dumps({
