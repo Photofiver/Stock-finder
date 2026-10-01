@@ -22,13 +22,19 @@ LIVE_ENABLED = os.getenv("BLOFIN_LIVE_ENABLED", "").strip().lower() == "true"
 MAX_NOTIONAL_USDT = Decimal(os.getenv("LIVE_MAX_BANKROLL_USDT", "10.64"))
 LEVERAGE = "1"
 MARGIN_MODE = "isolated"
-TOP_N = 10
+TOP_N = 7
 MAX_OPEN_POSITIONS = 4
-POSITION_FRACTION = Decimal("0.25")  # legacy/default single-entry fraction
-HARD_SL_PCT = Decimal("0.005")
+POSITION_FRACTION = Decimal("0.25")  # total LIVE bankroll is still hard-capped below
+HARD_SL_PCT = Decimal("0.01")
 TAKE_PROFIT_PCT = Decimal("0.01")
 RSI_PERIOD = 14
-SIGNAL_MINUTES = int(os.getenv("LIVE_SIGNAL_MINUTES", "240"))
+MACD_FAST = 12
+MACD_SLOW = 26
+MACD_SIGNAL = 9
+VOL_MA_FAST = 5
+VOL_MA_SLOW = 10
+RECENT_SPIKE_LOOKBACK = 5
+SIGNAL_MINUTES = int(os.getenv("LIVE_SIGNAL_MINUTES", "15"))
 MAX_DRAWDOWN_PCT = Decimal(os.getenv("LIVE_MAX_DRAWDOWN_PCT", "0.10"))
 if SIGNAL_MINUTES == 5:
     SIGNAL_BAR = "5m"
@@ -266,11 +272,134 @@ def rsi_wilder(bars, period=14):
     return out
 
 
+def ema_series(values, period):
+    out = [None] * len(values)
+    if len(values) < period:
+        return out
+    seed = sum(values[:period]) / period
+    out[period - 1] = seed
+    alpha = 2.0 / (period + 1.0)
+    prev = seed
+    for i in range(period, len(values)):
+        prev = values[i] * alpha + prev * (1.0 - alpha)
+        out[i] = prev
+    return out
+
+
+def macd_series(bars):
+    closes = [float(bar["c"]) for bar in bars]
+    fast = ema_series(closes, MACD_FAST)
+    slow = ema_series(closes, MACD_SLOW)
+    dif = [None] * len(bars)
+    for i in range(len(bars)):
+        if fast[i] is not None and slow[i] is not None:
+            dif[i] = fast[i] - slow[i]
+
+    dea = [None] * len(bars)
+    valid = [(i, value) for i, value in enumerate(dif) if value is not None]
+    if len(valid) >= MACD_SIGNAL:
+        seed = sum(value for _, value in valid[:MACD_SIGNAL]) / MACD_SIGNAL
+        seed_index = valid[MACD_SIGNAL - 1][0]
+        dea[seed_index] = seed
+        prev = seed
+        alpha = 2.0 / (MACD_SIGNAL + 1.0)
+        for idx, value in valid[MACD_SIGNAL:]:
+            prev = value * alpha + prev * (1.0 - alpha)
+            dea[idx] = prev
+
+    hist = [
+        (dif[i] - dea[i]) if dif[i] is not None and dea[i] is not None else None
+        for i in range(len(bars))
+    ]
+    return dif, dea, hist
+
+
 def decorate(bars):
     rsi = rsi_wilder(bars, RSI_PERIOD)
+    dif, dea, hist = macd_series(bars)
     for i, bar in enumerate(bars):
         bar["rsi"] = rsi[i]
+        bar["macd_dif"] = dif[i]
+        bar["macd_dea"] = dea[i]
+        bar["macd_hist"] = hist[i]
     return bars
+
+
+def volume_ma(bars, i, period):
+    if i + 1 < period:
+        return None
+    return sum(float(bars[j]["v"]) for j in range(i - period + 1, i + 1)) / period
+
+
+def short_entry_metrics(bars, i):
+    if i < 1:
+        return None
+    prev = bars[i - 1]
+    cur = bars[i]
+    needed = (
+        prev.get("macd_dif"),
+        prev.get("macd_dea"),
+        prev.get("macd_hist"),
+        cur.get("macd_dif"),
+        cur.get("macd_dea"),
+        cur.get("macd_hist"),
+    )
+    if any(value is None for value in needed):
+        return None
+
+    ma5 = volume_ma(bars, i, VOL_MA_FAST)
+    ma10 = volume_ma(bars, i, VOL_MA_SLOW)
+    if ma5 is None or ma10 is None:
+        return None
+
+    start = max(0, i - RECENT_SPIKE_LOOKBACK)
+    prior_indices = list(range(start, i))
+    if not prior_indices:
+        return None
+    spike_index = max(prior_indices, key=lambda j: float(bars[j]["v"]))
+    spike_v = float(bars[spike_index]["v"])
+    spike_ma5 = volume_ma(bars, spike_index, VOL_MA_FAST)
+    spike_ma10 = volume_ma(bars, spike_index, VOL_MA_SLOW)
+    recent_spike = (
+        spike_ma5 is not None
+        and spike_ma10 is not None
+        and spike_v > spike_ma5
+        and spike_v > spike_ma10
+    )
+
+    macd_cross_down = (
+        float(prev["macd_dif"]) >= float(prev["macd_dea"])
+        and float(cur["macd_dif"]) < float(cur["macd_dea"])
+        and float(prev["macd_hist"]) >= 0
+        and float(cur["macd_hist"]) < 0
+    )
+    volume_declining = float(cur["v"]) < float(prev["v"])
+    volume_below_mas = float(cur["v"]) < ma5 and float(cur["v"]) < ma10
+
+    return {
+        "macd_cross_down": macd_cross_down,
+        "volume_declining": volume_declining,
+        "volume_below_mas": volume_below_mas,
+        "recent_spike": recent_spike,
+        "volume": float(cur["v"]),
+        "volume_ma5": ma5,
+        "volume_ma10": ma10,
+        "spike_volume": spike_v,
+        "macd_dif": float(cur["macd_dif"]),
+        "macd_dea": float(cur["macd_dea"]),
+        "macd_hist": float(cur["macd_hist"]),
+    }
+
+
+def short_entry_signal(bars, i):
+    metrics = short_entry_metrics(bars, i)
+    return bool(
+        metrics
+        and metrics["macd_cross_down"]
+        and metrics["volume_declining"]
+        and metrics["volume_below_mas"]
+        and metrics["recent_spike"]
+    )
 
 
 def candle_color(bar):
@@ -482,7 +611,7 @@ def evaluate_signals(state, top10):
     for inst in top10:
         try:
             bars = fetch_signal_bars(inst)
-            if len(bars) < 2:
+            if len(bars) < 40:
                 continue
             data[inst] = bars
             latest_idx[inst] = len(bars) - 1
@@ -498,14 +627,13 @@ def evaluate_signals(state, top10):
         if close_ms <= last_done:
             continue
 
-        side = volume_flip_signal(bars, i)
-        if side in ("LONG", "SHORT"):
+        if short_entry_signal(bars, i):
             signal_age_ms = scan_now_ms - close_ms
             if 0 <= signal_age_ms <= SIGNAL_MAX_AGE_MS:
-                candidates.append((ranks[inst], inst, side, close_ms))
+                candidates.append((ranks[inst], inst, "SHORT", close_ms))
             else:
                 print(
-                    f"STALE SIGNAL {inst} {side}: age={signal_age_ms / 1000:.1f}s "
+                    f"STALE SIGNAL {inst} SHORT: age={signal_age_ms / 1000:.1f}s "
                     f"(max {SIGNAL_MAX_AGE_MS / 1000:.0f}s)"
                 )
 
@@ -899,8 +1027,8 @@ def cancel_tracked_tpsl(state):
     # Managed LIVE positions intentionally keep their broker-side TP/SL protection.
     if (
         pos.get("tp_policy") == "TP1"
-        or pos.get("sl_policy") == "SL0_5"
-        or str(pos.get("risk_profile") or "").endswith(("SL10", "SL1", "SL05"))
+        or pos.get("sl_policy") == "SL1"
+        or str(pos.get("risk_profile") or "").endswith(("SL10", "SL1", "SL1"))
     ):
         return False
 
@@ -951,29 +1079,8 @@ def sync_tracked_position(state):
 
 
 def evaluate_tracked_exit_signal(state, expected_close_ms=None):
-    pos = state.get("position")
-    if not pos:
-        return False
-
-    inst = pos["inst"]
-    bars = fetch_signal_bars(inst)
-    if len(bars) < 2:
-        return False
-
-    i = len(bars) - 1
-    close_ms = bar_close_ms(bars[i])
-    if expected_close_ms is not None and close_ms < int(expected_close_ms):
-        return False
-
-    last_checked = int(pos.get("last_exit_signal_close_ms") or 0)
-    if close_ms <= last_checked:
-        return False
-    pos["last_exit_signal_close_ms"] = close_ms
-
-    signal = volume_flip_signal(bars, i)
-    if signal and signal != pos.get("side"):
-        close_tracked_position(state, "OPPOSITE VOLUME FLIP")
-        return True
+    # Strategy exits are broker-side TP +1% / SL -1%.
+    # Do not close early on indicator changes; only safety/account sync may close earlier.
     return False
 
 
@@ -1025,12 +1132,12 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
             available * POSITION_FRACTION,
         )
         allocation_label = allocation_label or "25% of available, within LIVE bankroll cap"
-        risk_profile = "QUARTER_ACCOUNT_SL05"
+        risk_profile = "QUARTER_ACCOUNT_SL1"
         account_fraction = clean_decimal(POSITION_FRACTION)
     else:
         cap = min(d(cap_usdt), available, remaining_bankroll)
         allocation_label = allocation_label or "dynamic equal split within LIVE bankroll cap"
-        risk_profile = "DYNAMIC_SPLIT_SL05"
+        risk_profile = "DYNAMIC_SPLIT_SL1"
         account_fraction = ""
     sized = size_for_notional(market_reference, instruments[inst], cap)
     if sized is None:
@@ -1071,8 +1178,8 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         "sl": "",
         "size": clean_decimal(size),
         "notional_usdt": clean_decimal(estimated_notional),
-        "protection_status": "WAITING_FOR_TP1_SL05",
-        "strategy": f"VOLUME_COLOUR_FLIP_{SIGNAL_LABEL}",
+        "protection_status": "WAITING_FOR_TP1_SL1",
+        "strategy": f"MACD_VOL_SHORT_{SIGNAL_LABEL}",
         "risk_profile": risk_profile,
         "account_fraction": account_fraction,
         "allocation_label": allocation_label,
@@ -1128,8 +1235,8 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         "tp": clean_decimal(hard_tp),
         "sl": clean_decimal(hard_sl),
         "tp_policy": "TP1",
-        "sl_policy": "SL0_5",
-        "protection_status": "PLACING_TP1_SL05",
+        "sl_policy": "SL1",
+        "protection_status": "PLACING_TP1_SL1",
     })
 
     try:
@@ -1137,15 +1244,15 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
             inst, side, hard_tp, hard_sl
         )
     except Exception as exc:
-        state["position"]["protection_status"] = "TP1_SL05_FAILED"
+        state["position"]["protection_status"] = "TP1_SL1_FAILED"
         state["position"]["protection_error"] = str(exc)
         notify(
-            f"CRITICAL {side} {inst}: TP +1% / SL -0.5% could not be placed. "
+            f"CRITICAL {side} {inst}: TP +1% / SL -1% could not be placed. "
             f"Closing position for safety. Error: {exc}",
             "BloFin LIVE SAFETY",
         )
         try:
-            close_tracked_position(state, "SAFETY: TP1/SL05 placement failed")
+            close_tracked_position(state, "SAFETY: TP1/SL1 placement failed")
         except Exception as close_exc:
             state["position"]["protection_error"] = (
                 f"{exc}; safety close failed: {close_exc}"
@@ -1158,13 +1265,13 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
 
     state["position"]["tpsl_id"] = tpsl_id
     state["position"]["tpsl_client_order_id"] = tpsl_client_id
-    state["position"]["protection_status"] = "TP1_SL05_ACTIVE"
+    state["position"]["protection_status"] = "TP1_SL1_ACTIVE"
 
     notify(
         f"OPEN {side} {inst} | 1x isolated | actual entry {fill_price} | "
         f"notional≈{actual_notional:.4f} USDT ({allocation_label}) | "
-        f"TP {hard_tp} (+1%) | hard SL {hard_sl} (-0.5%) | "
-        f"normal exit on opposite larger Volume colour flip | "
+        f"TP {hard_tp} (+1%) | hard SL {hard_sl} (-1%) | "
+        f"exit only at TP +1% or SL -1% (except safety close) | "
         f"signal age {signal_age_ms / 1000:.0f}s",
         "BloFin LIVE OPEN",
     )
@@ -1230,7 +1337,7 @@ def ensure_tp1_for_all_tracked_positions(state):
             continue
         if (
             pos.get("tp_policy") == "TP1"
-            and pos.get("sl_policy") == "SL0_5"
+            and pos.get("sl_policy") == "SL1"
             and str(pos.get("tp") or "").strip()
             and str(pos.get("sl") or "").strip()
         ):
@@ -1295,12 +1402,12 @@ def ensure_tp1_for_all_tracked_positions(state):
         )
         if sl_already_hit:
             notify(
-                f"{side} {inst} | price already reached/passed SL -0.5% "
+                f"{side} {inst} | price already reached/passed SL -1% "
                 f"(target {sl}, last {last}); closing now.",
-                "BloFin LIVE SL05",
+                "BloFin LIVE SL1",
             )
             _run_for_tracked_position(
-                state, inst, close_tracked_position, "SL -0.5% reached"
+                state, inst, close_tracked_position, "SL -1% reached"
             )
             updated.append(inst)
             continue
@@ -1323,7 +1430,7 @@ def ensure_tp1_for_all_tracked_positions(state):
                     pos["tpsl_id"] = restore_id
                     pos["tpsl_client_order_id"] = restore_client
                     pos["sl"] = clean_decimal(sl)
-                    pos["protection_status"] = "SL05_ACTIVE"
+                    pos["protection_status"] = "SL1_ACTIVE"
                 except Exception as restore_exc:
                     pos["protection_status"] = "PROTECTION_MIGRATION_FAILED"
                     pos["protection_error"] = f"{exc}; restore SL failed: {restore_exc}"
@@ -1348,17 +1455,17 @@ def ensure_tp1_for_all_tracked_positions(state):
         pos["tp"] = clean_decimal(tp)
         pos["sl"] = clean_decimal(sl)
         pos["tp_policy"] = "TP1"
-        pos["sl_policy"] = "SL0_5"
+        pos["sl_policy"] = "SL1"
         old_profile = str(pos.get("risk_profile") or "")
         if old_profile:
             pos["risk_profile"] = (
-                old_profile.replace("SL10", "SL05").replace("SL1", "SL05")
+                old_profile.replace("SL10", "SL1").replace("SL1", "SL1")
             )
-        pos["protection_status"] = "TP1_SL05_ACTIVE"
+        pos["protection_status"] = "TP1_SL1_ACTIVE"
         pos.pop("protection_error", None)
         updated.append(inst)
         notify(
-            f"{side} {inst} | TP +1% active at {tp} | SL -0.5% active at {sl}",
+            f"{side} {inst} | TP +1% active at {tp} | SL -1% active at {sl}",
             "BloFin LIVE TP1",
         )
 
