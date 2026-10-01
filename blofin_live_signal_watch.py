@@ -120,8 +120,8 @@ def wait_for_confirmed_signal_close(top7, expected_close_ms):
 def build_live_diagnostic(state, top7):
     lines = [
         f"{bot.SIGNAL_LABEL} TOP{bot.TOP_N} — BRAK WEJSCIA",
-        "SHORT 3/3: MACD↓ + czerwona swieca + VOL>poprzedni",
-        "LONG 3/3: MACD↑ + zielona swieca + VOL>poprzedni",
+        "SHORT 3/3: MACD↓ + czerwona swieca + czerwony VOL > ostatni zielony",
+        "LONG 3/3: MACD↑ + zielona swieca + zielony VOL > ostatni czerwony",
         "",
     ]
 
@@ -142,12 +142,12 @@ def build_live_diagnostic(state, top7):
             s_checks = [
                 ("MACD↓", s["macd_cross_down"]),
                 ("RED", s["red_candle"]),
-                ("VOL>prev", s["volume_higher_than_prev"]),
+                ("RED VOL>last GREEN", s["volume_higher_than_last_green"]),
             ]
             l_checks = [
                 ("MACD↑", l["macd_cross_up"]),
                 ("GREEN", l["green_candle"]),
-                ("VOL>prev", l["volume_higher_than_prev"]),
+                ("GREEN VOL>last RED", l["volume_higher_than_last_red"]),
             ]
 
             s_ok = sum(1 for _, ok in s_checks if ok)
