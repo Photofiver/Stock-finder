@@ -24,6 +24,7 @@ LEVERAGE = "1"
 MARGIN_MODE = "isolated"
 TOP_N = 7
 MAX_OPEN_POSITIONS = 4
+TRADE_HISTORY_LIMIT = 5000
 POSITION_FRACTION = Decimal("0.25")  # total LIVE bankroll is still hard-capped below
 HARD_SL_PCT = Decimal("0.01")
 TAKE_PROFIT_PCT = Decimal("0.01")
@@ -661,6 +662,146 @@ def fetch_1h(inst):
     return fetch_signal_bars(inst)
 
 
+def build_signal_snapshot(inst, side, signal_close_ms, rank):
+    """Capture the market/indicator state that existed at the signal close."""
+    try:
+        bars = fetch_signal_bars(inst)
+        i = next(
+            (
+                idx
+                for idx, bar in enumerate(bars)
+                if bar_close_ms(bar) == int(signal_close_ms)
+            ),
+            None,
+        )
+        if i is None:
+            return {
+                "snapshot_error": "signal candle not found",
+                "captured_ms": now_ms(),
+                "rank": int(rank),
+                "side": side,
+                "signal_close_ms": int(signal_close_ms),
+            }
+
+        cur = bars[i]
+        prev = bars[i - 1] if i >= 1 else None
+        candle_range = float(cur["h"]) - float(cur["l"])
+        body = abs(float(cur["c"]) - float(cur["o"]))
+        close = float(cur["c"])
+
+        def close_return_pct(lookback):
+            if i < lookback:
+                return None
+            old_close = float(bars[i - lookback]["c"])
+            if old_close <= 0:
+                return None
+            return (close / old_close - 1.0) * 100.0
+
+        upper_wick = float(cur["h"]) - max(float(cur["o"]), float(cur["c"]))
+        lower_wick = min(float(cur["o"]), float(cur["c"])) - float(cur["l"])
+
+        metrics = (
+            long_entry_metrics(bars, i)
+            if side == "LONG"
+            else short_entry_metrics(bars, i)
+        ) or {}
+
+        opposite_volume = (
+            metrics.get("last_red_volume")
+            if side == "LONG"
+            else metrics.get("last_green_volume")
+        )
+        volume_ratio = None
+        if opposite_volume not in (None, 0):
+            volume_ratio = float(cur["v"]) / float(opposite_volume)
+
+        prev_hist = (
+            float(prev["macd_hist"])
+            if prev and prev.get("macd_hist") is not None
+            else None
+        )
+        cur_hist = (
+            float(cur["macd_hist"])
+            if cur.get("macd_hist") is not None
+            else None
+        )
+        hist_delta_pct_close = None
+        if prev_hist is not None and cur_hist is not None and close > 0:
+            hist_delta_pct_close = ((cur_hist - prev_hist) / close) * 100.0
+
+        snapshot = {
+            "captured_ms": now_ms(),
+            "rank": int(rank),
+            "side": side,
+            "signal_label": SIGNAL_LABEL,
+            "signal_close_ms": int(signal_close_ms),
+            "open": float(cur["o"]),
+            "high": float(cur["h"]),
+            "low": float(cur["l"]),
+            "close": close,
+            "volume": float(cur["v"]),
+            "color": candle_color(cur),
+            "range_pct_close": (
+                candle_range / close * 100.0 if close > 0 else None
+            ),
+            "body_pct_range": (
+                body / candle_range * 100.0 if candle_range > 0 else None
+            ),
+            "body_pct_close": body / close * 100.0 if close > 0 else None,
+            "upper_wick_pct_range": (
+                upper_wick / candle_range * 100.0 if candle_range > 0 else None
+            ),
+            "lower_wick_pct_range": (
+                lower_wick / candle_range * 100.0 if candle_range > 0 else None
+            ),
+            "return_1bar_pct": close_return_pct(1),
+            "return_2bar_pct": close_return_pct(2),
+            "return_4bar_pct": close_return_pct(4),
+            "return_8bar_pct": close_return_pct(8),
+            "return_10bar_pct": close_return_pct(10),
+            "return_20bar_pct": close_return_pct(20),
+            "rsi14": (
+                float(cur["rsi"]) if cur.get("rsi") is not None else None
+            ),
+            "macd_dif": (
+                float(cur["macd_dif"])
+                if cur.get("macd_dif") is not None
+                else None
+            ),
+            "macd_dea": (
+                float(cur["macd_dea"])
+                if cur.get("macd_dea") is not None
+                else None
+            ),
+            "macd_hist": cur_hist,
+            "prev_macd_hist": prev_hist,
+            "macd_hist_delta_pct_close": hist_delta_pct_close,
+            "opposite_candle_volume": (
+                float(opposite_volume) if opposite_volume is not None else None
+            ),
+            "volume_vs_opposite_ratio": volume_ratio,
+            "filter_metrics": metrics,
+        }
+        if prev:
+            snapshot["prev_candle"] = {
+                "open": float(prev["o"]),
+                "high": float(prev["h"]),
+                "low": float(prev["l"]),
+                "close": float(prev["c"]),
+                "volume": float(prev["v"]),
+                "color": candle_color(prev),
+            }
+        return snapshot
+    except Exception as exc:
+        return {
+            "snapshot_error": f"{type(exc).__name__}: {exc}",
+            "captured_ms": now_ms(),
+            "rank": int(rank),
+            "side": side,
+            "signal_close_ms": int(signal_close_ms),
+        }
+
+
 def init_arm_from_history(inst, bars, latest_index, state):
     arms = state.setdefault("arms", {})
     if inst in arms:
@@ -1058,19 +1199,29 @@ def record_closed(state, reason_hint=None):
     history.append({
         "inst": pos["inst"],
         "side": pos["side"],
+        "result": result,
         "opened_ms": opened_ms,
         "closed_ms": closed_ms,
         "hold_minutes": round(hold_minutes, 2),
+        "signal_close_ms": int(pos.get("signal_close_ms") or 0),
+        "signal_age_ms": int(pos.get("signal_age_ms") or 0),
+        "signal_rank": pos.get("signal_rank"),
+        "strategy": str(pos.get("strategy") or ""),
         "open_price": str(hist.get("openAveragePrice") or pos.get("reference_entry") or ""),
         "close_price": str(hist.get("closeAveragePrice") or ""),
+        "tp": str(pos.get("tp") or ""),
+        "sl": str(pos.get("sl") or ""),
+        "filled_size": str(pos.get("filled_size") or pos.get("size") or ""),
+        "notional_usdt": str(pos.get("notional_usdt") or ""),
         "gross_pnl_usdt": float(gross_pnl),
         "fee_usdt": float(fee),
         "net_pnl_usdt": float(net_pnl),
         "reason": reason,
         "history_id": str(hist.get("historyId") or ""),
+        "signal_snapshot": pos.get("signal_snapshot") or {},
     })
-    if len(history) > 100:
-        del history[:-100]
+    if len(history) > TRADE_HISTORY_LIMIT:
+        del history[:-TRADE_HISTORY_LIMIT]
 
     notify(
         f"{result} {pos['side']} {pos['inst']} | {reason} | "
@@ -1169,8 +1320,11 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
     if risk_stop_active(state):
         raise RuntimeError("HARD STOP active: 10% drawdown limit reached")
 
-    _, inst, side, signal_close_ms = candidate
+    rank, inst, side, signal_close_ms = candidate
     signal_age_ms = now_ms() - int(signal_close_ms)
+    signal_snapshot = build_signal_snapshot(
+        inst, side, signal_close_ms, rank
+    )
     if signal_age_ms < 0 or signal_age_ms > SIGNAL_MAX_AGE_MS:
         raise RuntimeError(
             f"{inst}: stale signal ({signal_age_ms / 1000:.1f}s old; "
@@ -1251,6 +1405,8 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         "opened_ms": opened_ms,
         "signal_close_ms": signal_close_ms,
         "signal_age_ms": signal_age_ms,
+        "signal_rank": int(rank),
+        "signal_snapshot": signal_snapshot,
         "order_id": order_id,
         "client_order_id": client_id,
         "requested_reference": clean_decimal(market_reference),
