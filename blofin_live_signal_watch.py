@@ -120,8 +120,8 @@ def wait_for_confirmed_signal_close(top7, expected_close_ms):
 def build_live_diagnostic(state, top7):
     lines = [
         f"{bot.SIGNAL_LABEL} TOP{bot.TOP_N} — BRAK WEJSCIA",
-        "SHORT 3/3: MACD↓ + czerwona swieca + czerwony VOL > ostatni zielony",
-        "LONG 3/3: MACD↑ + zielona swieca + zielony VOL > ostatni czerwony",
+        "SHORT 4/4: MACD↓ + RED + RED VOL>last GREEN + korpus <=1% ceny close",
+        "LONG 5/5: MACD↑ + GREEN + GREEN VOL>last RED + korpus >=60% zakresu + close >=2% vs 10 swiec wczesniej",
         "",
     ]
 
@@ -143,11 +143,14 @@ def build_live_diagnostic(state, top7):
                 ("MACD↓", s["macd_cross_down"]),
                 ("RED", s["red_candle"]),
                 ("RED VOL>last GREEN", s["volume_higher_than_last_green"]),
+                ("BODY<=1%", s["short_body_max_1pct"]),
             ]
             l_checks = [
                 ("MACD↑", l["macd_cross_up"]),
                 ("GREEN", l["green_candle"]),
                 ("GREEN VOL>last RED", l["volume_higher_than_last_red"]),
+                ("BODY>=60%", l["green_body_min_60pct"]),
+                ("10BAR>=+2%", l["rise_10_bars_min_2pct"]),
             ]
 
             s_ok = sum(1 for _, ok in s_checks if ok)
@@ -157,10 +160,10 @@ def build_live_diagnostic(state, top7):
 
             lines.append(f"{rank}. {inst}")
             lines.append(
-                f"   S {s_ok}/3" + ("" if s_ok == 3 else f" | brak: {s_missing}")
+                f"   S {s_ok}/4" + ("" if s_ok == 4 else f" | brak: {s_missing}")
             )
             lines.append(
-                f"   L {l_ok}/3" + ("" if l_ok == 3 else f" | brak: {l_missing}")
+                f"   L {l_ok}/5" + ("" if l_ok == 5 else f" | brak: {l_missing}")
             )
         except Exception as exc:
             lines.append(f"{rank}. {inst} — blad danych: {type(exc).__name__}")
