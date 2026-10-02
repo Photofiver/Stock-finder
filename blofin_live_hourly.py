@@ -18,6 +18,7 @@ SECRET = os.getenv("BLOFIN_SECRET_KEY", "").strip()
 PASSPHRASE = os.getenv("BLOFIN_PASSPHRASE", "").strip()
 NTFY_TOPIC = os.getenv("NTFY_TOPIC", "blofin-nhd0jt7wspfnhtitdlaowk1n").strip()
 STATE_FILE = os.getenv("LIVE_STATE_FILE", "blofin_live_state.json")
+CODE_COMMIT = os.getenv("GITHUB_SHA", "").strip()
 TECH_EVENTS_FILE = os.getenv("LIVE_TECH_EVENTS_FILE", "blofin_live_technical_events.json")
 TECH_EVENTS_LIMIT = 5000
 LIVE_ENABLED = os.getenv("BLOFIN_LIVE_ENABLED", "").strip().lower() == "true"
@@ -1289,6 +1290,7 @@ def record_closed(state, reason_hint=None):
         "signal_age_ms": int(pos.get("signal_age_ms") or 0),
         "signal_rank": pos.get("signal_rank"),
         "strategy": str(pos.get("strategy") or ""),
+        "code_commit": str(pos.get("code_commit") or ""),
         "open_price": str(hist.get("openAveragePrice") or pos.get("reference_entry") or ""),
         "close_price": str(hist.get("closeAveragePrice") or ""),
         "tp": str(pos.get("tp") or ""),
@@ -1499,6 +1501,7 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         "notional_usdt": clean_decimal(estimated_notional),
         "protection_status": "WAITING_FOR_TP1_SL1",
         "strategy": f"MACD_VOL_{side}_{SIGNAL_LABEL}",
+        "code_commit": CODE_COMMIT,
         "risk_profile": risk_profile,
         "account_fraction": account_fraction,
         "allocation_label": allocation_label,
