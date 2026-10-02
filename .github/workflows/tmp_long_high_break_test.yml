@@ -1,0 +1,15 @@
+name: Temporary LONG high-break test
+on:
+  push:
+    paths:
+      - 'tmp_long_high_break_test.py'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run historical LONG filter test
+        run: python tmp_long_high_break_test.py
