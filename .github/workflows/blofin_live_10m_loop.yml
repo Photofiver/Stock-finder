@@ -2,6 +2,9 @@ name: BloFin LIVE 15m scheduled
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - 'live15_trigger.txt'
   schedule:
     - cron: '12 * * * *'
     - cron: '27 * * * *'
@@ -13,7 +16,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: blofin-live-15m-scheduled
+  group: blofin-live-15m-continuous
   cancel-in-progress: true
 
 jobs:
