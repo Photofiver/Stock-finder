@@ -1,23 +1,25 @@
-name: BloFin LIVE 15m continuous
+name: BloFin LIVE 15m scheduled
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'live15_trigger.txt'
+  schedule:
+    - cron: '12 * * * *'
+    - cron: '27 * * * *'
+    - cron: '42 * * * *'
+    - cron: '57 * * * *'
 
 permissions:
   contents: write
   actions: write
 
 concurrency:
-  group: blofin-live-15m-continuous
+  group: blofin-live-15m-scheduled
   cancel-in-progress: true
 
 jobs:
   live:
-    runs-on: ubuntu-latest
-    timeout-minutes: 355
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +33,7 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Run LIVE continuously on 15m candle closes
+      - name: Wait for intended 15m candle close and run one LIVE scan
         env:
           BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
           BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
@@ -40,6 +42,7 @@ jobs:
           LIVE_MAX_BANKROLL_USDT: '10.64'
           LIVE_SIGNAL_MINUTES: '15'
           LIVE_SIGNAL_MAX_AGE_MS: '840000'
+          SCHEDULE_EXPR: ${{ github.event.schedule }}
         shell: bash
         run: |
           set -u
@@ -58,43 +61,47 @@ jobs:
             fi
           }
 
-          run_scan() {
-            echo "LIVE 15m scan at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-            if ! python blofin_live_signal_watch.py; then
-              curl -fsS --retry 2 --max-time 20 \
-                -H 'Title: BloFin LIVE 15m ERROR' \
-                -H 'Priority: 5' \
-                -d "LIVE 15m scan failed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')." \
-                'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n' || true
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ]; then
+            SCHED_MIN="$(printf '%s' "${SCHEDULE_EXPR}" | awk '{print $1}')"
+            WAIT="$(python - "${SCHED_MIN}" <<'PY'
+          import sys
+          import time
+          from datetime import datetime, timedelta, timezone
+
+          scheduled_minute = int(sys.argv[1])
+          now_ts = time.time()
+          now = datetime.fromtimestamp(now_ts, timezone.utc)
+          occurrence = now.replace(
+              minute=scheduled_minute,
+              second=0,
+              microsecond=0,
+          )
+          if occurrence.timestamp() > now_ts:
+              occurrence -= timedelta(hours=1)
+
+          target = occurrence + timedelta(minutes=3, seconds=2)
+          wait = max(0, int(target.timestamp() - now_ts))
+          print(wait)
+          PY
+            )"
+
+            if [ "${WAIT}" -gt 0 ]; then
+              echo "Started early; waiting ${WAIT}s for intended 15m candle close."
+              sleep "${WAIT}"
+            else
+              echo "Scheduled job started after intended candle close; scanning immediately."
             fi
-            persist_state
-          }
+          else
+            echo "Manual run: scanning immediately."
+          fi
 
-          END=$(( $(date +%s) + 20700 ))
+          echo "LIVE 15m scan at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          if ! python blofin_live_signal_watch.py; then
+            curl -fsS --retry 2 --max-time 20 \
+              -H 'Title: BloFin LIVE 15m ERROR' \
+              -H 'Priority: 5' \
+              -d "LIVE 15m scan failed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')." \
+              'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n' || true
+          fi
 
-          # On startup process the latest closed 15m candle immediately.
-          run_scan
-
-          while [ "$(date +%s)" -lt "$END" ]; do
-            NOW=$(date +%s)
-            NEXT=$(( ((NOW / 900) + 1) * 900 + 2 ))
-            WAIT=$(( NEXT - NOW ))
-            if [ "$WAIT" -gt 0 ]; then
-              echo "Waiting ${WAIT}s for next 15m candle close"
-              sleep "$WAIT"
-            fi
-            run_scan
-          done
-
-      - name: Restart continuous LIVE loop
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          curl -fsS -X POST \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/blofin_live_10m_loop.yml/dispatches" \
-            -d '{"ref":"main"}'
+          persist_state
