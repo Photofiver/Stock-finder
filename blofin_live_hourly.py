@@ -370,10 +370,18 @@ def short_entry_metrics(bars, i):
         and float(cur["v"]) > last_green_volume
     )
 
+    red_body_pct_close = (
+        ((float(cur["o"]) - float(cur["c"])) / float(cur["c"])) * 100.0
+        if float(cur["c"]) > 0
+        else float("inf")
+    )
+
     return {
         "macd_cross_down": macd_cross_down,
         "red_candle": red_candle,
         "volume_higher_than_last_green": volume_higher_than_last_green,
+        "red_body_pct_close": red_body_pct_close,
+        "short_body_max_1pct": red_body_pct_close <= 1.0,
         "volume": float(cur["v"]),
         "last_green_volume": last_green_volume,
         "macd_dif": float(cur["macd_dif"]),
@@ -389,6 +397,7 @@ def short_entry_signal(bars, i):
         and metrics["macd_cross_down"]
         and metrics["red_candle"]
         and metrics["volume_higher_than_last_green"]
+        and metrics["red_body_pct_close"] <= 1.0
     )
 
 
@@ -427,10 +436,27 @@ def long_entry_metrics(bars, i):
         and float(cur["v"]) > last_red_volume
     )
 
+    candle_range = float(cur["h"]) - float(cur["l"])
+    green_body_ratio = (
+        (float(cur["c"]) - float(cur["o"])) / candle_range
+        if candle_range > 0 and green_candle
+        else 0.0
+    )
+    close_10_bars_ago = float(bars[i - 10]["c"]) if i >= 10 else None
+    rise_10_bars_pct = (
+        ((float(cur["c"]) / close_10_bars_ago) - 1.0) * 100.0
+        if close_10_bars_ago is not None and close_10_bars_ago > 0
+        else float("-inf")
+    )
+
     return {
         "macd_cross_up": macd_cross_up,
         "green_candle": green_candle,
         "volume_higher_than_last_red": volume_higher_than_last_red,
+        "green_body_ratio": green_body_ratio,
+        "green_body_min_60pct": green_body_ratio >= 0.60,
+        "rise_10_bars_pct": rise_10_bars_pct,
+        "rise_10_bars_min_2pct": rise_10_bars_pct >= 2.0,
         "volume": float(cur["v"]),
         "last_red_volume": last_red_volume,
         "macd_dif": float(cur["macd_dif"]),
@@ -446,6 +472,8 @@ def long_entry_signal(bars, i):
         and metrics["macd_cross_up"]
         and metrics["green_candle"]
         and metrics["volume_higher_than_last_red"]
+        and metrics["green_body_min_60pct"]
+        and metrics["rise_10_bars_min_2pct"]
     )
 
 
