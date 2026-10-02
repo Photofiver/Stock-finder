@@ -50,6 +50,7 @@ jobs:
             git add blofin_signal_state.json 2>/dev/null || true
             git add blofin_pending_signal.json 2>/dev/null || true
             git add blofin_live_state.json 2>/dev/null || true
+            git add blofin_live_technical_events.json 2>/dev/null || true
             if ! git diff --cached --quiet; then
               git commit -m 'Update BloFin 15m LIVE state [skip ci]' || true
               git pull --rebase origin main || true
