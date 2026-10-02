@@ -6,10 +6,7 @@ on:
     paths:
       - 'live15_trigger.txt'
   schedule:
-    - cron: '12 * * * *'
-    - cron: '27 * * * *'
-    - cron: '42 * * * *'
-    - cron: '57 * * * *'
+    - cron: '12,27,42,57 * * * *'
 
 permissions:
   contents: write
@@ -65,23 +62,21 @@ jobs:
           }
 
           if [ "${GITHUB_EVENT_NAME}" = "schedule" ]; then
-            SCHED_MIN="$(printf '%s' "${SCHEDULE_EXPR}" | awk '{print $1}')"
-            WAIT="$(python - "${SCHED_MIN}" <<'PY'
-          import sys
+            WAIT="$(python - <<'PY'
           import time
           from datetime import datetime, timedelta, timezone
 
-          scheduled_minute = int(sys.argv[1])
           now_ts = time.time()
           now = datetime.fromtimestamp(now_ts, timezone.utc)
-          occurrence = now.replace(
-              minute=scheduled_minute,
-              second=0,
-              microsecond=0,
-          )
-          if occurrence.timestamp() > now_ts:
-              occurrence -= timedelta(hours=1)
-
+          slots = (12, 27, 42, 57)
+          candidates = []
+          for hour_shift in (0, -1):
+              base = now + timedelta(hours=hour_shift)
+              for minute in slots:
+                  occurrence = base.replace(minute=minute, second=0, microsecond=0)
+                  if occurrence.timestamp() <= now_ts:
+                      candidates.append(occurrence)
+          occurrence = max(candidates)
           target = occurrence + timedelta(minutes=3, seconds=2)
           wait = max(0, int(target.timestamp() - now_ts))
           print(wait)
