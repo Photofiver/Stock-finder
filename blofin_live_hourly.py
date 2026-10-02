@@ -18,6 +18,8 @@ SECRET = os.getenv("BLOFIN_SECRET_KEY", "").strip()
 PASSPHRASE = os.getenv("BLOFIN_PASSPHRASE", "").strip()
 NTFY_TOPIC = os.getenv("NTFY_TOPIC", "blofin-nhd0jt7wspfnhtitdlaowk1n").strip()
 STATE_FILE = os.getenv("LIVE_STATE_FILE", "blofin_live_state.json")
+TECH_EVENTS_FILE = os.getenv("LIVE_TECH_EVENTS_FILE", "blofin_live_technical_events.json")
+TECH_EVENTS_LIMIT = 5000
 LIVE_ENABLED = os.getenv("BLOFIN_LIVE_ENABLED", "").strip().lower() == "true"
 MAX_NOTIONAL_USDT = Decimal(os.getenv("LIVE_MAX_BANKROLL_USDT", "10.64"))
 LEVERAGE = "1"
@@ -235,6 +237,80 @@ def save_state(state):
         json.dump(state, f, ensure_ascii=False, indent=2, sort_keys=True)
         f.write("\n")
     os.replace(tmp, STATE_FILE)
+
+
+def append_technical_event(
+    event_type,
+    message,
+    inst=None,
+    side=None,
+    rank=None,
+    signal_close_ms=None,
+    extra=None,
+):
+    """Persist non-strategy execution problems separately from trade history."""
+    try:
+        try:
+            with open(TECH_EVENTS_FILE, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+            if not isinstance(payload, dict):
+                payload = {}
+        except Exception:
+            payload = {}
+
+        events = payload.setdefault("events", [])
+        payload["version"] = 1
+        event = {
+            "timestamp_ms": now_ms(),
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "event_type": str(event_type),
+            "message": str(message),
+            "signal_label": SIGNAL_LABEL,
+        }
+        if inst is not None:
+            event["inst"] = str(inst)
+        if side is not None:
+            event["side"] = str(side)
+        if rank is not None:
+            event["rank"] = int(rank)
+        if signal_close_ms is not None:
+            event["signal_close_ms"] = int(signal_close_ms)
+        if isinstance(extra, dict) and extra:
+            event["extra"] = extra
+
+        events.append(event)
+        if len(events) > TECH_EVENTS_LIMIT:
+            del events[:-TECH_EVENTS_LIMIT]
+
+        tmp = TECH_EVENTS_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2, sort_keys=True)
+            f.write("\n")
+        os.replace(tmp, TECH_EVENTS_FILE)
+    except Exception as exc:
+        print(f"TECH EVENT LOG ERROR: {type(exc).__name__}: {exc}")
+
+
+def classify_entry_error(exc):
+    text = str(exc).lower()
+    if "minimum contract" in text or "lot exceeds" in text:
+        return "SIZE_BLOCK"
+    if "no available" in text or "insufficient" in text or "balance" in text:
+        return "NO_FUNDS"
+    if "stale signal" in text:
+        return "STALE_SIGNAL"
+    if "bankroll" in text or "exposure" in text:
+        return "BANKROLL_BLOCK"
+    if (
+        "blofin api" in text
+        or "market request failed" in text
+        or "http" in text
+        or "timeout" in text
+        or "429" in text
+        or "connection" in text
+    ):
+        return "API_ERROR"
+    return "ENTRY_ERROR"
 
 
 def parse_candles(raw):
@@ -833,6 +909,12 @@ def evaluate_signals(state, top10):
             latest_idx[inst] = len(bars) - 1
         except Exception as exc:
             print(f"{SIGNAL_LABEL} ERROR {inst}: {exc}")
+            append_technical_event(
+                "MARKET_DATA_ERROR",
+                f"{type(exc).__name__}: {exc}",
+                inst=inst,
+                extra={"stage": "fetch_signal_bars"},
+            )
 
     candidates = []
     scan_now_ms = now_ms()
@@ -1425,6 +1507,15 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
     fill = wait_for_order_fill(inst, order_id, client_id)
     if not fill:
         state["position"]["protection_status"] = "ENTRY_PRICE_UNAVAILABLE"
+        append_technical_event(
+            "FILL_ERROR",
+            "Market order accepted but fill price/size could not be confirmed.",
+            inst=inst,
+            side=side,
+            rank=rank,
+            signal_close_ms=signal_close_ms,
+            extra={"order_id": order_id, "client_order_id": client_id},
+        )
         notify(
             f"CRITICAL {side} {inst}: market order was accepted but actual fill price "
             "could not be confirmed. Closing the position for safety.",
@@ -1483,6 +1574,15 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
     except Exception as exc:
         state["position"]["protection_status"] = "TP1_SL1_FAILED"
         state["position"]["protection_error"] = str(exc)
+        append_technical_event(
+            "PROTECTION_ERROR",
+            f"{type(exc).__name__}: {exc}",
+            inst=inst,
+            side=side,
+            rank=rank,
+            signal_close_ms=signal_close_ms,
+            extra={"stage": "place_tp_sl"},
+        )
         notify(
             f"CRITICAL {side} {inst}: TP +1% / SL -1% could not be placed. "
             f"Closing position for safety. Error: {exc}",
@@ -1743,6 +1843,15 @@ def place_live_trade_multi(
 def execute_candidate_batch(state, candidates, tickers, instruments):
     if risk_stop_active(state):
         print("HARD STOP active: skipping all new entries.")
+        for rank, inst, side, signal_close_ms in candidates:
+            append_technical_event(
+                "RISK_STOP",
+                "Valid strategy signal blocked by the bot hard drawdown stop.",
+                inst=inst,
+                side=side,
+                rank=rank,
+                signal_close_ms=signal_close_ms,
+            )
         return []
 
     positions = get_tracked_positions(state)
@@ -1751,27 +1860,67 @@ def execute_candidate_batch(state, candidates, tickers, instruments):
     tracked = set(positions)
     untracked = sorted(account_open - tracked)
     if untracked:
-        notify(
+        message = (
             "No new LIVE order: account has untracked open position(s): "
-            + ", ".join(untracked[:5]),
-            "BloFin LIVE BLOCKED",
+            + ", ".join(untracked[:5])
         )
+        notify(message, "BloFin LIVE BLOCKED")
+        for rank, inst, side, signal_close_ms in candidates:
+            append_technical_event(
+                "UNTRACKED_POSITION_BLOCK",
+                message,
+                inst=inst,
+                side=side,
+                rank=rank,
+                signal_close_ms=signal_close_ms,
+                extra={"untracked": untracked[:5]},
+            )
         return []
 
     slots = max(0, MAX_OPEN_POSITIONS - len(account_open))
     if slots <= 0:
+        for rank, inst, side, signal_close_ms in candidates:
+            append_technical_event(
+                "NO_SLOT",
+                f"Valid signal not entered: all {MAX_OPEN_POSITIONS} position slots were occupied.",
+                inst=inst,
+                side=side,
+                rank=rank,
+                signal_close_ms=signal_close_ms,
+                extra={"open_positions": len(account_open)},
+            )
         return []
 
     selected = []
+    skipped = []
     seen = set(account_open)
     for candidate in candidates:
-        inst = str(candidate[1])
+        rank, inst, side, signal_close_ms = candidate
+        inst = str(inst)
         if inst in seen:
+            skipped.append((candidate, "ALREADY_OPEN"))
+            continue
+        if len(selected) >= slots:
+            skipped.append((candidate, "NO_SLOT"))
             continue
         selected.append(candidate)
         seen.add(inst)
-        if len(selected) >= slots:
-            break
+
+    for candidate, reason in skipped:
+        rank, inst, side, signal_close_ms = candidate
+        if reason == "ALREADY_OPEN":
+            message = "Valid signal not entered: this instrument already has an open position."
+        else:
+            message = f"Valid signal not entered: only {slots} free position slot(s) were available."
+        append_technical_event(
+            reason,
+            message,
+            inst=inst,
+            side=side,
+            rank=rank,
+            signal_close_ms=signal_close_ms,
+            extra={"open_positions": len(account_open), "free_slots": slots},
+        )
 
     if not selected:
         return []
@@ -1779,34 +1928,71 @@ def execute_candidate_batch(state, candidates, tickers, instruments):
     available = get_available_usdt()
     if available <= 0:
         notify("No available USDT for a new LIVE order.", "BloFin LIVE BLOCKED")
+        for rank, inst, side, signal_close_ms in selected:
+            append_technical_event(
+                "NO_FUNDS",
+                "Valid signal not entered: available USDT was zero or below.",
+                inst=inst,
+                side=side,
+                rank=rank,
+                signal_close_ms=signal_close_ms,
+                extra={"available_usdt": str(available)},
+            )
         return []
 
     tracked_exposure = Decimal("0")
     for tracked_inst, tracked_pos in positions.items():
         try:
             tracked_notional = abs(d(tracked_pos.get("notional_usdt") or "0"))
-        except Exception:
-            notify(
-                f"No new LIVE order: {tracked_inst} has invalid tracked notional.",
-                "BloFin LIVE BLOCKED",
-            )
+        except Exception as exc:
+            message = f"{tracked_inst} has invalid tracked notional: {exc}"
+            notify("No new LIVE order: " + message, "BloFin LIVE BLOCKED")
+            for rank, inst, side, signal_close_ms in selected:
+                append_technical_event(
+                    "TRACKING_ERROR",
+                    message,
+                    inst=inst,
+                    side=side,
+                    rank=rank,
+                    signal_close_ms=signal_close_ms,
+                )
             return []
         if tracked_notional <= 0:
-            notify(
-                f"No new LIVE order: {tracked_inst} has missing tracked notional.",
-                "BloFin LIVE BLOCKED",
-            )
+            message = f"{tracked_inst} has missing tracked notional."
+            notify("No new LIVE order: " + message, "BloFin LIVE BLOCKED")
+            for rank, inst, side, signal_close_ms in selected:
+                append_technical_event(
+                    "TRACKING_ERROR",
+                    message,
+                    inst=inst,
+                    side=side,
+                    rank=rank,
+                    signal_close_ms=signal_close_ms,
+                )
             return []
         tracked_exposure += tracked_notional
 
     live_bankroll = current_live_bankroll(state)
     remaining_bankroll = live_bankroll - tracked_exposure
     if remaining_bankroll <= 0:
-        notify(
-            f"No new LIVE order: current bankroll {live_bankroll:.4f} USDT "
-            f"is already used by {tracked_exposure:.4f} USDT exposure.",
-            "BloFin LIVE BLOCKED",
+        message = (
+            f"Current bankroll {live_bankroll:.4f} USDT is already used by "
+            f"{tracked_exposure:.4f} USDT exposure."
         )
+        notify("No new LIVE order: " + message, "BloFin LIVE BLOCKED")
+        for rank, inst, side, signal_close_ms in selected:
+            append_technical_event(
+                "BANKROLL_BLOCK",
+                message,
+                inst=inst,
+                side=side,
+                rank=rank,
+                signal_close_ms=signal_close_ms,
+                extra={
+                    "live_bankroll_usdt": str(live_bankroll),
+                    "tracked_exposure_usdt": str(tracked_exposure),
+                },
+            )
         return []
 
     batch_budget = min(available, remaining_bankroll)
@@ -1836,6 +2022,20 @@ def execute_candidate_batch(state, candidates, tickers, instruments):
                     "notional_usdt": pos.get("notional_usdt"),
                 })
         except Exception as exc:
+            event_type = classify_entry_error(exc)
+            append_technical_event(
+                event_type,
+                f"{type(exc).__name__}: {exc}",
+                inst=inst,
+                side=side,
+                rank=rank,
+                signal_close_ms=signal_close_ms,
+                extra={
+                    "stage": "entry",
+                    "per_trade_cap_usdt": str(per_trade_cap),
+                    "available_usdt": str(available),
+                },
+            )
             print(f"LIVE ENTRY ERROR {inst}: {type(exc).__name__}: {exc}")
             notify(
                 f"{inst} {side}: entry failed: {exc}",
