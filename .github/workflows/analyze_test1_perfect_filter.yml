@@ -21,16 +21,16 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt
-      - name: Temporary Elliott Oct 1-2 analysis
-        run: python tmp_elliott_oct12.py
-      - name: Save temporary Elliott result
+      - name: Search causal zero-loss filters
+        run: python analyze_test1_perfect_filter.py
+      - name: Save result
         shell: bash
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add tmp_elliott_oct12_result.json
+          git add test1_perfect_filter_result.json
           if ! git diff --cached --quiet; then
-            git commit -m 'Save temporary Elliott Oct 1-2 analysis'
+            git commit -m 'Save TEST 1 zero-loss filter analysis'
             git pull --rebase origin main
             git push origin HEAD:main
           fi
