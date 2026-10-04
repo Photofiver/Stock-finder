@@ -33,8 +33,19 @@ jobs:
             cat scan.md
           } > notification.md
 
-      - name: Post result to GitHub issue
+      - name: Post result to main scan issue
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: "3"
         run: gh issue comment "$ISSUE_NUMBER" --repo "${{ github.repository }}" --body-file notification.md
+
+      - name: Create assigned alert issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOW=$(date -u +"%H:%M UTC")
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "BloFin 15m alert - $NOW" \
+            --body-file notification.md \
+            --assignee "Photofiver"
