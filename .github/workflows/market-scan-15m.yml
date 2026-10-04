@@ -25,8 +25,16 @@ jobs:
       - name: Run 15m market scan
         run: python market_scan_15m.py > scan.md
 
+      - name: Build notification
+        run: |
+          {
+            echo "@Photofiver"
+            echo
+            cat scan.md
+          } > notification.md
+
       - name: Post result to GitHub issue
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: "3"
-        run: gh issue comment "$ISSUE_NUMBER" --repo "${{ github.repository }}" --body-file scan.md
+        run: gh issue comment "$ISSUE_NUMBER" --repo "${{ github.repository }}" --body-file notification.md
