@@ -1,20 +1,51 @@
-name: Automatic schedule test
+name: Watchdog timing test
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'
-  workflow_run:
-    workflows:
-      - Strategy watch 5m
-    types:
-      - completed
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/workflow-dispatch-test.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: watchdog-timing-test
+  cancel-in-progress: false
 
 jobs:
-  test:
+  watchdog:
     runs-on: ubuntu-latest
+    timeout-minutes: 355
+
     steps:
-      - name: Test automatic trigger
+      - name: Run aligned 15m heartbeat loop
+        shell: bash
         run: |
-          echo "AUTOMATIC_TRIGGER_OK"
-          echo "EVENT=${{ github.event_name }}"
-          date -u
+          set -euo pipefail
+          for i in $(seq 1 23); do
+            NOW=$(date +%s)
+            PERIOD=900
+            OFFSET=60
+            TARGET=$(( ((NOW - OFFSET) / PERIOD + 1) * PERIOD + OFFSET ))
+            WAIT=$(( TARGET - NOW ))
+            echo "Heartbeat $i/23: waiting ${WAIT}s for next :01/:16/:31/:46 UTC slot"
+            sleep "$WAIT"
+            echo "WATCHDOG_OK $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          done
+
+      - name: Start next watchdog run
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/workflow-dispatch-test.yml/dispatches" \
+            -d '{"ref":"main"}'
