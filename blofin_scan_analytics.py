@@ -837,12 +837,24 @@ def load_trade_metrics():
             elif direction == "SHORT":
                 slip = (ref / fill - 1.0) * 100.0
 
+        timing = t.get("execution_timing") or {}
         metrics[key] = {
             "actual_trade": True,
             "actual_fee_usdt": fee,
             "actual_fee_pct_of_notional": fee_pct,
             "actual_entry_slippage_pct_if_available": slip,
             "actual_net_pnl_usdt": safe_float(t.get("net_pnl_usdt")),
+            "live_run_started_at_ms": timing.get("live_run_started_at_ms"),
+            "signal_bar_close_at_ms": timing.get("signal_bar_close_at_ms"),
+            "signal_selected_at_ms": timing.get("signal_selected_at_ms"),
+            "order_submit_started_at_ms": timing.get("order_submit_started_at_ms"),
+            "order_ack_at_ms": timing.get("order_ack_at_ms"),
+            "signal_selected_ms_after_candle_close": timing.get("signal_selected_ms_after_candle_close"),
+            "order_submit_ms_after_candle_close": timing.get("order_submit_ms_after_candle_close"),
+            "order_ack_ms_after_candle_close": timing.get("order_ack_ms_after_candle_close"),
+            "run_start_to_signal_selected_ms": timing.get("run_start_to_signal_selected_ms"),
+            "signal_selected_to_order_submit_ms": timing.get("signal_selected_to_order_submit_ms"),
+            "exchange_order_round_trip_ms": timing.get("exchange_order_round_trip_ms"),
         }
 
     return metrics
@@ -933,6 +945,17 @@ def regenerate_daily_csv(date_str):
             base["actual_fee_pct_of_notional"] = tm.get("actual_fee_pct_of_notional")
             base["actual_entry_slippage_pct_if_available"] = tm.get("actual_entry_slippage_pct_if_available")
             base["actual_net_pnl_usdt"] = tm.get("actual_net_pnl_usdt")
+            base["live_run_started_at_ms"] = tm.get("live_run_started_at_ms")
+            base["signal_bar_close_at_ms"] = tm.get("signal_bar_close_at_ms")
+            base["signal_selected_at_ms"] = tm.get("signal_selected_at_ms")
+            base["order_submit_started_at_ms"] = tm.get("order_submit_started_at_ms")
+            base["order_ack_at_ms"] = tm.get("order_ack_at_ms")
+            base["signal_selected_ms_after_candle_close"] = tm.get("signal_selected_ms_after_candle_close")
+            base["order_submit_ms_after_candle_close"] = tm.get("order_submit_ms_after_candle_close")
+            base["order_ack_ms_after_candle_close"] = tm.get("order_ack_ms_after_candle_close")
+            base["run_start_to_signal_selected_ms"] = tm.get("run_start_to_signal_selected_ms")
+            base["signal_selected_to_order_submit_ms"] = tm.get("signal_selected_to_order_submit_ms")
+            base["exchange_order_round_trip_ms"] = tm.get("exchange_order_round_trip_ms")
             rows.append(base)
 
     if not rows:
