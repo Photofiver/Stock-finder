@@ -2,6 +2,8 @@
 import csv
 import json
 import math
+import os
+import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -11,6 +13,7 @@ from blofin_alert_15m import (
     analyse_candidate,
     observe_market,
     candles,
+    get_json,
     MIN_TARGET_PCT,
     MIN_HIT_RATE,
     MIN_DECIDED,
@@ -27,6 +30,13 @@ SL_PCT = 0.5
 # Analysis-only costs. They never change order placement.
 ANALYSIS_ROUND_TRIP_FEE_PCT = 0.12
 ANALYSIS_ROUND_TRIP_SLIPPAGE_PCT = 0.0
+
+# Metadata only. These values do not change live entry logic.
+STRATEGY_VERSION = "live-entry-v1"
+ANALYTICS_VERSION = 3
+GIT_COMMIT_SHA = os.environ.get("GITHUB_SHA", "").strip() or None
+GITHUB_RUN_ID = os.environ.get("GITHUB_RUN_ID", "").strip() or None
+GITHUB_RUN_ATTEMPT = os.environ.get("GITHUB_RUN_ATTEMPT", "").strip() or None
 
 
 def finite(x):
@@ -55,6 +65,110 @@ def pass_fail(value):
     if value is None:
         return "N/A"
     return "PASS" if value else "FAIL"
+
+
+def make_scan_id(scan_time_utc):
+    seed = str(scan_time_utc or datetime.now(timezone.utc).isoformat())
+    return uuid.uuid5(uuid.NAMESPACE_URL, "Photofiver/Stock-finder:" + seed).hex
+
+
+def market_context_for(instruments):
+    out = {inst: {"market_microstructure": {}, "funding": {}, "errors": []} for inst in instruments}
+
+    try:
+        tickers = get_json("/api/v1/market/tickers").get("data", [])
+        ticker_map = {x.get("instId"): x for x in tickers if x.get("instId")}
+    except Exception as exc:
+        ticker_map = {}
+        for inst in instruments:
+            out[inst]["errors"].append(f"ticker_fetch_error: {exc}")
+
+    for inst in instruments:
+        t = ticker_map.get(inst) or {}
+        bid = safe_float(t.get("bidPrice"))
+        ask = safe_float(t.get("askPrice"))
+        last = safe_float(t.get("last"))
+        spread_abs = (ask - bid) if bid is not None and ask is not None else None
+        mid = ((ask + bid) / 2.0) if bid is not None and ask is not None else None
+        spread_pct_mid = (spread_abs / mid * 100.0) if spread_abs is not None and mid else None
+
+        out[inst]["market_microstructure"] = {
+            "bid_price": bid,
+            "ask_price": ask,
+            "bid_size": safe_float(t.get("bidSize")),
+            "ask_size": safe_float(t.get("askSize")),
+            "last_price": last,
+            "ticker_ts_ms": int(t.get("ts")) if str(t.get("ts") or "").isdigit() else None,
+            "spread_abs": spread_abs,
+            "spread_pct_mid": spread_pct_mid,
+        }
+
+        if bid is None or ask is None:
+            out[inst]["errors"].append("missing_bid_or_ask")
+
+        try:
+            fr = get_json("/api/v1/market/funding-rate", {"instId": inst}).get("data", [])
+            fr = fr[0] if fr else {}
+            rate = safe_float(fr.get("fundingRate"))
+            out[inst]["funding"] = {
+                "funding_rate": rate,
+                "funding_rate_pct": rate * 100.0 if rate is not None else None,
+                "funding_time_ms": int(fr.get("fundingTime")) if str(fr.get("fundingTime") or "").isdigit() else None,
+                "funding_interval": fr.get("fundingInterval"),
+                "funding_interval_unit": fr.get("fundingIntervalUnit"),
+                "funding_rate_cap": safe_float(fr.get("fundingRateCap")),
+                "funding_rate_floor": safe_float(fr.get("fundingRateFloor")),
+            }
+            if rate is None:
+                out[inst]["errors"].append("missing_funding_rate")
+        except Exception as exc:
+            out[inst]["funding"] = {}
+            out[inst]["errors"].append(f"funding_fetch_error: {exc}")
+
+    return out
+
+
+def data_quality_flags(row):
+    flags = []
+    obs = row.get("indicators_observed")
+    analysis = row.get("analysis")
+    micro = row.get("market_microstructure") or {}
+    funding = row.get("funding") or {}
+
+    if not isinstance(obs, dict):
+        flags.append("missing_indicators_observed")
+    elif obs.get("error"):
+        flags.append("indicator_observation_error")
+    else:
+        required = (
+            "volume", "rsi14", "macd_12_26_9", "stochastic_8_3", "adx14",
+            "obv", "ema200", "bollinger_20_2", "donchian20", "atr14",
+            "pivot_daily", "cvd_proxy", "support_resistance",
+        )
+        for key in required:
+            if key not in obs or obs.get(key) is None:
+                flags.append(f"missing_indicator:{key}")
+
+    if isinstance(analysis, dict):
+        for reason in analysis.get("reasons") or []:
+            if str(reason).startswith("analysis error:"):
+                flags.append("analysis_error")
+
+    if micro.get("bid_price") is None:
+        flags.append("missing_bid_price")
+    if micro.get("ask_price") is None:
+        flags.append("missing_ask_price")
+    if funding.get("funding_rate") is None:
+        flags.append("missing_funding_rate")
+
+    for err in row.get("market_context_errors") or []:
+        flags.append(str(err))
+
+    return {
+        "ok": len(flags) == 0,
+        "flag_count": len(flags),
+        "flags": sorted(set(flags)),
+    }
 
 
 def entry_conditions(analysis):
@@ -261,6 +375,7 @@ def scan_payload():
     now_uk = now_utc.astimezone(ZoneInfo("Europe/London"))
 
     rows = []
+    market_context = market_context_for([x["inst"] for x in top])
     for market in top:
         inst = market["inst"]
         a = analysed.get(inst)
@@ -277,12 +392,20 @@ def scan_payload():
             "diagnostic_checks_not_used_for_entry": diagnostic_checks(direction, obs),
             "analysis": a,
             "indicators_observed": obs,
+            "market_microstructure": market_context.get(inst, {}).get("market_microstructure", {}),
+            "funding": market_context.get(inst, {}).get("funding", {}),
+            "market_context_errors": market_context.get(inst, {}).get("errors", []),
             "multi_horizon_review": {},
         })
 
-    return {
+    payload = {
+        "scan_id": make_scan_id(now_utc.isoformat()),
         "scan_time_utc": now_utc.isoformat(),
         "scan_time_uk": now_uk.isoformat(),
+        "strategy_version": STRATEGY_VERSION,
+        "git_commit_sha": GIT_COMMIT_SHA,
+        "github_run_id": GITHUB_RUN_ID,
+        "github_run_attempt": GITHUB_RUN_ATTEMPT,
         "scanner_thresholds": {
             "target_pct_min": MIN_TARGET_PCT,
             "historical_hit_rate_pct_min": MIN_HIT_RATE,
@@ -298,8 +421,13 @@ def scan_payload():
         "scanned": rows,
         "selected_for_entry": selected,
         "multi_horizon_review_complete": False,
-        "analytics_version": 2,
+        "analytics_version": ANALYTICS_VERSION,
     }
+
+    for row in payload["scanned"]:
+        row["data_quality"] = data_quality_flags(row)
+
+    return payload
 
 
 def ensure_current_scan():
@@ -316,9 +444,45 @@ def ensure_current_scan():
         except Exception:
             pass
 
-    # The live trader normally writes the scan first. Create an analytics-only
-    # scan only when no fresh scan exists, e.g. while a position is already open.
+    # The live trader normally writes the scan first. If it is fresh, enrich
+    # that exact scan with market context/metadata instead of creating a duplicate.
     if latest and (now - latest) <= timedelta(minutes=7):
+        latest_path = None
+        latest_time = None
+        for path in sorted(SCAN_LOG_DIR.glob("*.json"), reverse=True)[:8]:
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                t = datetime.fromisoformat(str(payload.get("scan_time_utc")).replace("Z", "+00:00"))
+            except Exception:
+                continue
+            if latest_time is None or t > latest_time:
+                latest_time = t
+                latest_path = path
+
+        if latest_path is not None:
+            try:
+                payload = json.loads(latest_path.read_text(encoding="utf-8"))
+                instruments = [r.get("instrument") for r in payload.get("scanned", []) if r.get("instrument")]
+                context = market_context_for(instruments)
+                payload.setdefault("scan_id", make_scan_id(payload.get("scan_time_utc")))
+                payload["strategy_version"] = STRATEGY_VERSION
+                payload["git_commit_sha"] = GIT_COMMIT_SHA
+                payload["github_run_id"] = GITHUB_RUN_ID
+                payload["github_run_attempt"] = GITHUB_RUN_ATTEMPT
+                payload["market_context_captured_at_utc"] = now.isoformat()
+                payload["market_context_note"] = "captured immediately after live scan; analytics only"
+                for row in payload.get("scanned", []):
+                    inst = row.get("instrument")
+                    ctx = context.get(inst, {})
+                    row["market_microstructure"] = ctx.get("market_microstructure", {})
+                    row["funding"] = ctx.get("funding", {})
+                    row["market_context_errors"] = ctx.get("errors", [])
+                    row["data_quality"] = data_quality_flags(row)
+                payload["analytics_version"] = ANALYTICS_VERSION
+                latest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                print(f"ENRICHED_SCAN {latest_path}")
+            except Exception as exc:
+                print(f"ENRICH_SCAN_ERROR {type(exc).__name__}: {exc}")
         return None
 
     payload = scan_payload()
@@ -330,12 +494,22 @@ def ensure_current_scan():
 
 
 def normalize_existing_scan(payload):
+    payload.setdefault("scan_id", make_scan_id(payload.get("scan_time_utc")))
+    payload.setdefault("strategy_version", STRATEGY_VERSION)
+    payload.setdefault("git_commit_sha", GIT_COMMIT_SHA)
+    payload.setdefault("github_run_id", GITHUB_RUN_ID)
+    payload.setdefault("github_run_attempt", GITHUB_RUN_ATTEMPT)
+
     for row in payload.get("scanned", []):
         a = row.get("analysis") if isinstance(row.get("analysis"), dict) else None
         obs = row.get("indicators_observed") if isinstance(row.get("indicators_observed"), dict) else {}
         direction = a.get("direction") if a else None
         row["entry_conditions"] = entry_conditions(a)
         row["diagnostic_checks_not_used_for_entry"] = diagnostic_checks(direction, obs)
+        row.setdefault("market_microstructure", {})
+        row.setdefault("funding", {})
+        row.setdefault("market_context_errors", [])
+        row["data_quality"] = data_quality_flags(row)
         row.setdefault("multi_horizon_review", {})
 
     payload["analysis_cost_assumptions"] = {
@@ -343,7 +517,7 @@ def normalize_existing_scan(payload):
         "round_trip_slippage_pct": ANALYSIS_ROUND_TRIP_SLIPPAGE_PCT,
         "note": "analysis only; does not change live order placement",
     }
-    payload["analytics_version"] = 2
+    payload["analytics_version"] = ANALYTICS_VERSION
     return payload
 
 
@@ -532,7 +706,11 @@ def regenerate_daily_csv(date_str):
         for row in payload.get("scanned", []):
             a = row.get("analysis") or {}
             base = {
+                "scan_id": payload.get("scan_id"),
                 "scan_time_uk": payload.get("scan_time_uk"),
+                "strategy_version": payload.get("strategy_version"),
+                "git_commit_sha": payload.get("git_commit_sha"),
+                "github_run_id": payload.get("github_run_id"),
                 "instrument": row.get("instrument"),
                 "decision": row.get("decision"),
                 "selected_for_entry": bool(
@@ -546,6 +724,16 @@ def regenerate_daily_csv(date_str):
                 "analysis_round_trip_fee_pct": ANALYSIS_ROUND_TRIP_FEE_PCT,
                 "analysis_round_trip_slippage_pct": ANALYSIS_ROUND_TRIP_SLIPPAGE_PCT,
                 "next_candle_direction_confirmed": row.get("next_candle_direction_confirmed"),
+                "bid_price": (row.get("market_microstructure") or {}).get("bid_price"),
+                "ask_price": (row.get("market_microstructure") or {}).get("ask_price"),
+                "spread_abs": (row.get("market_microstructure") or {}).get("spread_abs"),
+                "spread_pct_mid": (row.get("market_microstructure") or {}).get("spread_pct_mid"),
+                "funding_rate": (row.get("funding") or {}).get("funding_rate"),
+                "funding_rate_pct": (row.get("funding") or {}).get("funding_rate_pct"),
+                "funding_time_ms": (row.get("funding") or {}).get("funding_time_ms"),
+                "data_quality_ok": (row.get("data_quality") or {}).get("ok"),
+                "data_quality_flag_count": (row.get("data_quality") or {}).get("flag_count"),
+                "data_quality_flags": json.dumps((row.get("data_quality") or {}).get("flags") or [], ensure_ascii=False, separators=(",", ":")),
             }
 
             reviews = row.get("multi_horizon_review") or {}
