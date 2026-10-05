@@ -1,11 +1,14 @@
-name: Workflow dispatch test
+name: Automatic schedule test
 
 on:
-  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Test
-        run: echo "WORKFLOW_DISPATCH_OK"
+      - name: Test automatic schedule
+        run: |
+          echo "AUTOMATIC_SCHEDULE_OK"
+          date -u
