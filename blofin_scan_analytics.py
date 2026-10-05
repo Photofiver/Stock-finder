@@ -101,10 +101,14 @@ def decision_latency_ms(scan_time_utc, analysis, obs):
 
 def rejection_details(analysis):
     if not isinstance(analysis, dict) or not analysis.get("direction"):
+        reasons = [str(x) for x in ((analysis or {}).get("reasons") or [])] if isinstance(analysis, dict) else []
+        codes = ["NO_DIRECTION_SIGNAL"]
+        if any(x.startswith("analysis error:") for x in reasons):
+            codes.append("ANALYSIS_ERROR")
         return {
             "rejected": True,
-            "reason_codes": ["NO_DIRECTION_SIGNAL"],
-            "reason_text": ["brak pełnego sygnału kierunkowego"],
+            "reason_codes": codes,
+            "reason_text": reasons or ["brak pełnego sygnału kierunkowego"],
         }
 
     if analysis.get("passed"):
@@ -774,6 +778,7 @@ def flatten_obs(row):
     obv = obs.get("obv") or {}
     ema = obs.get("ema200") or {}
     cvd = obs.get("cvd_proxy") or {}
+    atr = obs.get("atr14") or {}
 
     return {
         "direction": analysis.get("direction"),
@@ -789,6 +794,8 @@ def flatten_obs(row):
         "stoch_k": stoch.get("k"),
         "stoch_d": stoch.get("d"),
         "adx14": adx.get("value"),
+        "atr14": atr.get("value"),
+        "atr14_pct_of_price": atr.get("pct_of_price"),
         "volume_vs_ma20": vol.get("vs_ma20"),
         "obv_trend5": obv.get("trend_5"),
         "ema200_position": ema.get("price_position"),
