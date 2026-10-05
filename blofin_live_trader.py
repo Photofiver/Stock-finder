@@ -169,6 +169,7 @@ def write_trade_log(state, active, hist, realized, fee, funding, net, new_cap, e
         "tp_pct": plain(TP_PCT),
         "sl_pct": plain(SL_PCT),
         "signal_snapshot": active.get("signal_snapshot", {}),
+        "execution_timing": active.get("execution_timing", {}),
         "blofin_position_history": hist,
     }
     path.write_text(json.dumps(log, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -702,6 +703,7 @@ def dry_run():
 
 
 def live_run():
+    live_run_started_ms = int(time.time() * 1000)
     if NOTIFY_PATH.exists():
         NOTIFY_PATH.unlink()
     state = load_state()
@@ -727,6 +729,7 @@ def live_run():
         return
 
     sig = best_signal()
+    signal_selected_ms = int(time.time() * 1000)
     if not sig:
         print("NO_ENTRY no qualified signal")
         return
@@ -743,6 +746,7 @@ def live_run():
     pos_side = "net" if mode == "net_mode" else sig["direction"].lower()
     mm = margin_mode()
     plan = make_order_plan(sig, capital)
+    order_plan_ready_ms = int(time.time() * 1000)
 
     available = available_usdt()
     if available < capital:
@@ -773,7 +777,11 @@ def live_run():
         "slOrderPrice": "-1",
         "slTriggerPriceType": "last",
     }
+    signal_bar_open_ms = int(sig["bar_time"])
+    signal_bar_close_ms = signal_bar_open_ms + 15 * 60 * 1000
+    order_submit_started_ms = int(time.time() * 1000)
     result = private_request("POST", "/api/v1/trade/order", body=order_body)
+    order_ack_ms = int(time.time() * 1000)
     data = result.get("data") or {}
     order_id = str(data.get("orderId") or "")
     if not order_id:
@@ -789,6 +797,23 @@ def live_run():
         position_id = str(detail.get("positionId") or "")
     except Exception:
         pass
+
+    execution_timing = {
+        "live_run_started_at_ms": live_run_started_ms,
+        "signal_bar_open_at_ms": signal_bar_open_ms,
+        "signal_bar_close_at_ms": signal_bar_close_ms,
+        "signal_selected_at_ms": signal_selected_ms,
+        "order_plan_ready_at_ms": order_plan_ready_ms,
+        "order_submit_started_at_ms": order_submit_started_ms,
+        "order_ack_at_ms": order_ack_ms,
+        "signal_selected_ms_after_candle_close": signal_selected_ms - signal_bar_close_ms,
+        "order_plan_ready_ms_after_candle_close": order_plan_ready_ms - signal_bar_close_ms,
+        "order_submit_ms_after_candle_close": order_submit_started_ms - signal_bar_close_ms,
+        "order_ack_ms_after_candle_close": order_ack_ms - signal_bar_close_ms,
+        "run_start_to_signal_selected_ms": signal_selected_ms - live_run_started_ms,
+        "signal_selected_to_order_submit_ms": order_submit_started_ms - signal_selected_ms,
+        "exchange_order_round_trip_ms": order_ack_ms - order_submit_started_ms,
+    }
 
     trade_number = int(state.get("trades", 0)) + 1
     state["active"] = {
@@ -809,6 +834,7 @@ def live_run():
         "target_pct": sig["target_pct"],
         "bar_time": sig["bar_time"],
         "signal_snapshot": sig,
+        "execution_timing": execution_timing,
     }
     state["last_trade_signal"] = signal_id
     state["trades"] = trade_number
@@ -829,6 +855,9 @@ def live_run():
         f"TP: {plain(plan['tp'])} (+{plain(TP_PCT)}%)\n"
         f"SL: {plain(plan['sl'])} (-{plain(SL_PCT)}%)\n"
         f"Historyczna skuteczność sygnału: {sig['hit_rate']:.1f}%\n"
+        f"Order wysłany po zamknięciu świecy: {execution_timing['order_submit_ms_after_candle_close'] / 1000.0:.3f} s\n"
+        f"Potwierdzenie BloFin po zamknięciu świecy: {execution_timing['order_ack_ms_after_candle_close'] / 1000.0:.3f} s\n"
+        f"Czas odpowiedzi order API: {execution_timing['exchange_order_round_trip_ms']} ms\n"
         f"Order ID: {order_id}\n"
         f"Stochastic K/D: {sig.get('stoch_k_8', sig.get('k')):.2f} / {sig.get('stoch_d_3', sig.get('d')):.2f}\n"
         f"ATR14: {sig.get('atr14')}\n"
@@ -851,7 +880,12 @@ def live_run():
         f"BloFin OPEN #{trade_number} {sig['direction']} {sig['inst']}",
         open_body,
     )
-    print(f"OPENED {sig['direction']} {sig['inst']} order={order_id} capital={plain(capital)}")
+    print(
+        f"OPENED {sig['direction']} {sig['inst']} order={order_id} capital={plain(capital)} "
+        f"submit_after_close_ms={execution_timing['order_submit_ms_after_candle_close']} "
+        f"ack_after_close_ms={execution_timing['order_ack_ms_after_candle_close']} "
+        f"order_api_ms={execution_timing['exchange_order_round_trip_ms']}"
+    )
 
 
 def summary_12h():
