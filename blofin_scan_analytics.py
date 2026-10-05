@@ -33,7 +33,7 @@ ANALYSIS_ROUND_TRIP_SLIPPAGE_PCT = 0.0
 
 # Metadata only. These values do not change live entry logic.
 STRATEGY_VERSION = "live-entry-v1"
-ANALYTICS_VERSION = 3
+ANALYTICS_VERSION = 4
 GIT_COMMIT_SHA = os.environ.get("GITHUB_SHA", "").strip() or None
 GITHUB_RUN_ID = os.environ.get("GITHUB_RUN_ID", "").strip() or None
 GITHUB_RUN_ATTEMPT = os.environ.get("GITHUB_RUN_ATTEMPT", "").strip() or None
@@ -72,6 +72,118 @@ def make_scan_id(scan_time_utc):
     return uuid.uuid5(uuid.NAMESPACE_URL, "Photofiver/Stock-finder:" + seed).hex
 
 
+def scan_time_features(dt_uk):
+    return {
+        "hour_uk": dt_uk.hour,
+        "minute_uk": dt_uk.minute,
+        "weekday_number": dt_uk.weekday(),
+        "weekday_name": dt_uk.strftime("%A"),
+        "is_weekend": dt_uk.weekday() >= 5,
+    }
+
+
+def decision_latency_ms(scan_time_utc, analysis, obs):
+    base_time = None
+    if isinstance(analysis, dict):
+        base_time = analysis.get("bar_time")
+    if not base_time and isinstance(obs, dict):
+        base_time = obs.get("bar_time")
+    try:
+        base_time = int(base_time)
+    except Exception:
+        return None
+
+    # bar_time is the OPEN of the last fully closed 15m candle.
+    candle_close_ms = base_time + 15 * 60 * 1000
+    scan_ms = int(scan_time_utc.timestamp() * 1000)
+    return max(0, scan_ms - candle_close_ms)
+
+
+def rejection_details(analysis):
+    if not isinstance(analysis, dict) or not analysis.get("direction"):
+        return {
+            "rejected": True,
+            "reason_codes": ["NO_DIRECTION_SIGNAL"],
+            "reason_text": ["brak pełnego sygnału kierunkowego"],
+        }
+
+    if analysis.get("passed"):
+        return {"rejected": False, "reason_codes": [], "reason_text": []}
+
+    reasons = [str(x) for x in (analysis.get("reasons") or [])]
+    codes = []
+
+    target_pct = safe_float(analysis.get("target_pct"))
+    hit_rate = safe_float(analysis.get("hit_rate"))
+    decided = int(analysis.get("decided") or 0)
+
+    if target_pct is None:
+        codes.append("NO_SUPPORT_RESISTANCE_TARGET")
+    elif target_pct < float(MIN_TARGET_PCT):
+        codes.append("TARGET_TOO_CLOSE")
+
+    if decided < int(MIN_DECIDED):
+        codes.append("NOT_ENOUGH_HISTORY")
+
+    if hit_rate is None or hit_rate < float(MIN_HIT_RATE):
+        codes.append("HIT_RATE_TOO_LOW")
+
+    for reason in reasons:
+        if reason.startswith("analysis error:"):
+            codes.append("ANALYSIS_ERROR")
+
+    if not codes:
+        codes.append("OTHER_FILTER_FAIL")
+
+    return {
+        "rejected": True,
+        "reason_codes": sorted(set(codes)),
+        "reason_text": reasons,
+    }
+
+
+def btc_market_context():
+    try:
+        obs = observe_market("BTC-USDT")
+        if not isinstance(obs, dict) or obs.get("error"):
+            return {"instrument": "BTC-USDT", "error": (obs or {}).get("error") if isinstance(obs, dict) else "invalid response"}
+
+        ema = obs.get("ema200") or {}
+        macd = obs.get("macd_12_26_9") or {}
+        adx = obs.get("adx14") or {}
+        atr = obs.get("atr14") or {}
+        rsi = obs.get("rsi14") or {}
+        change8 = safe_float(obs.get("change8_pct"))
+
+        above_ema = ema.get("price_position") == "ABOVE"
+        below_ema = ema.get("price_position") == "BELOW"
+        macd_bull = macd.get("position") == "BULLISH"
+        macd_bear = macd.get("position") == "BEARISH"
+
+        if above_ema and macd_bull and change8 is not None and change8 > 0:
+            trend = "BULLISH"
+        elif below_ema and macd_bear and change8 is not None and change8 < 0:
+            trend = "BEARISH"
+        else:
+            trend = "MIXED"
+
+        return {
+            "instrument": "BTC-USDT",
+            "trend": trend,
+            "price": obs.get("price"),
+            "change8_pct": change8,
+            "atr14": atr.get("value"),
+            "atr14_pct_of_price": atr.get("pct_of_price"),
+            "adx14": adx.get("value"),
+            "rsi14": rsi.get("value"),
+            "ema200_position": ema.get("price_position"),
+            "macd_position": macd.get("position"),
+            "macd_histogram": macd.get("histogram"),
+        }
+    except Exception as exc:
+        return {"instrument": "BTC-USDT", "error": str(exc)}
+
+
 def market_context_for(instruments):
     out = {inst: {"market_microstructure": {}, "funding": {}, "errors": []} for inst in instruments}
 
@@ -101,6 +213,12 @@ def market_context_for(instruments):
             "ticker_ts_ms": int(t.get("ts")) if str(t.get("ts") or "").isdigit() else None,
             "spread_abs": spread_abs,
             "spread_pct_mid": spread_pct_mid,
+            "volume24h": safe_float(t.get("vol24h")),
+            "volume_currency24h": safe_float(t.get("volCurrency24h")),
+            "volume_usd24h": safe_float(t.get("volUsd24h")),
+            "open24h": safe_float(t.get("open24h")),
+            "high24h": safe_float(t.get("high24h")),
+            "low24h": safe_float(t.get("low24h")),
         }
 
         if bid is None or ask is None:
@@ -376,6 +494,7 @@ def scan_payload():
 
     rows = []
     market_context = market_context_for([x["inst"] for x in top])
+    btc_context = btc_market_context()
     for market in top:
         inst = market["inst"]
         a = analysed.get(inst)
@@ -383,11 +502,17 @@ def scan_payload():
         direction = a.get("direction") if isinstance(a, dict) else None
         decision = "WEJSCIE" if isinstance(a, dict) and a.get("passed") else "NIE_WCHODZIC" if a else "BRAK_SYGNALU_KIERUNKOWEGO"
 
+        latency = decision_latency_ms(now_utc, a, obs)
+        reject = rejection_details(a)
+
         rows.append({
             "instrument": inst,
             "market_last_price": market.get("last"),
             "change24_pct": market.get("change24"),
             "decision": decision,
+            "rejection": reject,
+            "decision_latency_ms": latency,
+            "decision_latency_seconds": (latency / 1000.0) if latency is not None else None,
             "entry_conditions": entry_conditions(a),
             "diagnostic_checks_not_used_for_entry": diagnostic_checks(direction, obs),
             "analysis": a,
@@ -406,6 +531,8 @@ def scan_payload():
         "git_commit_sha": GIT_COMMIT_SHA,
         "github_run_id": GITHUB_RUN_ID,
         "github_run_attempt": GITHUB_RUN_ATTEMPT,
+        "scan_time_features": scan_time_features(now_uk),
+        "btc_market_context": btc_context,
         "scanner_thresholds": {
             "target_pct_min": MIN_TARGET_PCT,
             "historical_hit_rate_pct_min": MIN_HIT_RATE,
@@ -464,11 +591,19 @@ def ensure_current_scan():
                 payload = json.loads(latest_path.read_text(encoding="utf-8"))
                 instruments = [r.get("instrument") for r in payload.get("scanned", []) if r.get("instrument")]
                 context = market_context_for(instruments)
+                btc_context = btc_market_context()
                 payload.setdefault("scan_id", make_scan_id(payload.get("scan_time_utc")))
                 payload["strategy_version"] = STRATEGY_VERSION
                 payload["git_commit_sha"] = GIT_COMMIT_SHA
                 payload["github_run_id"] = GITHUB_RUN_ID
                 payload["github_run_attempt"] = GITHUB_RUN_ATTEMPT
+                try:
+                    scan_dt_utc = datetime.fromisoformat(str(payload.get("scan_time_utc")).replace("Z", "+00:00"))
+                except Exception:
+                    scan_dt_utc = now
+                scan_dt_uk = scan_dt_utc.astimezone(ZoneInfo("Europe/London"))
+                payload["scan_time_features"] = scan_time_features(scan_dt_uk)
+                payload["btc_market_context"] = btc_context
                 payload["market_context_captured_at_utc"] = now.isoformat()
                 payload["market_context_note"] = "captured immediately after live scan; analytics only"
                 for row in payload.get("scanned", []):
@@ -477,6 +612,12 @@ def ensure_current_scan():
                     row["market_microstructure"] = ctx.get("market_microstructure", {})
                     row["funding"] = ctx.get("funding", {})
                     row["market_context_errors"] = ctx.get("errors", [])
+                    a = row.get("analysis") if isinstance(row.get("analysis"), dict) else None
+                    obs = row.get("indicators_observed") if isinstance(row.get("indicators_observed"), dict) else {}
+                    latency = decision_latency_ms(scan_dt_utc, a, obs)
+                    row["decision_latency_ms"] = latency
+                    row["decision_latency_seconds"] = (latency / 1000.0) if latency is not None else None
+                    row["rejection"] = rejection_details(a)
                     row["data_quality"] = data_quality_flags(row)
                 payload["analytics_version"] = ANALYTICS_VERSION
                 latest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -499,6 +640,13 @@ def normalize_existing_scan(payload):
     payload.setdefault("git_commit_sha", GIT_COMMIT_SHA)
     payload.setdefault("github_run_id", GITHUB_RUN_ID)
     payload.setdefault("github_run_attempt", GITHUB_RUN_ATTEMPT)
+    try:
+        scan_dt_utc = datetime.fromisoformat(str(payload.get("scan_time_utc")).replace("Z", "+00:00"))
+    except Exception:
+        scan_dt_utc = datetime.now(timezone.utc)
+    scan_dt_uk = scan_dt_utc.astimezone(ZoneInfo("Europe/London"))
+    payload.setdefault("scan_time_features", scan_time_features(scan_dt_uk))
+    payload.setdefault("btc_market_context", {})
 
     for row in payload.get("scanned", []):
         a = row.get("analysis") if isinstance(row.get("analysis"), dict) else None
@@ -506,6 +654,10 @@ def normalize_existing_scan(payload):
         direction = a.get("direction") if a else None
         row["entry_conditions"] = entry_conditions(a)
         row["diagnostic_checks_not_used_for_entry"] = diagnostic_checks(direction, obs)
+        row["rejection"] = rejection_details(a)
+        latency = decision_latency_ms(scan_dt_utc, a, obs)
+        row["decision_latency_ms"] = latency
+        row["decision_latency_seconds"] = (latency / 1000.0) if latency is not None else None
         row.setdefault("market_microstructure", {})
         row.setdefault("funding", {})
         row.setdefault("market_context_errors", [])
@@ -711,8 +863,22 @@ def regenerate_daily_csv(date_str):
                 "strategy_version": payload.get("strategy_version"),
                 "git_commit_sha": payload.get("git_commit_sha"),
                 "github_run_id": payload.get("github_run_id"),
+                "hour_uk": (payload.get("scan_time_features") or {}).get("hour_uk"),
+                "weekday_number": (payload.get("scan_time_features") or {}).get("weekday_number"),
+                "weekday_name": (payload.get("scan_time_features") or {}).get("weekday_name"),
+                "is_weekend": (payload.get("scan_time_features") or {}).get("is_weekend"),
+                "btc_trend": (payload.get("btc_market_context") or {}).get("trend"),
+                "btc_change8_pct": (payload.get("btc_market_context") or {}).get("change8_pct"),
+                "btc_atr14_pct": (payload.get("btc_market_context") or {}).get("atr14_pct_of_price"),
+                "btc_adx14": (payload.get("btc_market_context") or {}).get("adx14"),
+                "btc_rsi14": (payload.get("btc_market_context") or {}).get("rsi14"),
                 "instrument": row.get("instrument"),
                 "decision": row.get("decision"),
+                "rejected": (row.get("rejection") or {}).get("rejected"),
+                "rejection_reason_codes": json.dumps((row.get("rejection") or {}).get("reason_codes") or [], ensure_ascii=False, separators=(",", ":")),
+                "rejection_reason_text": json.dumps((row.get("rejection") or {}).get("reason_text") or [], ensure_ascii=False, separators=(",", ":")),
+                "decision_latency_ms": row.get("decision_latency_ms"),
+                "decision_latency_seconds": row.get("decision_latency_seconds"),
                 "selected_for_entry": bool(
                     payload.get("selected_for_entry")
                     and payload.get("selected_for_entry", {}).get("inst") == row.get("instrument")
@@ -728,6 +894,11 @@ def regenerate_daily_csv(date_str):
                 "ask_price": (row.get("market_microstructure") or {}).get("ask_price"),
                 "spread_abs": (row.get("market_microstructure") or {}).get("spread_abs"),
                 "spread_pct_mid": (row.get("market_microstructure") or {}).get("spread_pct_mid"),
+                "volume24h": (row.get("market_microstructure") or {}).get("volume24h"),
+                "volume_currency24h": (row.get("market_microstructure") or {}).get("volume_currency24h"),
+                "volume_usd24h": (row.get("market_microstructure") or {}).get("volume_usd24h"),
+                "high24h": (row.get("market_microstructure") or {}).get("high24h"),
+                "low24h": (row.get("market_microstructure") or {}).get("low24h"),
                 "funding_rate": (row.get("funding") or {}).get("funding_rate"),
                 "funding_rate_pct": (row.get("funding") or {}).get("funding_rate_pct"),
                 "funding_time_ms": (row.get("funding") or {}).get("funding_time_ms"),
