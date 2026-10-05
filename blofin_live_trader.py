@@ -19,12 +19,21 @@ from email.message import EmailMessage
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from blofin_alert_15m import top_usdt_swaps, analyse_candidate
+from blofin_alert_15m import (
+    top_usdt_swaps,
+    analyse_candidate,
+    observe_market,
+    candles,
+    MIN_TARGET_PCT as SCAN_MIN_TARGET_PCT,
+    MIN_HIT_RATE as SCAN_MIN_HIT_RATE,
+    MIN_DECIDED as SCAN_MIN_DECIDED,
+)
 
 BASE = "https://openapi.blofin.com"
 STATE_PATH = Path("blofin_bot_state.json")
 NOTIFY_PATH = Path("trade_notify.md")
 TRADE_LOG_DIR = Path("blofin_live_trades")
+SCAN_LOG_DIR = Path("blofin_live_scans")
 START_CAPITAL = Decimal("10")
 LEVERAGE = Decimal("1")
 TP_PCT = Decimal("0.5")
@@ -221,26 +230,239 @@ def private_request(method, path, params=None, body=None):
     return data
 
 
-def best_signal():
-    candidates = []
-    for row in top_usdt_swaps():
+def _next_candle_result(direction, entry, nxt):
+    close_change = (nxt["c"] / entry - 1) * 100 if entry else None
+    out = {
+        "bar_time": nxt["t"],
+        "open": nxt["o"],
+        "high": nxt["h"],
+        "low": nxt["l"],
+        "close": nxt["c"],
+        "close_change_pct": close_change,
+        "direction": direction,
+    }
+
+    if direction == "LONG":
+        favorable = (nxt["h"] / entry - 1) * 100
+        adverse = (entry - nxt["l"]) / entry * 100
+        hit_tp = favorable >= float(TP_PCT)
+        hit_sl = adverse >= float(SL_PCT)
+        confirmed = nxt["c"] > entry
+    elif direction == "SHORT":
+        favorable = (entry - nxt["l"]) / entry * 100
+        adverse = (nxt["h"] - entry) / entry * 100
+        hit_tp = favorable >= float(TP_PCT)
+        hit_sl = adverse >= float(SL_PCT)
+        confirmed = nxt["c"] < entry
+    else:
+        out.update({
+            "favorable_pct": None,
+            "adverse_pct": None,
+            "hit_tp_0_5_pct": None,
+            "hit_sl_0_5_pct": None,
+            "direction_confirmed_by_close": None,
+            "result": "NO_DIRECTION",
+        })
+        return out
+
+    if hit_tp and hit_sl:
+        result = "BOTH_TP_AND_SL_IN_SAME_CANDLE"
+    elif hit_tp:
+        result = "TP_HIT"
+    elif hit_sl:
+        result = "SL_HIT"
+    else:
+        result = "NO_TP_OR_SL"
+
+    out.update({
+        "favorable_pct": favorable,
+        "adverse_pct": adverse,
+        "hit_tp_0_5_pct": hit_tp,
+        "hit_sl_0_5_pct": hit_sl,
+        "direction_confirmed_by_close": confirmed,
+        "result": result,
+    })
+    return out
+
+
+def review_previous_scan():
+    if not SCAN_LOG_DIR.exists():
+        return
+
+    pending = []
+    for path in sorted(SCAN_LOG_DIR.glob("*.json"), reverse=True):
         try:
-            x = analyse_candidate(row["inst"])
-            if x and x["passed"]:
-                x["change24"] = row["change24"]
-                candidates.append(x)
+            payload = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             continue
-    if not candidates:
-        return None
-    def rank(x):
-        return (
-            float(x["hit_rate"] or 0),
-            float(x["target_pct"] or 0),
-            float(x["change24"]),
-        )
-    candidates.sort(key=rank, reverse=True)
-    return candidates[0]
+        if not payload.get("next_candle_review_complete"):
+            pending.append((path, payload))
+        if len(pending) >= 4:
+            break
+
+    for path, payload in pending:
+        complete = True
+        for row in payload.get("scanned", []):
+            if row.get("next_candle_review") is not None:
+                continue
+
+            analysis = row.get("analysis") or {}
+            obs = row.get("indicators_observed") or {}
+            bar_time = analysis.get("bar_time") or obs.get("bar_time")
+            entry = analysis.get("close") or obs.get("price")
+            direction = analysis.get("direction")
+
+            if not bar_time or not entry:
+                row["next_candle_review"] = {
+                    "status": "NO_BASE_BAR",
+                    "qualified_for_entry_at_scan": bool(analysis.get("passed")),
+                }
+                continue
+
+            try:
+                bars = candles(row["instrument"])
+                nxt = next((b for b in bars if int(b["t"]) > int(bar_time)), None)
+            except Exception as exc:
+                row["next_candle_review"] = {"status": "ERROR", "error": str(exc)}
+                complete = False
+                continue
+
+            if nxt is None:
+                complete = False
+                continue
+
+            review = _next_candle_result(direction, float(entry), nxt)
+            review["status"] = "DONE"
+            review["qualified_for_entry_at_scan"] = bool(analysis.get("passed"))
+            review["target_pct_at_scan"] = analysis.get("target_pct")
+            review["historical_hit_rate_pct_at_scan"] = analysis.get("hit_rate")
+            review["change8_pct_at_scan"] = analysis.get("change8_pct")
+            row["next_candle_review"] = review
+
+        payload["next_candle_review_complete"] = complete
+        payload["reviewed_at_utc"] = datetime.now(timezone.utc).isoformat()
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def write_scan_log(top, analysed_by_inst, observations_by_inst, selected):
+    SCAN_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    now_utc = datetime.now(timezone.utc)
+    now_uk = now_utc.astimezone(ZoneInfo("Europe/London"))
+    scanned = []
+
+    for row in top:
+        inst = row["inst"]
+        analysis = analysed_by_inst.get(inst)
+        obs = observations_by_inst.get(inst)
+        if analysis is None:
+            decision = "BRAK_SYGNALU_KIERUNKOWEGO"
+        elif analysis.get("passed"):
+            decision = "WEJSCIE"
+        else:
+            decision = "NIE_WCHODZIC"
+
+        atr_pct = None
+        if isinstance(obs, dict):
+            atr_block = obs.get("atr14")
+            if isinstance(atr_block, dict):
+                atr_pct = atr_block.get("pct_of_price")
+
+        scanned.append({
+            "instrument": inst,
+            "market_last_price": row.get("last"),
+            "change24_pct": row.get("change24"),
+            "decision": decision,
+            "percentages": {
+                "change24_pct": row.get("change24"),
+                "change8_pct": analysis.get("change8_pct") if analysis else None,
+                "target_pct": analysis.get("target_pct") if analysis else None,
+                "historical_hit_rate_pct": analysis.get("hit_rate") if analysis else None,
+                "atr_pct_of_price": atr_pct,
+            },
+            "analysis": analysis,
+            "indicators_observed": obs,
+            "next_candle_review": None,
+        })
+
+    payload = {
+        "scan_time_utc": now_utc.isoformat(),
+        "scan_time_uk": now_uk.isoformat(),
+        "scanner_thresholds": {
+            "target_pct_min": SCAN_MIN_TARGET_PCT,
+            "historical_hit_rate_pct_min": SCAN_MIN_HIT_RATE,
+            "minimum_decided_samples": SCAN_MIN_DECIDED,
+            "live_tp_pct": float(TP_PCT),
+            "live_sl_pct": float(SL_PCT),
+        },
+        "indicators_recorded": [
+            "candle",
+            "volume_vs_ma20",
+            "RSI14_and_RSI_MA9",
+            "MACD_12_26_9",
+            "Stochastic_8_3",
+            "ADX14",
+            "OBV",
+            "EMA200",
+            "Bollinger_20_2",
+            "Donchian20",
+            "ATR14",
+            "Daily_Pivot",
+            "CVD_proxy",
+            "Support_Resistance",
+            "change8_pct",
+            "change24_pct",
+        ],
+        "scanned": scanned,
+        "selected_for_entry": selected,
+        "next_candle_review_complete": False,
+    }
+
+    stamp = now_utc.strftime("%Y%m%dT%H%M%SZ")
+    path = SCAN_LOG_DIR / f"{stamp}.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"SCAN_LOG {path}")
+    return path
+
+
+def best_signal():
+    review_previous_scan()
+
+    top = top_usdt_swaps()
+    candidates = []
+    analysed_by_inst = {}
+    observations_by_inst = {}
+
+    for row in top:
+        inst = row["inst"]
+        try:
+            observations_by_inst[inst] = observe_market(inst)
+        except Exception as exc:
+            observations_by_inst[inst] = {"error": str(exc)}
+
+        try:
+            x = analyse_candidate(inst)
+            analysed_by_inst[inst] = x
+            if x:
+                x["change24"] = row["change24"]
+                if x.get("passed"):
+                    candidates.append(x)
+        except Exception as exc:
+            analysed_by_inst[inst] = {"passed": False, "reasons": [f"analysis error: {exc}"]}
+
+    if candidates:
+        def rank(x):
+            return (
+                float(x["hit_rate"] or 0),
+                float(x["target_pct"] or 0),
+                float(x["change24"]),
+            )
+        candidates.sort(key=rank, reverse=True)
+        selected = candidates[0]
+    else:
+        selected = None
+
+    write_scan_log(top, analysed_by_inst, observations_by_inst, selected)
+    return selected
 
 
 def instrument(inst):
