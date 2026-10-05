@@ -54,6 +54,10 @@ jobs:
             git add blofin_live_trades
           fi
 
+          if [ -d blofin_live_scans ]; then
+            git add blofin_live_scans
+          fi
+
           if git diff --cached --quiet; then
             echo "No live state changes to persist"
             exit 0
