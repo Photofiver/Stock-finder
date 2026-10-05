@@ -118,56 +118,160 @@ def wait_for_confirmed_signal_close(top7, expected_close_ms):
 
 
 def build_live_diagnostic(state, top7):
+    def fmt(value, digits=6):
+        if value is None:
+            return "n/a"
+        try:
+            return f"{float(value):.{digits}g}"
+        except Exception:
+            return str(value)
+
+    def pct_vs(current, reference):
+        if reference in (None, 0):
+            return None
+        return ((float(current) / float(reference)) - 1.0) * 100.0
+
     lines = [
         f"{bot.SIGNAL_LABEL} TOP{bot.TOP_N} — BRAK WEJSCIA",
-        "SHORT 4/4: MACD↓ + RED + RED VOL>last GREEN + korpus <=1% ceny close",
-        "LONG 5/5: MACD↑ + GREEN + GREEN VOL>last RED + korpus >=60% zakresu + close >=2% vs 10 swiec wczesniej",
+        "SHORT: MACD cross w dol + RED + RED volume > ostatni GREEN + korpus <=1% ceny close",
+        "LONG: MACD cross w gore + GREEN + GREEN volume > ostatni RED + korpus >=60% zakresu + close >=2% vs 10 swiec wczesniej",
         "",
     ]
+    records = []
 
     for rank, inst in enumerate(top7, start=1):
         try:
             bars = bot.fetch_signal_bars(inst)
             if len(bars) < 40:
                 lines.append(f"{rank}. {inst} — brak danych")
+                records.append({"rank": rank, "inst": inst, "error": "insufficient_data"})
                 continue
 
             i = len(bars) - 1
+            prev = bars[i - 1]
+            cur = bars[i]
             s = bot.short_entry_metrics(bars, i)
             l = bot.long_entry_metrics(bars, i)
             if not s or not l:
                 lines.append(f"{rank}. {inst} — brak danych MACD/Volume")
+                records.append({"rank": rank, "inst": inst, "error": "missing_macd_or_volume"})
                 continue
 
             s_checks = [
-                ("MACD↓", s["macd_cross_down"]),
+                ("MACD_DOWN", s["macd_cross_down"]),
                 ("RED", s["red_candle"]),
-                ("RED VOL>last GREEN", s["volume_higher_than_last_green"]),
-                ("BODY<=1%", s["short_body_max_1pct"]),
+                ("RED_VOL_GT_GREEN", s["volume_higher_than_last_green"]),
+                ("BODY_LE_1PCT", s["short_body_max_1pct"]),
             ]
             l_checks = [
-                ("MACD↑", l["macd_cross_up"]),
+                ("MACD_UP", l["macd_cross_up"]),
                 ("GREEN", l["green_candle"]),
-                ("GREEN VOL>last RED", l["volume_higher_than_last_red"]),
-                ("BODY>=60%", l["green_body_min_60pct"]),
-                ("10BAR>=+2%", l["rise_10_bars_min_2pct"]),
+                ("GREEN_VOL_GT_RED", l["volume_higher_than_last_red"]),
+                ("BODY_GE_60PCT", l["green_body_min_60pct"]),
+                ("RISE10_GE_2PCT", l["rise_10_bars_min_2pct"]),
             ]
 
             s_ok = sum(1 for _, ok in s_checks if ok)
             l_ok = sum(1 for _, ok in l_checks if ok)
-            s_missing = ", ".join(name for name, ok in s_checks if not ok)
-            l_missing = ", ".join(name for name, ok in l_checks if not ok)
+            s_missing = [name for name, ok in s_checks if not ok]
+            l_missing = [name for name, ok in l_checks if not ok]
 
-            lines.append(f"{rank}. {inst}")
+            current_volume = float(cur["v"])
+            vol_vs_green_pct = pct_vs(current_volume, s["last_green_volume"])
+            vol_vs_red_pct = pct_vs(current_volume, l["last_red_volume"])
+            rsi = cur.get("rsi")
+            candle = bot.candle_color(cur)
+            close_ms = bot.bar_close_ms(cur)
+
+            record = {
+                "rank": rank,
+                "inst": inst,
+                "close_ms": close_ms,
+                "candle": {
+                    "color": candle,
+                    "open": float(cur["o"]),
+                    "high": float(cur["h"]),
+                    "low": float(cur["l"]),
+                    "close": float(cur["c"]),
+                    "volume": current_volume,
+                },
+                "rsi14": None if rsi is None else float(rsi),
+                "macd": {
+                    "prev_dif": float(prev["macd_dif"]),
+                    "prev_dea": float(prev["macd_dea"]),
+                    "prev_hist": float(prev["macd_hist"]),
+                    "dif": float(cur["macd_dif"]),
+                    "dea": float(cur["macd_dea"]),
+                    "hist": float(cur["macd_hist"]),
+                    "cross_down": bool(s["macd_cross_down"]),
+                    "cross_up": bool(l["macd_cross_up"]),
+                },
+                "short": {
+                    "score": f"{s_ok}/4",
+                    "missing": s_missing,
+                    "red_candle": bool(s["red_candle"]),
+                    "body_pct_close": float(s["red_body_pct_close"]),
+                    "body_limit_pct": 1.0,
+                    "volume": current_volume,
+                    "last_green_volume": s["last_green_volume"],
+                    "volume_vs_last_green_pct": vol_vs_green_pct,
+                },
+                "long": {
+                    "score": f"{l_ok}/5",
+                    "missing": l_missing,
+                    "green_candle": bool(l["green_candle"]),
+                    "body_pct_range": float(l["green_body_ratio"]) * 100.0,
+                    "body_min_pct_range": 60.0,
+                    "volume": current_volume,
+                    "last_red_volume": l["last_red_volume"],
+                    "volume_vs_last_red_pct": vol_vs_red_pct,
+                    "rise_10_bars_pct": float(l["rise_10_bars_pct"]),
+                    "rise_10_bars_min_pct": 2.0,
+                },
+            }
+            records.append(record)
+
             lines.append(
-                f"   S {s_ok}/4" + ("" if s_ok == 4 else f" | brak: {s_missing}")
+                f"{rank}. {inst} | {candle} | O={fmt(cur['o'])} H={fmt(cur['h'])} "
+                f"L={fmt(cur['l'])} C={fmt(cur['c'])} | RSI14={fmt(rsi, 4)}"
             )
             lines.append(
-                f"   L {l_ok}/5" + ("" if l_ok == 5 else f" | brak: {l_missing}")
+                "   MACD: "
+                f"prev DIF={fmt(prev['macd_dif'])} DEA={fmt(prev['macd_dea'])} HIST={fmt(prev['macd_hist'])} -> "
+                f"now DIF={fmt(cur['macd_dif'])} DEA={fmt(cur['macd_dea'])} HIST={fmt(cur['macd_hist'])} | "
+                f"cross DOWN={'TAK' if s['macd_cross_down'] else 'NIE'}, "
+                f"UP={'TAK' if l['macd_cross_up'] else 'NIE'}"
+            )
+            lines.append(
+                f"   SHORT {s_ok}/4: candle RED={'TAK' if s['red_candle'] else 'NIE'} | "
+                f"VOL={fmt(current_volume)} vs last GREEN={fmt(s['last_green_volume'])} "
+                f"({fmt(vol_vs_green_pct, 4)}%) | body={s['red_body_pct_close']:.3f}% <=1% "
+                f"| brak: {', '.join(s_missing) if s_missing else 'NIC'}"
+            )
+            lines.append(
+                f"   LONG  {l_ok}/5: candle GREEN={'TAK' if l['green_candle'] else 'NIE'} | "
+                f"VOL={fmt(current_volume)} vs last RED={fmt(l['last_red_volume'])} "
+                f"({fmt(vol_vs_red_pct, 4)}%) | body={l['green_body_ratio'] * 100:.1f}% >=60% "
+                f"| 10BAR={l['rise_10_bars_pct']:+.3f}% >=2% "
+                f"| brak: {', '.join(l_missing) if l_missing else 'NIC'}"
             )
         except Exception as exc:
-            lines.append(f"{rank}. {inst} — blad danych: {type(exc).__name__}")
+            lines.append(f"{rank}. {inst} — blad danych: {type(exc).__name__}: {exc}")
+            records.append(
+                {
+                    "rank": rank,
+                    "inst": inst,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
 
+    state["last_diagnostic"] = {
+        "generated_at_ms": bot.now_ms(),
+        "signal_label": bot.SIGNAL_LABEL,
+        "result": "NO_ENTRY",
+        "top7": list(top7),
+        "instruments": records,
+    }
     return "\n".join(lines)
 
 
