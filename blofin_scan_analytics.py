@@ -111,15 +111,15 @@ def diagnostic_checks(direction, obs):
 
     rsi = obs.get("rsi14") or {}
     rsi_val = safe_float(rsi.get("value"))
-    out["rsi_directional"] = pass_fail((rsi_val >= 50) if direction == "LONG" else (rsi_val <= 50) if rsi_val is not None else None)
+    out["rsi_directional"] = pass_fail(None if rsi_val is None else ((rsi_val >= 50) if direction == "LONG" else (rsi_val <= 50)))
 
     macd = obs.get("macd_12_26_9") or {}
     pos = macd.get("position")
-    out["macd_directional"] = pass_fail((pos == "BULLISH") if direction == "LONG" else (pos == "BEARISH") if pos else None)
+    out["macd_directional"] = pass_fail(None if not pos else ((pos == "BULLISH") if direction == "LONG" else (pos == "BEARISH")))
 
     stoch = obs.get("stochastic_8_3") or {}
     spos = stoch.get("position")
-    out["stochastic_k_vs_d"] = pass_fail((spos == "K_ABOVE_D") if direction == "LONG" else (spos == "K_BELOW_D") if spos else None)
+    out["stochastic_k_vs_d"] = pass_fail(None if not spos else ((spos == "K_ABOVE_D") if direction == "LONG" else (spos == "K_BELOW_D")))
 
     adx = obs.get("adx14") or {}
     adx_val = safe_float(adx.get("value"))
@@ -127,19 +127,19 @@ def diagnostic_checks(direction, obs):
 
     obv = obs.get("obv") or {}
     otrend = obv.get("trend_5")
-    out["obv_directional"] = pass_fail((otrend == "RISING") if direction == "LONG" else (otrend == "FALLING") if otrend else None)
+    out["obv_directional"] = pass_fail(None if not otrend else ((otrend == "RISING") if direction == "LONG" else (otrend == "FALLING")))
 
     ema = obs.get("ema200") or {}
     epos = ema.get("price_position")
-    out["ema200_directional"] = pass_fail((epos == "ABOVE") if direction == "LONG" else (epos == "BELOW") if epos else None)
+    out["ema200_directional"] = pass_fail(None if not epos else ((epos == "ABOVE") if direction == "LONG" else (epos == "BELOW")))
 
     cvd = obs.get("cvd_proxy") or {}
     ctrend = cvd.get("trend_5")
-    out["cvd_proxy_directional"] = pass_fail((ctrend == "RISING") if direction == "LONG" else (ctrend == "FALLING") if ctrend else None)
+    out["cvd_proxy_directional"] = pass_fail(None if not ctrend else ((ctrend == "RISING") if direction == "LONG" else (ctrend == "FALLING")))
 
     candle = obs.get("candle") or {}
     color = candle.get("color")
-    out["candle_directional"] = pass_fail((color == "GREEN") if direction == "LONG" else (color == "RED") if color else None)
+    out["candle_directional"] = pass_fail(None if not color else ((color == "GREEN") if direction == "LONG" else (color == "RED")))
 
     return out
 
