@@ -3,11 +3,11 @@ name: BloFin LIVE trader
 on:
   workflow_dispatch:
   schedule:
-    - cron: "2,17,32,47 * * * *"
+    - cron: "13,28,43,58 * * * *"
 
 concurrency:
   group: blofin-live-trader
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -27,7 +27,36 @@ jobs:
       - name: Syntax check
         run: python -m py_compile blofin_alert_15m.py blofin_live_trader.py blofin_scan_analytics.py
 
-      - name: Run BloFin LIVE trader
+      - name: Align scheduled run to candle close +2s
+        if: github.event_name == 'schedule'
+        run: |
+          python - <<'PY'
+          import datetime
+          import time
+
+          now = time.time()
+          dt = datetime.datetime.now(datetime.timezone.utc)
+          hour_start = dt.replace(minute=0, second=0, microsecond=0).timestamp()
+          trigger_minutes = (13, 28, 43, 58)
+          candidates = [hour_start + minute * 60 for minute in trigger_minutes]
+          previous = [ts for ts in candidates if ts <= now]
+          trigger = max(previous) if previous else hour_start - 2 * 60
+          target = trigger + 122  # :13 -> :15:02, :28 -> :30:02, etc.
+          delay = target - time.time()
+
+          print(f"TIMING_PROBE_NOW_UTC={datetime.datetime.now(datetime.timezone.utc).isoformat()}")
+          print(f"TIMING_PROBE_TARGET_UTC={datetime.datetime.fromtimestamp(target, datetime.timezone.utc).isoformat()}")
+          print(f"TIMING_PROBE_WAIT_SECONDS={max(0.0, delay):.3f}")
+
+          if delay > 0:
+              time.sleep(delay)
+
+          actual = time.time()
+          print(f"TIMING_PROBE_START_UTC={datetime.datetime.fromtimestamp(actual, datetime.timezone.utc).isoformat()}")
+          print(f"TIMING_PROBE_START_AFTER_TARGET_MS={int((actual - target) * 1000)}")
+          PY
+
+      - name: Run BloFin timing probe
         env:
           BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
           BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
@@ -37,7 +66,7 @@ jobs:
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           EMAIL_SMTP_HOST: ${{ secrets.EMAIL_SMTP_HOST }}
           EMAIL_SMTP_PORT: ${{ secrets.EMAIL_SMTP_PORT }}
-        run: python blofin_live_trader.py
+        run: python blofin_live_trader.py --dry-run
 
       - name: Update scan analytics
         continue-on-error: true
