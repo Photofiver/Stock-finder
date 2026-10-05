@@ -89,7 +89,7 @@ jobs:
             probe_start_ms=$(date +%s%3N)
 
             # Timing/data collection only. This does not place a real order.
-            python blofin_live_trader.py --dry-run
+            python blofin_live_trader.py 
             python blofin_scan_analytics.py || true
 
             probe_end_ms=$(date +%s%3N)
