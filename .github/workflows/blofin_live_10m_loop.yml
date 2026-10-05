@@ -1,25 +1,25 @@
-name: BloFin LIVE trader
+name: BloFin 15m timing test
 
 on:
   workflow_dispatch:
-  repository_dispatch:
-    types: [blofin-quarter-hour]
-  schedule:
-    - cron: "13,28,43,58 * * * *"
 
 concurrency:
-  group: blofin-live-trader
+  group: blofin-15m-timing-test
   cancel-in-progress: true
 
 permissions:
   contents: write
 
 jobs:
-  live:
+  timing:
     runs-on: ubuntu-latest
+    timeout-minutes: 355
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -29,78 +29,93 @@ jobs:
       - name: Syntax check
         run: python -m py_compile blofin_alert_15m.py blofin_live_trader.py blofin_scan_analytics.py
 
-      - name: Align trigger to candle close +2s
-        if: github.event_name == 'schedule' || github.event_name == 'repository_dispatch'
+      - name: Configure git
         run: |
-          python - <<'PY'
-          import datetime
-          import time
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          now = time.time()
-          dt = datetime.datetime.now(datetime.timezone.utc)
-          hour_start = dt.replace(minute=0, second=0, microsecond=0).timestamp()
-          # Always align to the next 15-minute candle close plus 2 seconds.
+      - name: Run 23 aligned 15m probes
+        shell: bash
+        run: |
+          set -u
+          mkdir -p blofin_live_scan_summary
+
+          for i in $(seq 1 23); do
+            echo "===== PROBE $i / 23 ====="
+
+            export PROBE_INDEX="$i"
+            python - <<'PY'
+          import csv
+          import datetime
+          import os
+          import time
+          from pathlib import Path
+
           quarter = 15 * 60
+          now = time.time()
           target = ((int(now) // quarter) + 1) * quarter + 2
           delay = target - time.time()
 
-          print(f"TIMING_PROBE_NOW_UTC={datetime.datetime.now(datetime.timezone.utc).isoformat()}")
-          print(f"TIMING_PROBE_TARGET_UTC={datetime.datetime.fromtimestamp(target, datetime.timezone.utc).isoformat()}")
-          print(f"TIMING_PROBE_WAIT_SECONDS={max(0.0, delay):.3f}")
+          print(f"TARGET_UTC={datetime.datetime.fromtimestamp(target, datetime.timezone.utc).isoformat()}")
+          print(f"WAIT_SECONDS={max(0.0, delay):.3f}")
 
           if delay > 0:
               time.sleep(delay)
 
           actual = time.time()
-          print(f"TIMING_PROBE_START_UTC={datetime.datetime.fromtimestamp(actual, datetime.timezone.utc).isoformat()}")
-          print(f"TIMING_PROBE_START_AFTER_TARGET_MS={int((actual - target) * 1000)}")
+          lateness_ms = int((actual - target) * 1000)
+          print(f"ACTUAL_START_UTC={datetime.datetime.fromtimestamp(actual, datetime.timezone.utc).isoformat()}")
+          print(f"START_AFTER_TARGET_MS={lateness_ms}")
+
+          path = Path("blofin_live_scan_summary/timing_probe.csv")
+          exists = path.exists()
+          with path.open("a", newline="", encoding="utf-8") as fh:
+              w = csv.writer(fh)
+              if not exists:
+                  w.writerow([
+                      "probe",
+                      "target_utc",
+                      "actual_start_utc",
+                      "start_after_target_ms",
+                  ])
+              w.writerow([
+                  os.environ.get("PROBE_INDEX"),
+                  datetime.datetime.fromtimestamp(target, datetime.timezone.utc).isoformat(),
+                  datetime.datetime.fromtimestamp(actual, datetime.timezone.utc).isoformat(),
+                  lateness_ms,
+              ])
           PY
 
-      - name: Run BloFin timing probe
-        env:
-          BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
-          BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
-          BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
-          EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
-          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-          EMAIL_TO: ${{ secrets.EMAIL_TO }}
-          EMAIL_SMTP_HOST: ${{ secrets.EMAIL_SMTP_HOST }}
-          EMAIL_SMTP_PORT: ${{ secrets.EMAIL_SMTP_PORT }}
-        run: python blofin_live_trader.py --dry-run
+            probe_start_ms=$(date +%s%3N)
 
-      - name: Update scan analytics
-        continue-on-error: true
-        run: python blofin_scan_analytics.py
+            # Timing/data collection only. This does not place a real order.
+            python blofin_live_trader.py --dry-run
+            python blofin_scan_analytics.py || true
 
-      - name: Persist rolled capital and trade logs
-        if: always()
-        run: |
-          set -e
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            probe_end_ms=$(date +%s%3N)
+            probe_duration_ms=$((probe_end_ms - probe_start_ms))
+            echo "PROBE_DURATION_MS=$probe_duration_ms"
 
-          if [ -f blofin_bot_state.json ]; then
-            git add blofin_bot_state.json
-          fi
+            python - <<PY
+          import csv
+          from pathlib import Path
 
-          if [ -d blofin_live_trades ]; then
-            git add blofin_live_trades
-          fi
+          path = Path("blofin_live_scan_summary/timing_probe_duration.csv")
+          exists = path.exists()
+          with path.open("a", newline="", encoding="utf-8") as fh:
+              w = csv.writer(fh)
+              if not exists:
+                  w.writerow(["probe", "scan_and_analytics_duration_ms"])
+              w.writerow(["$i", "$probe_duration_ms"])
+          PY
 
-          if [ -d blofin_live_scans ]; then
-            git add blofin_live_scans
-          fi
+            git add blofin_live_scans blofin_live_scan_summary 2>/dev/null || true
 
-          if [ -d blofin_live_scan_summary ]; then
-            git add blofin_live_scan_summary
-          fi
-
-          if git diff --cached --quiet; then
-            echo "No live state changes to persist"
-            exit 0
-          fi
-
-          git commit -m "Persist BloFin live state and trade log [skip ci]"
-          git pull --rebase origin main
-          git push origin HEAD:main
-# schedule refresh
+            if ! git diff --cached --quiet; then
+              git commit -m "Persist BloFin timing probe $i [skip ci]"
+              git pull --rebase origin main
+              git push origin HEAD:main
+            else
+              echo "No timing data changes to persist"
+            fi
+          done
