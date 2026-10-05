@@ -2,6 +2,8 @@ name: BloFin LIVE signal watch
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '1,16,31,46 * * * *'
 
 permissions:
   contents: write
