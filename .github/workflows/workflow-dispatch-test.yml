@@ -3,12 +3,18 @@ name: Automatic schedule test
 on:
   schedule:
     - cron: '*/5 * * * *'
+  workflow_run:
+    workflows:
+      - Strategy watch 5m
+    types:
+      - completed
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Test automatic schedule
+      - name: Test automatic trigger
         run: |
-          echo "AUTOMATIC_SCHEDULE_OK"
+          echo "AUTOMATIC_TRIGGER_OK"
+          echo "EVENT=${{ github.event_name }}"
           date -u
