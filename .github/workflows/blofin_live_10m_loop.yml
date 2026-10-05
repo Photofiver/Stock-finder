@@ -25,7 +25,7 @@ jobs:
           python-version: "3.11"
 
       - name: Syntax check
-        run: python -m py_compile blofin_alert_15m.py blofin_live_trader.py
+        run: python -m py_compile blofin_alert_15m.py blofin_live_trader.py blofin_scan_analytics.py
 
       - name: Run BloFin LIVE trader
         env:
@@ -38,6 +38,10 @@ jobs:
           EMAIL_SMTP_HOST: ${{ secrets.EMAIL_SMTP_HOST }}
           EMAIL_SMTP_PORT: ${{ secrets.EMAIL_SMTP_PORT }}
         run: python blofin_live_trader.py
+
+      - name: Update scan analytics
+        continue-on-error: true
+        run: python blofin_scan_analytics.py
 
       - name: Persist rolled capital and trade logs
         if: always()
@@ -56,6 +60,10 @@ jobs:
 
           if [ -d blofin_live_scans ]; then
             git add blofin_live_scans
+          fi
+
+          if [ -d blofin_live_scan_summary ]; then
+            git add blofin_live_scan_summary
           fi
 
           if git diff --cached --quiet; then
