@@ -156,6 +156,7 @@ def persist_learning_12h(
                     "RED candle",
                     "current RED volume > last GREEN candle volume",
                     "RED body <= 1% of close",
+                    "price return over last 20 bars <= 10%",
                 ],
                 "LONG": [
                     "MACD cross up",
@@ -164,10 +165,29 @@ def persist_learning_12h(
                     "GREEN body >= 60% of candle range",
                     "close >= 2% vs 10 bars earlier",
                     "no Stochastic 14,1,3 cross DOWN in last 3 candles",
+                    "RSI14 < 70",
                 ],
             },
             "scans": [],
         }
+
+    payload["strategy_rules"] = {
+        "SHORT": [
+            "RED candle",
+            "current RED volume > last GREEN candle volume",
+            "RED body <= 1% of close",
+            "price return over last 20 bars <= 10%",
+        ],
+        "LONG": [
+            "MACD cross up",
+            "GREEN candle",
+            "current GREEN volume > last RED candle volume",
+            "GREEN body >= 60% of candle range",
+            "close >= 2% vs 10 bars earlier",
+            "no Stochastic 14,1,3 cross DOWN in last 3 candles",
+            "RSI14 < 70",
+        ],
+    }
 
     update_learning_movements(payload, tickers, now)
 
@@ -332,8 +352,8 @@ def build_live_diagnostic(state, top7):
 
     lines = [
         f"{bot.SIGNAL_LABEL} TOP{bot.TOP_N} — BRAK WEJSCIA",
-        "SHORT: RED + RED volume > ostatni GREEN + korpus <=1% ceny close",
-        "LONG: MACD cross w gore + GREEN + GREEN volume > ostatni RED + korpus >=60% zakresu + close >=2% vs 10 swiec wczesniej + brak Stoch 14,1,3 cross DOWN w ostatnich 3 swiecach",
+        "SHORT: RED + RED volume > ostatni GREEN + korpus <=1% ceny close + return20 <=10%",
+        "LONG: MACD cross w gore + GREEN + GREEN volume > ostatni RED + korpus >=60% zakresu + close >=2% vs 10 swiec wczesniej + brak Stoch 14,1,3 cross DOWN w ostatnich 3 swiecach + RSI14 <70",
         "",
     ]
     records = []
@@ -360,6 +380,7 @@ def build_live_diagnostic(state, top7):
                 ("RED", s["red_candle"]),
                 ("RED_VOL_GT_GREEN", s["volume_higher_than_last_green"]),
                 ("BODY_LE_1PCT", s["short_body_max_1pct"]),
+                ("RETURN20_LE_10PCT", s["return_20_bars_max_10pct"]),
             ]
             l_checks = [
                 ("MACD_UP", l["macd_cross_up"]),
@@ -368,6 +389,7 @@ def build_live_diagnostic(state, top7):
                 ("BODY_GE_60PCT", l["green_body_min_60pct"]),
                 ("RISE10_GE_2PCT", l["rise_10_bars_min_2pct"]),
                 ("STOCH_NO_DOWN_LAST3", l["stoch_long_ok"]),
+                ("RSI_LT_70", l["rsi_below_70"]),
             ]
 
             s_ok = sum(1 for _, ok in s_checks if ok)
@@ -406,7 +428,7 @@ def build_live_diagnostic(state, top7):
                     "cross_up": bool(l["macd_cross_up"]),
                 },
                 "short": {
-                    "score": f"{s_ok}/3",
+                    "score": f"{s_ok}/4",
                     "missing": s_missing,
                     "red_candle": bool(s["red_candle"]),
                     "body_pct_close": float(s["red_body_pct_close"]),
@@ -414,9 +436,11 @@ def build_live_diagnostic(state, top7):
                     "volume": current_volume,
                     "last_green_volume": s["last_green_volume"],
                     "volume_vs_last_green_pct": vol_vs_green_pct,
+                    "return_20_bars_pct": float(s["return_20_bars_pct"]),
+                    "return_20_bars_max_pct": 10.0,
                 },
                 "long": {
-                    "score": f"{l_ok}/6",
+                    "score": f"{l_ok}/7",
                     "missing": l_missing,
                     "green_candle": bool(l["green_candle"]),
                     "body_pct_range": float(l["green_body_ratio"]) * 100.0,
@@ -430,6 +454,9 @@ def build_live_diagnostic(state, top7):
                     "stoch_d": l["stoch_d"],
                     "stoch_cross_down_recent_3": bool(l["stoch_cross_down_recent_3"]),
                     "stoch_long_ok": bool(l["stoch_long_ok"]),
+                    "rsi14": l["rsi14"],
+                    "rsi_max_exclusive": 70.0,
+                    "rsi_below_70": bool(l["rsi_below_70"]),
                 },
             }
             records.append(record)
@@ -446,18 +473,20 @@ def build_live_diagnostic(state, top7):
                 f"UP={'TAK' if l['macd_cross_up'] else 'NIE'}"
             )
             lines.append(
-                f"   SHORT {s_ok}/3: candle RED={'TAK' if s['red_candle'] else 'NIE'} | "
+                f"   SHORT {s_ok}/4: candle RED={'TAK' if s['red_candle'] else 'NIE'} | "
                 f"VOL={fmt(current_volume)} vs last GREEN={fmt(s['last_green_volume'])} "
                 f"({fmt(vol_vs_green_pct, 4)}%) | body={s['red_body_pct_close']:.3f}% <=1% "
+                f"| RETURN20={s['return_20_bars_pct']:+.3f}% <=10% "
                 f"| brak: {', '.join(s_missing) if s_missing else 'NIC'}"
             )
             lines.append(
-                f"   LONG  {l_ok}/6: candle GREEN={'TAK' if l['green_candle'] else 'NIE'} | "
+                f"   LONG  {l_ok}/7: candle GREEN={'TAK' if l['green_candle'] else 'NIE'} | "
                 f"VOL={fmt(current_volume)} vs last RED={fmt(l['last_red_volume'])} "
                 f"({fmt(vol_vs_red_pct, 4)}%) | body={l['green_body_ratio'] * 100:.1f}% >=60% "
                 f"| 10BAR={l['rise_10_bars_pct']:+.3f}% >=2% "
                 f"| STOCH K={fmt(l['stoch_k'], 4)} D={fmt(l['stoch_d'], 4)} "
                 f"| DOWN last3={'TAK' if l['stoch_cross_down_recent_3'] else 'NIE'} "
+                f"| RSI14={fmt(l['rsi14'], 4)} <70 "
                 f"| brak: {', '.join(l_missing) if l_missing else 'NIC'}"
             )
         except Exception as exc:
