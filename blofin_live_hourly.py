@@ -455,6 +455,12 @@ def short_entry_metrics(bars, i):
         if float(cur["c"]) > 0
         else float("inf")
     )
+    close_20_bars_ago = float(bars[i - 20]["c"]) if i >= 20 else None
+    return_20_bars_pct = (
+        ((float(cur["c"]) / close_20_bars_ago) - 1.0) * 100.0
+        if close_20_bars_ago is not None and close_20_bars_ago > 0
+        else float("inf")
+    )
 
     return {
         "macd_cross_down": macd_cross_down,
@@ -462,6 +468,8 @@ def short_entry_metrics(bars, i):
         "volume_higher_than_last_green": volume_higher_than_last_green,
         "red_body_pct_close": red_body_pct_close,
         "short_body_max_1pct": red_body_pct_close <= 1.0,
+        "return_20_bars_pct": return_20_bars_pct,
+        "return_20_bars_max_10pct": return_20_bars_pct <= 10.0,
         "volume": float(cur["v"]),
         "last_green_volume": last_green_volume,
         "macd_dif": float(cur["macd_dif"]),
@@ -477,6 +485,7 @@ def short_entry_signal(bars, i):
         and metrics["red_candle"]
         and metrics["volume_higher_than_last_green"]
         and metrics["red_body_pct_close"] <= 1.0
+        and metrics["return_20_bars_max_10pct"]
     )
 
 
@@ -573,6 +582,8 @@ def long_entry_metrics(bars, i):
     stoch_d = stoch_d_values[i] if i < len(stoch_d_values) else None
     stoch_cross_down_recent_3 = recent_stoch_cross_down(bars, i, 3)
     stoch_long_ok = not stoch_cross_down_recent_3
+    rsi14 = cur.get("rsi")
+    rsi_below_70 = rsi14 is not None and float(rsi14) < 70.0
 
     return {
         "macd_cross_up": macd_cross_up,
@@ -586,6 +597,8 @@ def long_entry_metrics(bars, i):
         "stoch_d": stoch_d,
         "stoch_cross_down_recent_3": stoch_cross_down_recent_3,
         "stoch_long_ok": stoch_long_ok,
+        "rsi14": None if rsi14 is None else float(rsi14),
+        "rsi_below_70": rsi_below_70,
         "volume": float(cur["v"]),
         "last_red_volume": last_red_volume,
         "macd_dif": float(cur["macd_dif"]),
@@ -604,6 +617,7 @@ def long_entry_signal(bars, i):
         and metrics["green_body_min_60pct"]
         and metrics["rise_10_bars_min_2pct"]
         and metrics["stoch_long_ok"]
+        and metrics["rsi_below_70"]
     )
 
 
