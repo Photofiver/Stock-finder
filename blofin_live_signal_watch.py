@@ -13,6 +13,9 @@ CANDLE_CONFIRM_ATTEMPTS = 30
 CANDLE_CONFIRM_DELAY_SEC = 1
 BROKER_ID = os.getenv("BLOFIN_BROKER_ID", "dd3511977f23cc87").strip()
 UK_TZ = ZoneInfo("Europe/London")
+LEARNING_FILE = os.getenv("LIVE_LEARNING_FILE", "blofin_learning_12h.json")
+LEARNING_WINDOW_MS = 12 * 60 * 60 * 1000
+LEARNING_CHECKPOINT_LIMIT = 60
 
 _original_private_request = bot.private_request
 
@@ -49,6 +52,202 @@ def save_json(path, data):
         json.dump(data, f, ensure_ascii=False, indent=2, sort_keys=True)
         f.write("\n")
     os.replace(tmp, path)
+
+
+
+def load_technical_events():
+    payload = load_json(bot.TECH_EVENTS_FILE, {"events": []})
+    events = payload.get("events", [])
+    return events if isinstance(events, list) else []
+
+
+def json_copy(value):
+    return json.loads(json.dumps(value, ensure_ascii=False, default=str))
+
+
+def update_learning_movements(payload, tickers, observed_ms):
+    for scan in payload.get("scans", []):
+        signal_close_ms = int(scan.get("signal_close_ms") or 0)
+        if not signal_close_ms:
+            continue
+        elapsed_ms = max(0, observed_ms - signal_close_ms)
+        if elapsed_ms > LEARNING_WINDOW_MS:
+            continue
+
+        for record in scan.get("instruments", []):
+            inst = str(record.get("inst") or "")
+            candle = record.get("candle") or {}
+            reference = candle.get("close")
+            ticker = tickers.get(inst)
+            if not inst or reference in (None, 0) or not ticker:
+                continue
+            try:
+                reference = float(reference)
+                price = float(ticker["last"])
+                change_pct = ((price / reference) - 1.0) * 100.0
+            except Exception:
+                continue
+
+            movement = record.setdefault(
+                "post_signal_movement",
+                {
+                    "reference_close": reference,
+                    "last_price": price,
+                    "last_change_pct": change_pct,
+                    "max_up_pct": max(0.0, change_pct),
+                    "max_down_pct": min(0.0, change_pct),
+                    "checkpoints": [],
+                },
+            )
+            movement["last_price"] = price
+            movement["last_change_pct"] = change_pct
+            movement["last_observed_ms"] = observed_ms
+            movement["elapsed_minutes"] = round(elapsed_ms / 60000.0, 2)
+            movement["max_up_pct"] = max(
+                float(movement.get("max_up_pct", 0.0)), change_pct
+            )
+            movement["max_down_pct"] = min(
+                float(movement.get("max_down_pct", 0.0)), change_pct
+            )
+            movement["long_mfe_pct"] = movement["max_up_pct"]
+            movement["long_mae_pct"] = movement["max_down_pct"]
+            movement["short_mfe_pct"] = -movement["max_down_pct"]
+            movement["short_mae_pct"] = -movement["max_up_pct"]
+
+            checkpoints = movement.setdefault("checkpoints", [])
+            if not checkpoints or int(checkpoints[-1].get("timestamp_ms") or 0) != observed_ms:
+                checkpoints.append(
+                    {
+                        "timestamp_ms": observed_ms,
+                        "elapsed_minutes": round(elapsed_ms / 60000.0, 2),
+                        "price": price,
+                        "change_pct": change_pct,
+                    }
+                )
+                if len(checkpoints) > LEARNING_CHECKPOINT_LIMIT:
+                    del checkpoints[:-LEARNING_CHECKPOINT_LIMIT]
+
+
+def persist_learning_12h(
+    state,
+    top7,
+    tickers,
+    expected_close_ms,
+    candidates,
+    executed,
+    positions_before,
+    run_started_ms,
+):
+    now = bot.now_ms()
+    payload = load_json(LEARNING_FILE, {})
+    if not isinstance(payload, dict):
+        payload = {}
+
+    if not payload.get("collection_started_ms"):
+        payload = {
+            "version": 1,
+            "purpose": "12h LIVE strategy learning audit",
+            "collection_started_ms": now,
+            "collection_ends_ms": now + LEARNING_WINDOW_MS,
+            "status": "collecting",
+            "signal_label": bot.SIGNAL_LABEL,
+            "strategy_rules": {
+                "SHORT": [
+                    "RED candle",
+                    "current RED volume > last GREEN candle volume",
+                    "RED body <= 1% of close",
+                ],
+                "LONG": [
+                    "MACD cross up",
+                    "GREEN candle",
+                    "current GREEN volume > last RED candle volume",
+                    "GREEN body >= 60% of candle range",
+                    "close >= 2% vs 10 bars earlier",
+                    "no Stochastic 14,1,3 cross DOWN in last 3 candles",
+                ],
+            },
+            "scans": [],
+        }
+
+    update_learning_movements(payload, tickers, now)
+
+    collection_ends_ms = int(payload.get("collection_ends_ms") or 0)
+    if collection_ends_ms and now > collection_ends_ms:
+        payload["status"] = "complete"
+        payload["last_capture_ms"] = now
+        save_json(LEARNING_FILE, payload)
+        return
+
+    diagnostic = state.get("last_diagnostic") or {}
+    records = json_copy(diagnostic.get("instruments") or [])
+    candidate_keys = {
+        (str(inst), str(side)): {
+            "rank": int(rank),
+            "signal_close_ms": int(signal_close_ms),
+        }
+        for rank, inst, side, signal_close_ms in candidates
+    }
+    executed_keys = {
+        (str(item.get("inst")), str(item.get("side"))): item
+        for item in executed
+        if isinstance(item, dict)
+    }
+
+    for record in records:
+        inst = str(record.get("inst") or "")
+        if not inst or record.get("error"):
+            continue
+        for key, label in (("short", "SHORT"), ("long", "LONG")):
+            metrics = record.get(key)
+            if not isinstance(metrics, dict):
+                continue
+            missing = list(metrics.get("missing") or [])
+            metrics["decision"] = "CANDIDATE" if not missing else "REJECTED"
+            metrics["rejected_because"] = missing
+            metrics["selected_candidate"] = (inst, label) in candidate_keys
+            metrics["executed_live"] = (inst, label) in executed_keys
+
+    all_events = load_technical_events()
+    new_events = [
+        json_copy(event)
+        for event in all_events
+        if int(event.get("timestamp_ms") or 0) >= int(run_started_ms)
+    ]
+
+    previous_capture_ms = int(payload.get("last_capture_ms") or 0)
+    closed_since_previous = [
+        json_copy(trade)
+        for trade in state.get("trade_history", [])
+        if int(trade.get("closed_ms") or 0) > previous_capture_ms
+    ]
+
+    scan = {
+        "captured_ms": now,
+        "captured_utc": datetime.now(timezone.utc).isoformat(),
+        "signal_close_ms": int(expected_close_ms),
+        "code_commit": os.getenv("GITHUB_SHA", "").strip(),
+        "top7": list(top7),
+        "candidates": [
+            {
+                "rank": int(rank),
+                "inst": str(inst),
+                "side": str(side),
+                "signal_close_ms": int(signal_close_ms),
+            }
+            for rank, inst, side, signal_close_ms in candidates
+        ],
+        "executed": json_copy(executed),
+        "execution_or_tracking_events": new_events,
+        "positions_before": json_copy(positions_before),
+        "positions_after": json_copy(bot.get_tracked_positions(state)),
+        "closed_trades_since_previous_scan": closed_since_previous,
+        "instruments": records,
+    }
+    payload.setdefault("scans", []).append(scan)
+    payload["last_capture_ms"] = now
+    payload["scan_count"] = len(payload["scans"])
+    payload["status"] = "collecting"
+    save_json(LEARNING_FILE, payload)
 
 
 def default_signal_state():
@@ -285,6 +484,7 @@ def main():
     bot.require_live_enabled()
     bot.require_account_modes()
 
+    run_started_ms = bot.now_ms()
     state = bot.load_state()
     top7, tickers, instruments = bot.get_universe()
     if not top7:
@@ -311,10 +511,16 @@ def main():
     confirm_insts = list(dict.fromkeys(top7 + tracked_insts))
     wait_for_confirmed_signal_close(confirm_insts, expected_close_ms)
 
+    positions_before = json_copy(bot.get_tracked_positions(state))
     bot.sync_all_tracked_positions(state)
     bot.evaluate_all_tracked_exit_signals(state, expected_close_ms)
     bot.ensure_tp1_for_all_tracked_positions(state)
     candidates = bot.evaluate_signals(state, top7)
+
+    diagnostic = build_live_diagnostic(state, top7)
+    state["last_diagnostic"]["result"] = (
+        "CANDIDATES_FOUND" if candidates else "NO_ENTRY"
+    )
 
     for rank, inst, side, signal_close_ms in candidates:
         if int(signal_close_ms) != expected_close_ms:
@@ -330,7 +536,6 @@ def main():
     executed = bot.execute_candidate_batch(state, candidates, tickers, instruments)
 
     if not candidates:
-        diagnostic = build_live_diagnostic(state, top7)
         print(diagnostic)
         send_ntfy("BloFin LIVE check", diagnostic, priority=2)
     else:
@@ -339,6 +544,17 @@ def main():
             f"Skan {bot.SIGNAL_LABEL} wykonany. Kandydaci: {len(candidates)}, wykonane: {len(executed)}.",
             priority=2,
         )
+
+    persist_learning_12h(
+        state=state,
+        top7=top7,
+        tickers=tickers,
+        expected_close_ms=expected_close_ms,
+        candidates=candidates,
+        executed=executed,
+        positions_before=positions_before,
+        run_started_ms=run_started_ms,
+    )
 
     state["last_scan_close_ms"] = expected_close_ms
     state["last_run_ms"] = bot.now_ms()
