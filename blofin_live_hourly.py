@@ -1394,11 +1394,7 @@ def cancel_tracked_tpsl(state):
         return False
 
     if pos.get("hold_policy") == "HOLD_60M":
-        pos["tp"] = ""
-        pos["sl"] = ""
-        pos["tp_policy"] = "NONE"
-        pos["sl_policy"] = "NONE"
-        pos["protection_status"] = "HOLD_60M_ACTIVE_NO_TPSL"
+        # HOLD60 positions keep broker-side TP +1% / SL -1% protection active.
         return False
 
     # Managed LIVE positions intentionally keep their broker-side TP/SL protection.
@@ -1620,26 +1616,80 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         if contract_value > 0
         else estimated_notional
     )
+    tick = d(instruments[inst].get("tickSize") or "0.00000001")
+    if side == "LONG":
+        hard_tp = price_step(
+            fill_price * (Decimal("1") + TAKE_PROFIT_PCT), tick, ROUND_CEILING
+        )
+        hard_sl = price_step(
+            fill_price * (Decimal("1") - HARD_SL_PCT), tick, ROUND_FLOOR
+        )
+    else:
+        hard_tp = price_step(
+            fill_price * (Decimal("1") - TAKE_PROFIT_PCT), tick, ROUND_FLOOR
+        )
+        hard_sl = price_step(
+            fill_price * (Decimal("1") + HARD_SL_PCT), tick, ROUND_CEILING
+        )
+
     state["position"].update({
         "reference_entry": clean_decimal(fill_price),
         "entry_fee": str(fill.get("fee") or "0"),
         "filled_size": clean_decimal(filled_size),
         "notional_usdt": clean_decimal(actual_notional),
-        "tp": "",
-        "sl": "",
-        "tp_policy": "NONE",
-        "sl_policy": "NONE",
+        "tp": clean_decimal(hard_tp),
+        "sl": clean_decimal(hard_sl),
+        "tp_policy": "TP1",
+        "sl_policy": "SL1",
         "hold_policy": "HOLD_60M",
         "hold_minutes": HOLD_MINUTES,
         "exit_after_ms": opened_ms + HOLD_MS,
-        "protection_status": "HOLD_60M_ACTIVE_NO_TPSL",
+        "protection_status": "PLACING_TP1_SL1_HOLD60",
     })
+
+    try:
+        tpsl_id, tpsl_client_id = place_tpsl_for_position(
+            inst, side, hard_tp, hard_sl
+        )
+    except Exception as exc:
+        state["position"]["protection_status"] = "TP1_SL1_FAILED"
+        state["position"]["protection_error"] = str(exc)
+        append_technical_event(
+            "PROTECTION_ERROR",
+            f"{type(exc).__name__}: {exc}",
+            inst=inst,
+            side=side,
+            rank=rank,
+            signal_close_ms=signal_close_ms,
+            extra={"stage": "place_tp_sl_hold60"},
+        )
+        notify(
+            f"CRITICAL {side} {inst}: TP +1% / SL -1% could not be placed. "
+            f"Closing position for safety. Error: {exc}",
+            "BloFin LIVE SAFETY",
+        )
+        try:
+            close_tracked_position(state, "SAFETY: TP1/SL1 placement failed")
+        except Exception as close_exc:
+            state["position"]["protection_error"] = (
+                f"{exc}; safety close failed: {close_exc}"
+            )
+            notify(
+                f"CRITICAL {side} {inst}: safety close failed too: {close_exc}",
+                "BloFin LIVE SAFETY",
+            )
+        return
+
+    state["position"]["tpsl_id"] = tpsl_id
+    state["position"]["tpsl_client_order_id"] = tpsl_client_id
+    state["position"]["protection_status"] = "TP1_SL1_HOLD60_ACTIVE"
 
     notify(
         f"OPEN {side} {inst} | 1x isolated | actual entry {fill_price} | "
         f"notional≈{actual_notional:.4f} USDT ({allocation_label}) | "
-        f"HOLD {HOLD_MINUTES}m | no TP/SL | market close after hold period "
-        f"(except safety close) | signal age {signal_age_ms / 1000:.0f}s",
+        f"TP {hard_tp} (+1%) | SL {hard_sl} (-1%) | "
+        f"max hold {HOLD_MINUTES}m, then market close if still open | "
+        f"signal age {signal_age_ms / 1000:.0f}s",
         "BloFin LIVE OPEN",
     )
 
@@ -1702,7 +1752,13 @@ def ensure_tp1_for_all_tracked_positions(state):
         pos = positions.get(inst)
         if not isinstance(pos, dict):
             continue
-        if pos.get("hold_policy") == "HOLD_60M":
+        if (
+            pos.get("hold_policy") == "HOLD_60M"
+            and pos.get("tp_policy") == "TP1"
+            and pos.get("sl_policy") == "SL1"
+            and str(pos.get("tp") or "").strip()
+            and str(pos.get("sl") or "").strip()
+        ):
             continue
         if (
             pos.get("tp_policy") == "TP1"
