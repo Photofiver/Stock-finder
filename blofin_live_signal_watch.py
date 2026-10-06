@@ -517,11 +517,6 @@ def main():
     bot.ensure_tp1_for_all_tracked_positions(state)
     candidates = bot.evaluate_signals(state, top7)
 
-    diagnostic = build_live_diagnostic(state, top7)
-    state["last_diagnostic"]["result"] = (
-        "CANDIDATES_FOUND" if candidates else "NO_ENTRY"
-    )
-
     for rank, inst, side, signal_close_ms in candidates:
         if int(signal_close_ms) != expected_close_ms:
             raise RuntimeError(
@@ -534,6 +529,13 @@ def main():
         )
 
     executed = bot.execute_candidate_batch(state, candidates, tickers, instruments)
+
+    # Build the full learning snapshot only after LIVE execution so logging
+    # cannot delay a valid entry.
+    diagnostic = build_live_diagnostic(state, top7)
+    state["last_diagnostic"]["result"] = (
+        "CANDIDATES_FOUND" if candidates else "NO_ENTRY"
+    )
 
     if not candidates:
         print(diagnostic)
