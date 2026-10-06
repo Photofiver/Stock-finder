@@ -134,7 +134,7 @@ def build_live_diagnostic(state, top7):
     lines = [
         f"{bot.SIGNAL_LABEL} TOP{bot.TOP_N} — BRAK WEJSCIA",
         "SHORT: MACD cross w dol + RED + RED volume > ostatni GREEN + korpus <=1% ceny close",
-        "LONG: MACD cross w gore + GREEN + GREEN volume > ostatni RED + korpus >=60% zakresu + close >=2% vs 10 swiec wczesniej",
+        "LONG: MACD cross w gore + GREEN + GREEN volume > ostatni RED + korpus >=60% zakresu + close >=2% vs 10 swiec wczesniej + brak Stoch 14,1,3 cross DOWN w ostatnich 3 swiecach",
         "",
     ]
     records = []
@@ -169,6 +169,7 @@ def build_live_diagnostic(state, top7):
                 ("GREEN_VOL_GT_RED", l["volume_higher_than_last_red"]),
                 ("BODY_GE_60PCT", l["green_body_min_60pct"]),
                 ("RISE10_GE_2PCT", l["rise_10_bars_min_2pct"]),
+                ("STOCH_NO_DOWN_LAST3", l["stoch_long_ok"]),
             ]
 
             s_ok = sum(1 for _, ok in s_checks if ok)
@@ -217,7 +218,7 @@ def build_live_diagnostic(state, top7):
                     "volume_vs_last_green_pct": vol_vs_green_pct,
                 },
                 "long": {
-                    "score": f"{l_ok}/5",
+                    "score": f"{l_ok}/6",
                     "missing": l_missing,
                     "green_candle": bool(l["green_candle"]),
                     "body_pct_range": float(l["green_body_ratio"]) * 100.0,
@@ -227,6 +228,10 @@ def build_live_diagnostic(state, top7):
                     "volume_vs_last_red_pct": vol_vs_red_pct,
                     "rise_10_bars_pct": float(l["rise_10_bars_pct"]),
                     "rise_10_bars_min_pct": 2.0,
+                    "stoch_k": l["stoch_k"],
+                    "stoch_d": l["stoch_d"],
+                    "stoch_cross_down_recent_3": bool(l["stoch_cross_down_recent_3"]),
+                    "stoch_long_ok": bool(l["stoch_long_ok"]),
                 },
             }
             records.append(record)
@@ -249,10 +254,12 @@ def build_live_diagnostic(state, top7):
                 f"| brak: {', '.join(s_missing) if s_missing else 'NIC'}"
             )
             lines.append(
-                f"   LONG  {l_ok}/5: candle GREEN={'TAK' if l['green_candle'] else 'NIE'} | "
+                f"   LONG  {l_ok}/6: candle GREEN={'TAK' if l['green_candle'] else 'NIE'} | "
                 f"VOL={fmt(current_volume)} vs last RED={fmt(l['last_red_volume'])} "
                 f"({fmt(vol_vs_red_pct, 4)}%) | body={l['green_body_ratio'] * 100:.1f}% >=60% "
                 f"| 10BAR={l['rise_10_bars_pct']:+.3f}% >=2% "
+                f"| STOCH K={fmt(l['stoch_k'], 4)} D={fmt(l['stoch_d'], 4)} "
+                f"| DOWN last3={'TAK' if l['stoch_cross_down_recent_3'] else 'NIE'} "
                 f"| brak: {', '.join(l_missing) if l_missing else 'NIC'}"
             )
         except Exception as exc:
