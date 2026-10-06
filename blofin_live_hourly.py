@@ -31,6 +31,8 @@ TRADE_HISTORY_LIMIT = 5000
 POSITION_FRACTION = Decimal("0.25")  # total LIVE bankroll is still hard-capped below
 HARD_SL_PCT = Decimal("0.01")
 TAKE_PROFIT_PCT = Decimal("0.01")
+HOLD_MINUTES = 60
+HOLD_MS = HOLD_MINUTES * 60 * 1000
 RSI_PERIOD = 14
 MACD_FAST = 12
 MACD_SLOW = 26
@@ -1391,6 +1393,14 @@ def cancel_tracked_tpsl(state):
     if not pos:
         return False
 
+    if pos.get("hold_policy") == "HOLD_60M":
+        pos["tp"] = ""
+        pos["sl"] = ""
+        pos["tp_policy"] = "NONE"
+        pos["sl_policy"] = "NONE"
+        pos["protection_status"] = "HOLD_60M_ACTIVE_NO_TPSL"
+        return False
+
     # Managed LIVE positions intentionally keep their broker-side TP/SL protection.
     if (
         pos.get("tp_policy") == "TP1"
@@ -1446,9 +1456,26 @@ def sync_tracked_position(state):
 
 
 def evaluate_tracked_exit_signal(state, expected_close_ms=None):
-    # Strategy exits are broker-side TP +1% / SL -1%.
-    # Do not close early on indicator changes; only safety/account sync may close earlier.
-    return False
+    pos = state.get("position")
+    if not isinstance(pos, dict) or not pos.get("inst"):
+        return False
+
+    if pos.get("hold_policy") != "HOLD_60M":
+        return False
+
+    opened_ms = int(pos.get("opened_ms") or 0)
+    if opened_ms <= 0:
+        return False
+
+    elapsed_ms = now_ms() - opened_ms
+    if elapsed_ms < HOLD_MS:
+        return False
+
+    close_tracked_position(
+        state,
+        f"{HOLD_MINUTES}m hold complete",
+    )
+    return True
 
 
 def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allocation_label=None):
@@ -1502,12 +1529,12 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
             available * POSITION_FRACTION,
         )
         allocation_label = allocation_label or "25% of available, within LIVE bankroll cap"
-        risk_profile = "QUARTER_ACCOUNT_SL1"
+        risk_profile = "QUARTER_ACCOUNT_HOLD60"
         account_fraction = clean_decimal(POSITION_FRACTION)
     else:
         cap = min(d(cap_usdt), available, remaining_bankroll)
         allocation_label = allocation_label or "dynamic equal split within LIVE bankroll cap"
-        risk_profile = "DYNAMIC_SPLIT_SL1"
+        risk_profile = "DYNAMIC_SPLIT_HOLD60"
         account_fraction = ""
     sized = size_for_notional(market_reference, instruments[inst], cap)
     if sized is None:
@@ -1550,7 +1577,7 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         "sl": "",
         "size": clean_decimal(size),
         "notional_usdt": clean_decimal(estimated_notional),
-        "protection_status": "WAITING_FOR_TP1_SL1",
+        "protection_status": "HOLD_60M_PENDING_FILL",
         "strategy": f"MACD_VOL_{side}_{SIGNAL_LABEL}",
         "code_commit": CODE_COMMIT,
         "risk_profile": risk_profile,
@@ -1593,77 +1620,26 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         if contract_value > 0
         else estimated_notional
     )
-    tick = d(instruments[inst].get("tickSize") or "0.00000001")
-    if side == "LONG":
-        hard_tp = price_step(
-            fill_price * (Decimal("1") + TAKE_PROFIT_PCT), tick, ROUND_CEILING
-        )
-        hard_sl = price_step(
-            fill_price * (Decimal("1") - HARD_SL_PCT), tick, ROUND_FLOOR
-        )
-    else:
-        hard_tp = price_step(
-            fill_price * (Decimal("1") - TAKE_PROFIT_PCT), tick, ROUND_FLOOR
-        )
-        hard_sl = price_step(
-            fill_price * (Decimal("1") + HARD_SL_PCT), tick, ROUND_CEILING
-        )
-
     state["position"].update({
         "reference_entry": clean_decimal(fill_price),
         "entry_fee": str(fill.get("fee") or "0"),
         "filled_size": clean_decimal(filled_size),
         "notional_usdt": clean_decimal(actual_notional),
-        "tp": clean_decimal(hard_tp),
-        "sl": clean_decimal(hard_sl),
-        "tp_policy": "TP1",
-        "sl_policy": "SL1",
-        "protection_status": "PLACING_TP1_SL1",
+        "tp": "",
+        "sl": "",
+        "tp_policy": "NONE",
+        "sl_policy": "NONE",
+        "hold_policy": "HOLD_60M",
+        "hold_minutes": HOLD_MINUTES,
+        "exit_after_ms": opened_ms + HOLD_MS,
+        "protection_status": "HOLD_60M_ACTIVE_NO_TPSL",
     })
-
-    try:
-        tpsl_id, tpsl_client_id = place_tpsl_for_position(
-            inst, side, hard_tp, hard_sl
-        )
-    except Exception as exc:
-        state["position"]["protection_status"] = "TP1_SL1_FAILED"
-        state["position"]["protection_error"] = str(exc)
-        append_technical_event(
-            "PROTECTION_ERROR",
-            f"{type(exc).__name__}: {exc}",
-            inst=inst,
-            side=side,
-            rank=rank,
-            signal_close_ms=signal_close_ms,
-            extra={"stage": "place_tp_sl"},
-        )
-        notify(
-            f"CRITICAL {side} {inst}: TP +1% / SL -1% could not be placed. "
-            f"Closing position for safety. Error: {exc}",
-            "BloFin LIVE SAFETY",
-        )
-        try:
-            close_tracked_position(state, "SAFETY: TP1/SL1 placement failed")
-        except Exception as close_exc:
-            state["position"]["protection_error"] = (
-                f"{exc}; safety close failed: {close_exc}"
-            )
-            notify(
-                f"CRITICAL {side} {inst}: safety close failed too: {close_exc}",
-                "BloFin LIVE SAFETY",
-            )
-        return
-
-    state["position"]["tpsl_id"] = tpsl_id
-    state["position"]["tpsl_client_order_id"] = tpsl_client_id
-    state["position"]["protection_status"] = "TP1_SL1_ACTIVE"
 
     notify(
         f"OPEN {side} {inst} | 1x isolated | actual entry {fill_price} | "
         f"notional≈{actual_notional:.4f} USDT ({allocation_label}) | "
-        f"TP {hard_tp} (+1%) | hard SL {hard_sl} (-1%) | "
-        f"exit only at TP +1% or SL -1% (except safety close) | "
-        f"signal age {signal_age_ms / 1000:.0f}s",
+        f"HOLD {HOLD_MINUTES}m | no TP/SL | market close after hold period "
+        f"(except safety close) | signal age {signal_age_ms / 1000:.0f}s",
         "BloFin LIVE OPEN",
     )
 
@@ -1725,6 +1701,8 @@ def ensure_tp1_for_all_tracked_positions(state):
     for inst in list(positions):
         pos = positions.get(inst)
         if not isinstance(pos, dict):
+            continue
+        if pos.get("hold_policy") == "HOLD_60M":
             continue
         if (
             pos.get("tp_policy") == "TP1"
