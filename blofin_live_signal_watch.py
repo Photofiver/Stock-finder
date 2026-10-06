@@ -156,6 +156,7 @@ def persist_learning_12h(
                     "RED candle",
                     "current RED volume > last GREEN candle volume",
                     "RED body <= 1% of close",
+                    "lower wick <= 50% of candle range",
                     "price return over last 20 bars <= 10%",
                 ],
                 "LONG": [
@@ -176,6 +177,7 @@ def persist_learning_12h(
             "RED candle",
             "current RED volume > last GREEN candle volume",
             "RED body <= 1% of close",
+            "lower wick <= 50% of candle range",
             "price return over last 20 bars <= 10%",
         ],
         "LONG": [
@@ -352,7 +354,7 @@ def build_live_diagnostic(state, top7):
 
     lines = [
         f"{bot.SIGNAL_LABEL} TOP{bot.TOP_N} — BRAK WEJSCIA",
-        "SHORT: RED + RED volume > ostatni GREEN + korpus <=1% ceny close + return20 <=10%",
+        "SHORT: RED + RED volume > ostatni GREEN + korpus <=1% ceny close + dolny knot <=50% zakresu + return20 <=10%",
         "LONG: MACD cross w gore + GREEN + GREEN volume > ostatni RED + korpus >=60% zakresu + close >=2% vs 10 swiec wczesniej + brak Stoch 14,1,3 cross DOWN w ostatnich 3 swiecach + RSI14 <70",
         "",
     ]
@@ -380,6 +382,7 @@ def build_live_diagnostic(state, top7):
                 ("RED", s["red_candle"]),
                 ("RED_VOL_GT_GREEN", s["volume_higher_than_last_green"]),
                 ("BODY_LE_1PCT", s["short_body_max_1pct"]),
+                ("LOWER_WICK_LE_50PCT", s["lower_wick_max_50pct"]),
                 ("RETURN20_LE_10PCT", s["return_20_bars_max_10pct"]),
             ]
             l_checks = [
@@ -428,11 +431,13 @@ def build_live_diagnostic(state, top7):
                     "cross_up": bool(l["macd_cross_up"]),
                 },
                 "short": {
-                    "score": f"{s_ok}/4",
+                    "score": f"{s_ok}/5",
                     "missing": s_missing,
                     "red_candle": bool(s["red_candle"]),
                     "body_pct_close": float(s["red_body_pct_close"]),
                     "body_limit_pct": 1.0,
+                    "lower_wick_pct_range": float(s["lower_wick_pct_range"]),
+                    "lower_wick_max_pct_range": 50.0,
                     "volume": current_volume,
                     "last_green_volume": s["last_green_volume"],
                     "volume_vs_last_green_pct": vol_vs_green_pct,
@@ -473,9 +478,10 @@ def build_live_diagnostic(state, top7):
                 f"UP={'TAK' if l['macd_cross_up'] else 'NIE'}"
             )
             lines.append(
-                f"   SHORT {s_ok}/4: candle RED={'TAK' if s['red_candle'] else 'NIE'} | "
+                f"   SHORT {s_ok}/5: candle RED={'TAK' if s['red_candle'] else 'NIE'} | "
                 f"VOL={fmt(current_volume)} vs last GREEN={fmt(s['last_green_volume'])} "
                 f"({fmt(vol_vs_green_pct, 4)}%) | body={s['red_body_pct_close']:.3f}% <=1% "
+                f"| lower wick={s['lower_wick_pct_range']:.1f}% <=50% "
                 f"| RETURN20={s['return_20_bars_pct']:+.3f}% <=10% "
                 f"| brak: {', '.join(s_missing) if s_missing else 'NIC'}"
             )
