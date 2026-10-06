@@ -313,6 +313,7 @@ def main():
     wait_for_confirmed_signal_close(confirm_insts, expected_close_ms)
 
     bot.sync_all_tracked_positions(state)
+    bot.evaluate_all_tracked_exit_signals(state, expected_close_ms)
     bot.ensure_tp1_for_all_tracked_positions(state)
     candidates = bot.evaluate_signals(state, top7)
 
