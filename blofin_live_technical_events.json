@@ -171,6 +171,37 @@
       "signal_label": "15m",
       "timestamp_ms": 1791325878045,
       "timestamp_utc": "2026-10-06T22:31:18.045050+00:00"
+    },
+    {
+      "event_type": "ALREADY_OPEN",
+      "extra": {
+        "free_slots": 2,
+        "open_positions": 2
+      },
+      "inst": "CAP-USDT",
+      "message": "Valid signal not entered: this instrument already has an open position.",
+      "rank": 4,
+      "side": "SHORT",
+      "signal_close_ms": 1791327600000,
+      "signal_label": "15m",
+      "timestamp_ms": 1791327676306,
+      "timestamp_utc": "2026-10-06T23:01:16.306563+00:00"
+    },
+    {
+      "event_type": "API_ERROR",
+      "extra": {
+        "available_usdt": "81.769861606478898206",
+        "per_trade_cap_usdt": "7.068990249529693",
+        "stage": "entry"
+      },
+      "inst": "US-USDT",
+      "message": "RuntimeError: BloFin API /api/v1/trade/order: 1 All operations failed | details=[{\"orderId\": null, \"clientOrderId\": \"\", \"code\": \"102127\", \"msg\": \"Service temporarily unavailable. Please try again later.\"}]",
+      "rank": 1,
+      "side": "LONG",
+      "signal_close_ms": 1791327600000,
+      "signal_label": "15m",
+      "timestamp_ms": 1791327677386,
+      "timestamp_utc": "2026-10-06T23:01:17.386602+00:00"
     }
   ],
   "version": 1
