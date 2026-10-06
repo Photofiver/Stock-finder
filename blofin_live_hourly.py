@@ -474,7 +474,6 @@ def short_entry_signal(bars, i):
     metrics = short_entry_metrics(bars, i)
     return bool(
         metrics
-        and metrics["macd_cross_down"]
         and metrics["red_candle"]
         and metrics["volume_higher_than_last_green"]
         and metrics["red_body_pct_close"] <= 1.0
