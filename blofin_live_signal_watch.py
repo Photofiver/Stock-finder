@@ -133,7 +133,7 @@ def build_live_diagnostic(state, top7):
 
     lines = [
         f"{bot.SIGNAL_LABEL} TOP{bot.TOP_N} — BRAK WEJSCIA",
-        "SHORT: MACD cross w dol + RED + RED volume > ostatni GREEN + korpus <=1% ceny close",
+        "SHORT: RED + RED volume > ostatni GREEN + korpus <=1% ceny close",
         "LONG: MACD cross w gore + GREEN + GREEN volume > ostatni RED + korpus >=60% zakresu + close >=2% vs 10 swiec wczesniej + brak Stoch 14,1,3 cross DOWN w ostatnich 3 swiecach",
         "",
     ]
@@ -158,7 +158,6 @@ def build_live_diagnostic(state, top7):
                 continue
 
             s_checks = [
-                ("MACD_DOWN", s["macd_cross_down"]),
                 ("RED", s["red_candle"]),
                 ("RED_VOL_GT_GREEN", s["volume_higher_than_last_green"]),
                 ("BODY_LE_1PCT", s["short_body_max_1pct"]),
@@ -208,7 +207,7 @@ def build_live_diagnostic(state, top7):
                     "cross_up": bool(l["macd_cross_up"]),
                 },
                 "short": {
-                    "score": f"{s_ok}/4",
+                    "score": f"{s_ok}/3",
                     "missing": s_missing,
                     "red_candle": bool(s["red_candle"]),
                     "body_pct_close": float(s["red_body_pct_close"]),
@@ -248,7 +247,7 @@ def build_live_diagnostic(state, top7):
                 f"UP={'TAK' if l['macd_cross_up'] else 'NIE'}"
             )
             lines.append(
-                f"   SHORT {s_ok}/4: candle RED={'TAK' if s['red_candle'] else 'NIE'} | "
+                f"   SHORT {s_ok}/3: candle RED={'TAK' if s['red_candle'] else 'NIE'} | "
                 f"VOL={fmt(current_volume)} vs last GREEN={fmt(s['last_green_volume'])} "
                 f"({fmt(vol_vs_green_pct, 4)}%) | body={s['red_body_pct_close']:.3f}% <=1% "
                 f"| brak: {', '.join(s_missing) if s_missing else 'NIC'}"
