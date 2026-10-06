@@ -479,6 +479,46 @@ def short_entry_signal(bars, i):
     )
 
 
+def stochastic_kd_series(bars, k_period=14, d_period=3):
+    """Raw Stochastic %K with 1-bar K smoothing and SMA %D."""
+    k_values = [None] * len(bars)
+    d_values = [None] * len(bars)
+
+    for idx in range(k_period - 1, len(bars)):
+        window = bars[idx - k_period + 1: idx + 1]
+        highest = max(float(bar["h"]) for bar in window)
+        lowest = min(float(bar["l"]) for bar in window)
+        close = float(bars[idx]["c"])
+        k_values[idx] = (
+            50.0
+            if highest == lowest
+            else ((close - lowest) / (highest - lowest)) * 100.0
+        )
+
+        if idx >= (k_period - 1) + (d_period - 1):
+            recent_k = k_values[idx - d_period + 1: idx + 1]
+            if all(value is not None for value in recent_k):
+                d_values[idx] = sum(recent_k) / d_period
+
+    return k_values, d_values
+
+
+def recent_stoch_cross_down(bars, i, lookback_bars=3):
+    """True when Stochastic 14,1,3 crossed down on the signal bar or <=3 bars ago."""
+    k_values, d_values = stochastic_kd_series(bars, 14, 3)
+    start = max(1, i - lookback_bars)
+
+    for idx in range(start, i + 1):
+        prev_k, prev_d = k_values[idx - 1], d_values[idx - 1]
+        cur_k, cur_d = k_values[idx], d_values[idx]
+        if None in (prev_k, prev_d, cur_k, cur_d):
+            continue
+        if prev_k >= prev_d and cur_k < cur_d:
+            return True
+
+    return False
+
+
 def long_entry_metrics(bars, i):
     if i < 1:
         return None
@@ -527,6 +567,12 @@ def long_entry_metrics(bars, i):
         else float("-inf")
     )
 
+    stoch_k_values, stoch_d_values = stochastic_kd_series(bars, 14, 3)
+    stoch_k = stoch_k_values[i] if i < len(stoch_k_values) else None
+    stoch_d = stoch_d_values[i] if i < len(stoch_d_values) else None
+    stoch_cross_down_recent_3 = recent_stoch_cross_down(bars, i, 3)
+    stoch_long_ok = not stoch_cross_down_recent_3
+
     return {
         "macd_cross_up": macd_cross_up,
         "green_candle": green_candle,
@@ -535,6 +581,10 @@ def long_entry_metrics(bars, i):
         "green_body_min_60pct": green_body_ratio >= 0.60,
         "rise_10_bars_pct": rise_10_bars_pct,
         "rise_10_bars_min_2pct": rise_10_bars_pct >= 2.0,
+        "stoch_k": stoch_k,
+        "stoch_d": stoch_d,
+        "stoch_cross_down_recent_3": stoch_cross_down_recent_3,
+        "stoch_long_ok": stoch_long_ok,
         "volume": float(cur["v"]),
         "last_red_volume": last_red_volume,
         "macd_dif": float(cur["macd_dif"]),
@@ -552,6 +602,7 @@ def long_entry_signal(bars, i):
         and metrics["volume_higher_than_last_red"]
         and metrics["green_body_min_60pct"]
         and metrics["rise_10_bars_min_2pct"]
+        and metrics["stoch_long_ok"]
     )
 
 
