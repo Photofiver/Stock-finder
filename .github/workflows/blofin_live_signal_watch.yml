@@ -88,6 +88,12 @@ jobs:
           if [ -f blofin_live_state.json ]; then
             git add blofin_live_state.json
           fi
+          if [ -f blofin_live_technical_events.json ]; then
+            git add blofin_live_technical_events.json
+          fi
+          if [ -f blofin_learning_12h.json ]; then
+            git add blofin_learning_12h.json
+          fi
           if ! git diff --cached --quiet; then
             git commit -m 'Update BloFin signal state'
             git pull --rebase origin main
