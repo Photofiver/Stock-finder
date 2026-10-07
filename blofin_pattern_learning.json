@@ -9,10 +9,55 @@
       "reviews": [],
       "side": "LONG",
       "signal_close_ms": 1791396000000
+    },
+    {
+      "closed_ms": 1791400590491,
+      "inst": "RAY-USDT",
+      "net_pnl_usdt": 0.1248,
+      "patterns": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.7,
+          "evidence": {
+            "high_slope_pct_per_bar": -0.1696,
+            "low_slope_pct_per_bar": -0.0504,
+            "width_ratio": 0.529
+          },
+          "name": "DESCENDING_TRIANGLE"
+        }
+      ],
+      "result": "WIN",
+      "reviews": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.7,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "high_slope_pct_per_bar": -0.1696,
+            "low_slope_pct_per_bar": -0.0504,
+            "width_ratio": 0.529
+          },
+          "name": "DESCENDING_TRIANGLE",
+          "relation_to_trade": "SUPPORTS"
+        }
+      ],
+      "side": "SHORT",
+      "signal_close_ms": 1791396900000
     }
   ],
   "interpretation": "HELPED = pattern supported a winner or opposed a loser; HURT = pattern supported a loser or opposed a winner.",
   "mode": "PASSIVE_ONLY_DOES_NOT_BLOCK_TRADES",
-  "summary": {},
+  "summary": {
+    "DESCENDING_TRIANGLE": {
+      "helped": 1,
+      "hurt": 0,
+      "losses_when_present": 0,
+      "no_effect": 0,
+      "opposes_trade": 0,
+      "seen": 1,
+      "supports_trade": 1,
+      "wins_when_present": 1
+    }
+  },
   "version": 1
 }
