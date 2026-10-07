@@ -719,6 +719,8 @@ def get_universe():
     tickers = {}
     for row in market_get("/api/v1/market/tickers"):
         inst = str(row.get("instId") or "")
+        if inst == "SOXS-USDT":
+            continue
         if inst not in instruments:
             continue
         try:
