@@ -179,6 +179,7 @@ def persist_learning_12h(
             "current RED volume > last GREEN candle volume",
             "RED body <= 1% of close",
             "lower wick <= 50% of candle range",
+            "price return over last 4 bars <= 1%",
             "price return over last 20 bars <= 10%",
         ],
         "LONG": [
