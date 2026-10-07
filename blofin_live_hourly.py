@@ -711,6 +711,7 @@ def get_universe():
             and row.get("instType") == "SWAP"
             and row.get("contractType") == "linear"
             and row.get("settleCurrency") == "USDT"
+            and str(row.get("assetClass") or "").lower() == "crypto"
         ):
             inst = str(row.get("instId") or "")
             if inst:
@@ -719,8 +720,6 @@ def get_universe():
     tickers = {}
     for row in market_get("/api/v1/market/tickers"):
         inst = str(row.get("instId") or "")
-        if inst == "SOXS-USDT":
-            continue
         if inst not in instruments:
             continue
         try:
