@@ -21,6 +21,8 @@ STATE_FILE = os.getenv("LIVE_STATE_FILE", "blofin_live_state.json")
 CODE_COMMIT = os.getenv("GITHUB_SHA", "").strip()
 TECH_EVENTS_FILE = os.getenv("LIVE_TECH_EVENTS_FILE", "blofin_live_technical_events.json")
 TECH_EVENTS_LIMIT = 5000
+PATTERN_AUDIT_FILE = os.getenv("LIVE_PATTERN_AUDIT_FILE", "blofin_pattern_learning.json")
+PATTERN_AUDIT_LIMIT = 5000
 LIVE_ENABLED = os.getenv("BLOFIN_LIVE_ENABLED", "").strip().lower() == "true"
 MAX_NOTIONAL_USDT = Decimal(os.getenv("LIVE_MAX_BANKROLL_USDT", "10.64"))
 LEVERAGE = "1"
@@ -649,6 +651,295 @@ def candle_color(bar):
     return "DOJI"
 
 
+
+def _pattern_slope_pct(values):
+    """Linear slope as percent of the average value per bar."""
+    if len(values) < 2:
+        return 0.0
+    n = len(values)
+    x_mean = (n - 1) / 2.0
+    y_mean = sum(float(v) for v in values) / n
+    if y_mean == 0:
+        return 0.0
+    denom = sum((x - x_mean) ** 2 for x in range(n))
+    if denom == 0:
+        return 0.0
+    slope = sum(
+        (x - x_mean) * (float(values[x]) - y_mean)
+        for x in range(n)
+    ) / denom
+    return (slope / abs(y_mean)) * 100.0
+
+
+def _pattern_pivots(bars, start, end, field, kind, wing=2):
+    out = []
+    start = max(start, wing)
+    end = min(end, len(bars) - wing - 1)
+    for idx in range(start, end + 1):
+        value = float(bars[idx][field])
+        neighbors = [
+            float(bars[j][field])
+            for j in range(idx - wing, idx + wing + 1)
+            if j != idx
+        ]
+        if kind == "HIGH" and all(value >= x for x in neighbors):
+            out.append((idx, value))
+        elif kind == "LOW" and all(value <= x for x in neighbors):
+            out.append((idx, value))
+    return out
+
+
+def detect_chart_patterns(bars, i, lookback=40):
+    """Passive 15m pattern detector. It NEVER changes an entry/exit decision."""
+    if i < 19:
+        return []
+
+    start = max(0, i - lookback + 1)
+    window = bars[start:i + 1]
+    patterns = []
+
+    def add(name, bias, confidence, evidence):
+        if not any(item["name"] == name for item in patterns):
+            patterns.append({
+                "name": name,
+                "bias": bias,
+                "confidence": round(float(confidence), 3),
+                "evidence": evidence,
+            })
+
+    def gap_pct(a, b):
+        base = max((abs(float(a)) + abs(float(b))) / 2.0, 1e-12)
+        return abs(float(a) - float(b)) / base * 100.0
+
+    piv_hi = _pattern_pivots(bars, start, i, "h", "HIGH")
+    piv_lo = _pattern_pivots(bars, start, i, "l", "LOW")
+
+    # Double top / bottom: two completed pivots close in price with a meaningful swing between.
+    if len(piv_hi) >= 2:
+        (a_i, a), (b_i, b) = piv_hi[-2], piv_hi[-1]
+        if b_i - a_i >= 3 and i - b_i <= 12 and gap_pct(a, b) <= 1.0:
+            valley = min(float(bars[j]["l"]) for j in range(a_i, b_i + 1))
+            top = (a + b) / 2.0
+            depth = ((top - valley) / top * 100.0) if top > 0 else 0.0
+            if depth >= 0.8:
+                add("DOUBLE_TOP", "SHORT", min(0.9, 0.62 + depth / 20.0), {
+                    "peak_gap_pct": round(gap_pct(a, b), 3),
+                    "neck_depth_pct": round(depth, 3),
+                })
+
+    if len(piv_lo) >= 2:
+        (a_i, a), (b_i, b) = piv_lo[-2], piv_lo[-1]
+        if b_i - a_i >= 3 and i - b_i <= 12 and gap_pct(a, b) <= 1.0:
+            peak = max(float(bars[j]["h"]) for j in range(a_i, b_i + 1))
+            bottom = (a + b) / 2.0
+            depth = ((peak - bottom) / bottom * 100.0) if bottom > 0 else 0.0
+            if depth >= 0.8:
+                add("DOUBLE_BOTTOM", "LONG", min(0.9, 0.62 + depth / 20.0), {
+                    "bottom_gap_pct": round(gap_pct(a, b), 3),
+                    "neck_height_pct": round(depth, 3),
+                })
+
+    # Head & shoulders / inverse H&S from the latest three completed pivots.
+    if len(piv_hi) >= 3:
+        (l_i, left), (h_i, head), (r_i, right) = piv_hi[-3:]
+        shoulders_gap = gap_pct(left, right)
+        shoulder_ref = (left + right) / 2.0
+        head_above = ((head / shoulder_ref) - 1.0) * 100.0 if shoulder_ref > 0 else 0.0
+        if l_i < h_i < r_i and i - r_i <= 12 and shoulders_gap <= 1.5 and head_above >= 0.8:
+            add("HEAD_AND_SHOULDERS", "SHORT", min(0.9, 0.65 + head_above / 20.0), {
+                "shoulders_gap_pct": round(shoulders_gap, 3),
+                "head_above_shoulders_pct": round(head_above, 3),
+            })
+
+    if len(piv_lo) >= 3:
+        (l_i, left), (h_i, head), (r_i, right) = piv_lo[-3:]
+        shoulders_gap = gap_pct(left, right)
+        shoulder_ref = (left + right) / 2.0
+        head_below = (1.0 - head / shoulder_ref) * 100.0 if shoulder_ref > 0 else 0.0
+        if l_i < h_i < r_i and i - r_i <= 12 and shoulders_gap <= 1.5 and head_below >= 0.8:
+            add("INVERSE_HEAD_AND_SHOULDERS", "LONG", min(0.9, 0.65 + head_below / 20.0), {
+                "shoulders_gap_pct": round(shoulders_gap, 3),
+                "head_below_shoulders_pct": round(head_below, 3),
+            })
+
+    # Triangles: compare linear boundary slopes and require visible range compression.
+    tri = window[-12:]
+    if len(tri) >= 10:
+        highs = [float(x["h"]) for x in tri]
+        lows = [float(x["l"]) for x in tri]
+        high_slope = _pattern_slope_pct(highs)
+        low_slope = _pattern_slope_pct(lows)
+        first_width = max(highs[:3]) - min(lows[:3])
+        last_width = max(highs[-3:]) - min(lows[-3:])
+        narrowing = first_width > 0 and last_width / first_width <= 0.80
+        evidence = {
+            "high_slope_pct_per_bar": round(high_slope, 4),
+            "low_slope_pct_per_bar": round(low_slope, 4),
+            "width_ratio": round(last_width / first_width, 3) if first_width > 0 else None,
+        }
+        if narrowing and abs(high_slope) <= 0.08 and low_slope >= 0.05:
+            add("ASCENDING_TRIANGLE", "LONG", 0.70, evidence)
+        if narrowing and abs(low_slope) <= 0.08 and high_slope <= -0.05:
+            add("DESCENDING_TRIANGLE", "SHORT", 0.70, evidence)
+        if narrowing and high_slope <= -0.04 and low_slope >= 0.04:
+            add("SYMMETRICAL_TRIANGLE", "NEUTRAL", 0.62, evidence)
+
+    # Wedges: both boundaries trend in the same direction while converging.
+    wedge = window[-14:]
+    if len(wedge) >= 12:
+        highs = [float(x["h"]) for x in wedge]
+        lows = [float(x["l"]) for x in wedge]
+        high_slope = _pattern_slope_pct(highs)
+        low_slope = _pattern_slope_pct(lows)
+        first_width = max(highs[:3]) - min(lows[:3])
+        last_width = max(highs[-3:]) - min(lows[-3:])
+        narrowing = first_width > 0 and last_width / first_width <= 0.82
+        evidence = {
+            "high_slope_pct_per_bar": round(high_slope, 4),
+            "low_slope_pct_per_bar": round(low_slope, 4),
+            "width_ratio": round(last_width / first_width, 3) if first_width > 0 else None,
+        }
+        if narrowing and high_slope > 0.03 and low_slope > high_slope + 0.02:
+            add("RISING_WEDGE", "SHORT", 0.66, evidence)
+        if narrowing and low_slope < -0.03 and high_slope < low_slope - 0.02:
+            add("FALLING_WEDGE", "LONG", 0.66, evidence)
+
+    # Flags: strong impulse followed by a smaller counter-trend consolidation.
+    flag = window[-16:]
+    if len(flag) >= 14:
+        impulse_start = float(flag[0]["c"])
+        impulse_end = float(flag[-7]["c"])
+        flag_start = float(flag[-7]["c"])
+        flag_end = float(flag[-1]["c"])
+        if impulse_start > 0 and flag_start > 0:
+            impulse_pct = (impulse_end / impulse_start - 1.0) * 100.0
+            flag_pct = (flag_end / flag_start - 1.0) * 100.0
+            recent_high = max(float(x["h"]) for x in flag[-7:])
+            recent_low = min(float(x["l"]) for x in flag[-7:])
+            recent_range_pct = (recent_high / recent_low - 1.0) * 100.0 if recent_low > 0 else 999.0
+            evidence = {
+                "impulse_pct": round(impulse_pct, 3),
+                "flag_move_pct": round(flag_pct, 3),
+                "flag_range_pct": round(recent_range_pct, 3),
+            }
+            if impulse_pct >= 3.0 and -2.0 <= flag_pct <= 0.5 and recent_range_pct <= 4.0:
+                add("BULL_FLAG", "LONG", 0.67, evidence)
+            if impulse_pct <= -3.0 and -0.5 <= flag_pct <= 2.0 and recent_range_pct <= 4.0:
+                add("BEAR_FLAG", "SHORT", 0.67, evidence)
+
+    return patterns
+
+
+def review_chart_patterns(patterns, trade_side, result):
+    """Score whether using each detected pattern as a directional filter would help."""
+    reviews = []
+    for pattern in patterns or []:
+        bias = str(pattern.get("bias") or "NEUTRAL")
+        if bias == trade_side:
+            relation = "SUPPORTS"
+        elif bias in ("LONG", "SHORT"):
+            relation = "OPPOSES"
+        else:
+            relation = "NEUTRAL"
+
+        if result not in ("WIN", "LOSS") or relation == "NEUTRAL":
+            effect = "NO_EFFECT"
+        elif (relation == "SUPPORTS" and result == "WIN") or (
+            relation == "OPPOSES" and result == "LOSS"
+        ):
+            effect = "HELPED"
+        else:
+            effect = "HURT"
+
+        reviews.append({
+            "name": pattern.get("name"),
+            "bias": bias,
+            "confidence": pattern.get("confidence"),
+            "relation_to_trade": relation,
+            "effect_if_used_as_filter": effect,
+            "evidence": pattern.get("evidence") or {},
+        })
+    return reviews
+
+
+def append_pattern_audit(pos, result, closed_ms, net_pnl):
+    """Write passive pattern evidence without changing the LIVE strategy."""
+    try:
+        try:
+            with open(PATTERN_AUDIT_FILE, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+            if not isinstance(payload, dict):
+                payload = {}
+        except Exception:
+            payload = {}
+
+        patterns = (
+            (pos.get("signal_snapshot") or {}).get("chart_patterns")
+            if isinstance(pos, dict)
+            else []
+        ) or []
+        reviews = review_chart_patterns(patterns, str(pos.get("side") or ""), result)
+
+        payload["version"] = 1
+        payload["mode"] = "PASSIVE_ONLY_DOES_NOT_BLOCK_TRADES"
+        payload["interpretation"] = (
+            "HELPED = pattern supported a winner or opposed a loser; "
+            "HURT = pattern supported a loser or opposed a winner."
+        )
+        events = payload.setdefault("events", [])
+        events.append({
+            "closed_ms": int(closed_ms),
+            "inst": str(pos.get("inst") or ""),
+            "side": str(pos.get("side") or ""),
+            "result": str(result),
+            "net_pnl_usdt": float(net_pnl),
+            "signal_close_ms": int(pos.get("signal_close_ms") or 0),
+            "patterns": patterns,
+            "reviews": reviews,
+        })
+        if len(events) > PATTERN_AUDIT_LIMIT:
+            del events[:-PATTERN_AUDIT_LIMIT]
+
+        summary = payload.setdefault("summary", {})
+        for item in reviews:
+            name = str(item.get("name") or "UNKNOWN")
+            row = summary.setdefault(name, {
+                "seen": 0,
+                "helped": 0,
+                "hurt": 0,
+                "no_effect": 0,
+                "supports_trade": 0,
+                "opposes_trade": 0,
+                "wins_when_present": 0,
+                "losses_when_present": 0,
+            })
+            row["seen"] += 1
+            effect = str(item.get("effect_if_used_as_filter") or "NO_EFFECT")
+            if effect == "HELPED":
+                row["helped"] += 1
+            elif effect == "HURT":
+                row["hurt"] += 1
+            else:
+                row["no_effect"] += 1
+            relation = str(item.get("relation_to_trade") or "NEUTRAL")
+            if relation == "SUPPORTS":
+                row["supports_trade"] += 1
+            elif relation == "OPPOSES":
+                row["opposes_trade"] += 1
+            if result == "WIN":
+                row["wins_when_present"] += 1
+            elif result == "LOSS":
+                row["losses_when_present"] += 1
+
+        tmp = PATTERN_AUDIT_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2, sort_keys=True)
+            f.write("\n")
+        os.replace(tmp, PATTERN_AUDIT_FILE)
+    except Exception as exc:
+        print(f"PATTERN AUDIT ERROR: {type(exc).__name__}: {exc}")
+
+
 def last_green_red_volume(bars, i):
     """Return the latest GREEN and latest RED candle volumes at or before index i."""
     last_green = None
@@ -945,6 +1236,7 @@ def build_signal_snapshot(inst, side, signal_close_ms, rank):
             ),
             "volume_vs_opposite_ratio": volume_ratio,
             "filter_metrics": metrics,
+            "chart_patterns": detect_chart_patterns(bars, i),
         }
         if prev:
             snapshot["prev_candle"] = {
@@ -1365,6 +1657,9 @@ def record_closed(state, reason_hint=None):
     state["fees_usdt"] = float(d(state.get("fees_usdt", 0)) + fee)
     state["realized_pnl_usdt"] = float(d(state.get("realized_pnl_usdt", 0)) + net_pnl)
 
+    patterns = (pos.get("signal_snapshot") or {}).get("chart_patterns") or []
+    pattern_review = review_chart_patterns(patterns, str(pos.get("side") or ""), result)
+
     history = state.setdefault("trade_history", [])
     history.append({
         "inst": pos["inst"],
@@ -1390,9 +1685,12 @@ def record_closed(state, reason_hint=None):
         "reason": reason,
         "history_id": str(hist.get("historyId") or ""),
         "signal_snapshot": pos.get("signal_snapshot") or {},
+        "pattern_review": pattern_review,
     })
     if len(history) > TRADE_HISTORY_LIMIT:
         del history[:-TRADE_HISTORY_LIMIT]
+
+    append_pattern_audit(pos, result, closed_ms, net_pnl)
 
     notify(
         f"{result} {pos['side']} {pos['inst']} | {reason} | "
