@@ -43,6 +43,60 @@
       ],
       "side": "SHORT",
       "signal_close_ms": 1791396900000
+    },
+    {
+      "closed_ms": 1791401763539,
+      "inst": "RAY-USDT",
+      "net_pnl_usdt": -0.4128,
+      "patterns": [
+        {
+          "bias": "LONG",
+          "confidence": 0.843,
+          "evidence": {
+            "bottom_gap_pct": 0.075,
+            "neck_height_pct": 4.469
+          },
+          "name": "DOUBLE_BOTTOM"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.66,
+          "evidence": {
+            "high_slope_pct_per_bar": -0.2112,
+            "low_slope_pct_per_bar": -0.1813,
+            "width_ratio": 0.586
+          },
+          "name": "FALLING_WEDGE"
+        }
+      ],
+      "result": "LOSS",
+      "reviews": [
+        {
+          "bias": "LONG",
+          "confidence": 0.843,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "bottom_gap_pct": 0.075,
+            "neck_height_pct": 4.469
+          },
+          "name": "DOUBLE_BOTTOM",
+          "relation_to_trade": "OPPOSES"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.66,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "high_slope_pct_per_bar": -0.2112,
+            "low_slope_pct_per_bar": -0.1813,
+            "width_ratio": 0.586
+          },
+          "name": "FALLING_WEDGE",
+          "relation_to_trade": "OPPOSES"
+        }
+      ],
+      "side": "SHORT",
+      "signal_close_ms": 1791401400000
     }
   ],
   "interpretation": "HELPED = pattern supported a winner or opposed a loser; HURT = pattern supported a loser or opposed a winner.",
@@ -57,6 +111,26 @@
       "seen": 1,
       "supports_trade": 1,
       "wins_when_present": 1
+    },
+    "DOUBLE_BOTTOM": {
+      "helped": 1,
+      "hurt": 0,
+      "losses_when_present": 1,
+      "no_effect": 0,
+      "opposes_trade": 1,
+      "seen": 1,
+      "supports_trade": 0,
+      "wins_when_present": 0
+    },
+    "FALLING_WEDGE": {
+      "helped": 1,
+      "hurt": 0,
+      "losses_when_present": 1,
+      "no_effect": 0,
+      "opposes_trade": 1,
+      "seen": 1,
+      "supports_trade": 0,
+      "wins_when_present": 0
     }
   },
   "version": 1
