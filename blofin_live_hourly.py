@@ -462,6 +462,12 @@ def short_entry_metrics(bars, i):
         if candle_range > 0
         else 100.0
     )
+    close_4_bars_ago = float(bars[i - 4]["c"]) if i >= 4 else None
+    return_4_bars_pct = (
+        ((float(cur["c"]) / close_4_bars_ago) - 1.0) * 100.0
+        if close_4_bars_ago is not None and close_4_bars_ago > 0
+        else float("inf")
+    )
     close_20_bars_ago = float(bars[i - 20]["c"]) if i >= 20 else None
     return_20_bars_pct = (
         ((float(cur["c"]) / close_20_bars_ago) - 1.0) * 100.0
@@ -477,6 +483,8 @@ def short_entry_metrics(bars, i):
         "short_body_max_1pct": red_body_pct_close <= 1.0,
         "lower_wick_pct_range": lower_wick_pct_range,
         "lower_wick_max_50pct": lower_wick_pct_range <= 50.0,
+        "return_4_bars_pct": return_4_bars_pct,
+        "return_4_bars_max_1pct": return_4_bars_pct <= 1.0,
         "return_20_bars_pct": return_20_bars_pct,
         "return_20_bars_max_10pct": return_20_bars_pct <= 10.0,
         "volume": float(cur["v"]),
@@ -495,6 +503,7 @@ def short_entry_signal(bars, i):
         and metrics["volume_higher_than_last_green"]
         and metrics["red_body_pct_close"] <= 1.0
         and metrics["lower_wick_max_50pct"]
+        and metrics["return_4_bars_max_1pct"]
         and metrics["return_20_bars_max_10pct"]
     )
 
