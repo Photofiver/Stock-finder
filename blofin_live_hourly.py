@@ -739,6 +739,49 @@ def detect_chart_patterns(bars, i, lookback=40):
                     "neck_height_pct": round(depth, 3),
                 })
 
+    # Triple top / bottom: three similar completed pivots with meaningful swings between.
+    if len(piv_hi) >= 3:
+        (a_i, a), (b_i, b), (c_i, c) = piv_hi[-3:]
+        max_gap = max(gap_pct(a, b), gap_pct(b, c), gap_pct(a, c))
+        if (
+            b_i - a_i >= 3
+            and c_i - b_i >= 3
+            and i - c_i <= 12
+            and max_gap <= 1.2
+        ):
+            valley1 = min(float(bars[j]["l"]) for j in range(a_i, b_i + 1))
+            valley2 = min(float(bars[j]["l"]) for j in range(b_i, c_i + 1))
+            top = (a + b + c) / 3.0
+            depth1 = ((top - valley1) / top * 100.0) if top > 0 else 0.0
+            depth2 = ((top - valley2) / top * 100.0) if top > 0 else 0.0
+            if min(depth1, depth2) >= 0.8:
+                add("TRIPLE_TOP", "SHORT", min(0.92, 0.68 + min(depth1, depth2) / 20.0), {
+                    "max_peak_gap_pct": round(max_gap, 3),
+                    "valley1_depth_pct": round(depth1, 3),
+                    "valley2_depth_pct": round(depth2, 3),
+                })
+
+    if len(piv_lo) >= 3:
+        (a_i, a), (b_i, b), (c_i, c) = piv_lo[-3:]
+        max_gap = max(gap_pct(a, b), gap_pct(b, c), gap_pct(a, c))
+        if (
+            b_i - a_i >= 3
+            and c_i - b_i >= 3
+            and i - c_i <= 12
+            and max_gap <= 1.2
+        ):
+            peak1 = max(float(bars[j]["h"]) for j in range(a_i, b_i + 1))
+            peak2 = max(float(bars[j]["h"]) for j in range(b_i, c_i + 1))
+            bottom = (a + b + c) / 3.0
+            height1 = ((peak1 - bottom) / bottom * 100.0) if bottom > 0 else 0.0
+            height2 = ((peak2 - bottom) / bottom * 100.0) if bottom > 0 else 0.0
+            if min(height1, height2) >= 0.8:
+                add("TRIPLE_BOTTOM", "LONG", min(0.92, 0.68 + min(height1, height2) / 20.0), {
+                    "max_bottom_gap_pct": round(max_gap, 3),
+                    "peak1_height_pct": round(height1, 3),
+                    "peak2_height_pct": round(height2, 3),
+                })
+
     # Head & shoulders / inverse H&S from the latest three completed pivots.
     if len(piv_hi) >= 3:
         (l_i, left), (h_i, head), (r_i, right) = piv_hi[-3:]
@@ -784,6 +827,33 @@ def detect_chart_patterns(bars, i, lookback=40):
         if narrowing and high_slope <= -0.04 and low_slope >= 0.04:
             add("SYMMETRICAL_TRIANGLE", "NEUTRAL", 0.62, evidence)
 
+    # Pennants: strong impulse followed by a short converging consolidation.
+    pennant = window[-16:]
+    if len(pennant) >= 14:
+        impulse_start = float(pennant[0]["c"])
+        impulse_end = float(pennant[-8]["c"])
+        cons = pennant[-8:]
+        if impulse_start > 0:
+            impulse_pct = (impulse_end / impulse_start - 1.0) * 100.0
+            highs = [float(x["h"]) for x in cons]
+            lows = [float(x["l"]) for x in cons]
+            high_slope = _pattern_slope_pct(highs)
+            low_slope = _pattern_slope_pct(lows)
+            first_width = max(highs[:3]) - min(lows[:3])
+            last_width = max(highs[-3:]) - min(lows[-3:])
+            narrowing = first_width > 0 and last_width / first_width <= 0.78
+            evidence = {
+                "impulse_pct": round(impulse_pct, 3),
+                "high_slope_pct_per_bar": round(high_slope, 4),
+                "low_slope_pct_per_bar": round(low_slope, 4),
+                "width_ratio": round(last_width / first_width, 3) if first_width > 0 else None,
+            }
+            if narrowing and high_slope <= -0.03 and low_slope >= 0.03:
+                if impulse_pct >= 3.0:
+                    add("BULL_PENNANT", "LONG", 0.69, evidence)
+                if impulse_pct <= -3.0:
+                    add("BEAR_PENNANT", "SHORT", 0.69, evidence)
+
     # Wedges: both boundaries trend in the same direction while converging.
     wedge = window[-14:]
     if len(wedge) >= 12:
@@ -826,6 +896,57 @@ def detect_chart_patterns(bars, i, lookback=40):
                 add("BULL_FLAG", "LONG", 0.67, evidence)
             if impulse_pct <= -3.0 and -0.5 <= flag_pct <= 2.0 and recent_range_pct <= 4.0:
                 add("BEAR_FLAG", "SHORT", 0.67, evidence)
+
+    # Cup & handle / inverse cup & handle: rounded recovery plus a shallow handle.
+    cupwin = window[-30:]
+    if len(cupwin) >= 26:
+        highs = [float(x["h"]) for x in cupwin]
+        lows = [float(x["l"]) for x in cupwin]
+        closes = [float(x["c"]) for x in cupwin]
+
+        left_rim = max(highs[:6])
+        right_rim = max(highs[-10:-5])
+        trough_slice = lows[6:-10]
+        if trough_slice:
+            trough = min(trough_slice)
+            rim = (left_rim + right_rim) / 2.0
+            rim_gap = gap_pct(left_rim, right_rim)
+            cup_depth = ((rim - trough) / rim * 100.0) if rim > 0 else 0.0
+            handle_low = min(lows[-5:])
+            handle_drop = ((right_rim - handle_low) / right_rim * 100.0) if right_rim > 0 else 999.0
+            if (
+                rim_gap <= 2.0
+                and cup_depth >= 2.0
+                and handle_drop <= max(1.5, cup_depth * 0.45)
+                and closes[-1] >= trough
+            ):
+                add("CUP_AND_HANDLE", "LONG", min(0.88, 0.66 + cup_depth / 30.0), {
+                    "rim_gap_pct": round(rim_gap, 3),
+                    "cup_depth_pct": round(cup_depth, 3),
+                    "handle_drop_pct": round(handle_drop, 3),
+                })
+
+        left_floor = min(lows[:6])
+        right_floor = min(lows[-10:-5])
+        dome_slice = highs[6:-10]
+        if dome_slice:
+            dome = max(dome_slice)
+            floor = (left_floor + right_floor) / 2.0
+            floor_gap = gap_pct(left_floor, right_floor)
+            dome_height = ((dome - floor) / floor * 100.0) if floor > 0 else 0.0
+            handle_high = max(highs[-5:])
+            handle_rise = ((handle_high - right_floor) / right_floor * 100.0) if right_floor > 0 else 999.0
+            if (
+                floor_gap <= 2.0
+                and dome_height >= 2.0
+                and handle_rise <= max(1.5, dome_height * 0.45)
+                and closes[-1] <= dome
+            ):
+                add("INVERSE_CUP_AND_HANDLE", "SHORT", min(0.88, 0.66 + dome_height / 30.0), {
+                    "floor_gap_pct": round(floor_gap, 3),
+                    "dome_height_pct": round(dome_height, 3),
+                    "handle_rise_pct": round(handle_rise, 3),
+                })
 
     return patterns
 
