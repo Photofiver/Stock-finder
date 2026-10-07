@@ -632,7 +632,6 @@ def long_entry_signal(bars, i):
     metrics = long_entry_metrics(bars, i)
     return bool(
         metrics
-        and metrics["macd_cross_up"]
         and metrics["green_candle"]
         and metrics["volume_higher_than_last_red"]
         and metrics["green_body_min_60pct"]
