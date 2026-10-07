@@ -433,6 +433,82 @@
       ],
       "side": "SHORT",
       "signal_close_ms": 1791411300000
+    },
+    {
+      "closed_ms": 1791413360080,
+      "inst": "RAY-USDT",
+      "net_pnl_usdt": -0.4272,
+      "patterns": [
+        {
+          "bias": "LONG",
+          "confidence": 0.695,
+          "evidence": {
+            "bottom_gap_pct": 0.324,
+            "neck_height_pct": 1.49
+          },
+          "name": "DOUBLE_BOTTOM"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.753,
+          "evidence": {
+            "max_bottom_gap_pct": 0.324,
+            "peak1_height_pct": 4.569,
+            "peak2_height_pct": 1.461
+          },
+          "name": "TRIPLE_BOTTOM"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.67,
+          "evidence": {
+            "flag_move_pct": -0.862,
+            "flag_range_pct": 3.166,
+            "impulse_pct": 3.211
+          },
+          "name": "BULL_FLAG"
+        }
+      ],
+      "result": "LOSS",
+      "reviews": [
+        {
+          "bias": "LONG",
+          "confidence": 0.695,
+          "effect_if_used_as_filter": "HURT",
+          "evidence": {
+            "bottom_gap_pct": 0.324,
+            "neck_height_pct": 1.49
+          },
+          "name": "DOUBLE_BOTTOM",
+          "relation_to_trade": "SUPPORTS"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.753,
+          "effect_if_used_as_filter": "HURT",
+          "evidence": {
+            "max_bottom_gap_pct": 0.324,
+            "peak1_height_pct": 4.569,
+            "peak2_height_pct": 1.461
+          },
+          "name": "TRIPLE_BOTTOM",
+          "relation_to_trade": "SUPPORTS"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.67,
+          "effect_if_used_as_filter": "HURT",
+          "evidence": {
+            "flag_move_pct": -0.862,
+            "flag_range_pct": 3.166,
+            "impulse_pct": 3.211
+          },
+          "name": "BULL_FLAG",
+          "relation_to_trade": "SUPPORTS"
+        }
+      ],
+      "side": "LONG",
+      "signal_close_ms": 1791410400000
     }
   ],
   "interpretation": "HELPED = pattern supported a winner or opposed a loser; HURT = pattern supported a loser or opposed a winner.",
@@ -447,6 +523,16 @@
       "seen": 1,
       "supports_trade": 1,
       "wins_when_present": 1
+    },
+    "BULL_FLAG": {
+      "helped": 0,
+      "hurt": 1,
+      "losses_when_present": 1,
+      "no_effect": 0,
+      "opposes_trade": 0,
+      "seen": 1,
+      "supports_trade": 1,
+      "wins_when_present": 0
     },
     "CUP_AND_HANDLE": {
       "helped": 0,
@@ -470,12 +556,12 @@
     },
     "DOUBLE_BOTTOM": {
       "helped": 3,
-      "hurt": 2,
-      "losses_when_present": 4,
+      "hurt": 3,
+      "losses_when_present": 5,
       "no_effect": 0,
       "opposes_trade": 4,
-      "seen": 5,
-      "supports_trade": 1,
+      "seen": 6,
+      "supports_trade": 2,
       "wins_when_present": 1
     },
     "DOUBLE_TOP": {
@@ -510,12 +596,12 @@
     },
     "TRIPLE_BOTTOM": {
       "helped": 1,
-      "hurt": 2,
-      "losses_when_present": 2,
+      "hurt": 3,
+      "losses_when_present": 3,
       "no_effect": 0,
       "opposes_trade": 2,
-      "seen": 3,
-      "supports_trade": 1,
+      "seen": 4,
+      "supports_trade": 2,
       "wins_when_present": 1
     }
   },
