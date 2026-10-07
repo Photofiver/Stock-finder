@@ -359,7 +359,7 @@ def build_live_diagnostic(state, top7):
     lines = [
         f"{bot.SIGNAL_LABEL} TOP{bot.TOP_N} — BRAK WEJSCIA",
         "SHORT: RED + RED volume > ostatni GREEN + korpus <=1% ceny close + dolny knot <=50% zakresu + -2% <= return4 <=1% + return20 <=10%",
-        "LONG: MACD cross w gore + GREEN + GREEN volume > ostatni RED + korpus >=60% zakresu + close >=2% vs 10 swiec wczesniej + brak Stoch 14,1,3 cross DOWN w ostatnich 3 swiecach + RSI14 <70",
+        "LONG: GREEN + GREEN volume > ostatni RED + korpus >=60% zakresu + close >=2% vs 10 swiec wczesniej + brak Stoch 14,1,3 cross DOWN w ostatnich 3 swiecach + RSI14 <70",
         "",
     ]
     records = []
@@ -435,6 +435,7 @@ def build_live_diagnostic(state, top7):
                     "cross_down": bool(s["macd_cross_down"]),
                     "cross_up": bool(l["macd_cross_up"]),
                 },
+                "chart_patterns": bot.detect_chart_patterns(bars, i),
                 "short": {
                     "score": f"{s_ok}/7",
                     "missing": s_missing,
@@ -495,7 +496,7 @@ def build_live_diagnostic(state, top7):
                 f"| brak: {', '.join(s_missing) if s_missing else 'NIC'}"
             )
             lines.append(
-                f"   LONG  {l_ok}/7: candle GREEN={'TAK' if l['green_candle'] else 'NIE'} | "
+                f"   LONG  {l_ok}/6: candle GREEN={'TAK' if l['green_candle'] else 'NIE'} | "
                 f"VOL={fmt(current_volume)} vs last RED={fmt(l['last_red_volume'])} "
                 f"({fmt(vol_vs_red_pct, 4)}%) | body={l['green_body_ratio'] * 100:.1f}% >=60% "
                 f"| 10BAR={l['rise_10_bars_pct']:+.3f}% >=2% "
