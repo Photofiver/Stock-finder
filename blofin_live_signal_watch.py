@@ -392,7 +392,6 @@ def build_live_diagnostic(state, top7):
                 ("RETURN20_LE_10PCT", s["return_20_bars_max_10pct"]),
             ]
             l_checks = [
-                ("MACD_UP", l["macd_cross_up"]),
                 ("GREEN", l["green_candle"]),
                 ("GREEN_VOL_GT_RED", l["volume_higher_than_last_red"]),
                 ("BODY_GE_60PCT", l["green_body_min_60pct"]),
@@ -454,7 +453,7 @@ def build_live_diagnostic(state, top7):
                     "return_20_bars_max_pct": 10.0,
                 },
                 "long": {
-                    "score": f"{l_ok}/7",
+                    "score": f"{l_ok}/6",
                     "missing": l_missing,
                     "green_candle": bool(l["green_candle"]),
                     "body_pct_range": float(l["green_body_ratio"]) * 100.0,
