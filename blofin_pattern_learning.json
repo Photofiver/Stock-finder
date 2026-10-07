@@ -401,6 +401,38 @@
       ],
       "side": "SHORT",
       "signal_close_ms": 1791408600000
+    },
+    {
+      "closed_ms": 1791413110219,
+      "inst": "MOVR-USDT",
+      "net_pnl_usdt": -0.00256,
+      "patterns": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.764,
+          "evidence": {
+            "neck_depth_pct": 2.876,
+            "peak_gap_pct": 0.867
+          },
+          "name": "DOUBLE_TOP"
+        }
+      ],
+      "result": "LOSS",
+      "reviews": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.764,
+          "effect_if_used_as_filter": "HURT",
+          "evidence": {
+            "neck_depth_pct": 2.876,
+            "peak_gap_pct": 0.867
+          },
+          "name": "DOUBLE_TOP",
+          "relation_to_trade": "SUPPORTS"
+        }
+      ],
+      "side": "SHORT",
+      "signal_close_ms": 1791411300000
     }
   ],
   "interpretation": "HELPED = pattern supported a winner or opposed a loser; HURT = pattern supported a loser or opposed a winner.",
@@ -445,6 +477,16 @@
       "seen": 5,
       "supports_trade": 1,
       "wins_when_present": 1
+    },
+    "DOUBLE_TOP": {
+      "helped": 0,
+      "hurt": 1,
+      "losses_when_present": 1,
+      "no_effect": 0,
+      "opposes_trade": 0,
+      "seen": 1,
+      "supports_trade": 1,
+      "wins_when_present": 0
     },
     "FALLING_WEDGE": {
       "helped": 2,
