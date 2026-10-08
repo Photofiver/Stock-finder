@@ -951,6 +951,21 @@ def detect_chart_patterns(bars, i, lookback=40):
     return patterns
 
 
+def pattern_entry_filter(bars, i, side):
+    """Active entry filter: block trades when a detected chart pattern points the other way."""
+    patterns = detect_chart_patterns(bars, i)
+    opposing_bias = "LONG" if side == "SHORT" else "SHORT"
+    opposing = [
+        pattern for pattern in patterns
+        if str(pattern.get("bias") or "").upper() == opposing_bias
+    ]
+    return {
+        "allowed": not opposing,
+        "patterns": patterns,
+        "opposing": opposing,
+    }
+
+
 def review_chart_patterns(patterns, trade_side, result):
     """Score whether using each detected pattern as a directional filter would help."""
     reviews = []
@@ -1433,14 +1448,38 @@ def evaluate_signals(state, top10):
             side = "LONG"
 
         if side:
-            signal_age_ms = scan_now_ms - close_ms
-            if 0 <= signal_age_ms <= SIGNAL_MAX_AGE_MS:
-                candidates.append((ranks[inst], inst, side, close_ms))
-            else:
-                print(
-                    f"STALE SIGNAL {inst} {side}: age={signal_age_ms / 1000:.1f}s "
-                    f"(max {SIGNAL_MAX_AGE_MS / 1000:.0f}s)"
+            pattern_filter = pattern_entry_filter(bars, i, side)
+            if not pattern_filter["allowed"]:
+                opposing_names = [
+                    str(pattern.get("name") or "")
+                    for pattern in pattern_filter["opposing"]
+                ]
+                message = (
+                    f"{inst} {side} blocked by opposing chart pattern(s): "
+                    + ", ".join(opposing_names)
                 )
+                print("PATTERN BLOCK: " + message)
+                append_technical_event(
+                    "PATTERN_BLOCK",
+                    message,
+                    inst=inst,
+                    side=side,
+                    rank=ranks[inst],
+                    signal_close_ms=close_ms,
+                    extra={
+                        "opposing_patterns": pattern_filter["opposing"],
+                        "all_patterns": pattern_filter["patterns"],
+                    },
+                )
+            else:
+                signal_age_ms = scan_now_ms - close_ms
+                if 0 <= signal_age_ms <= SIGNAL_MAX_AGE_MS:
+                    candidates.append((ranks[inst], inst, side, close_ms))
+                else:
+                    print(
+                        f"STALE SIGNAL {inst} {side}: age={signal_age_ms / 1000:.1f}s "
+                        f"(max {SIGNAL_MAX_AGE_MS / 1000:.0f}s)"
+                    )
 
     for inst, bars in data.items():
         i = latest_idx[inst]
