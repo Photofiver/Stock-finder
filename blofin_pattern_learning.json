@@ -1391,6 +1391,60 @@
       ],
       "side": "LONG",
       "signal_close_ms": 1791450900000
+    },
+    {
+      "closed_ms": 1791461139995,
+      "inst": "AEVO-USDT",
+      "net_pnl_usdt": -0.4263,
+      "patterns": [
+        {
+          "bias": "LONG",
+          "confidence": 0.834,
+          "evidence": {
+            "bottom_gap_pct": 0.225,
+            "neck_height_pct": 4.282
+          },
+          "name": "DOUBLE_BOTTOM"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.757,
+          "evidence": {
+            "max_bottom_gap_pct": 0.64,
+            "peak1_height_pct": 1.53,
+            "peak2_height_pct": 4.466
+          },
+          "name": "TRIPLE_BOTTOM"
+        }
+      ],
+      "result": "LOSS",
+      "reviews": [
+        {
+          "bias": "LONG",
+          "confidence": 0.834,
+          "effect_if_used_as_filter": "HURT",
+          "evidence": {
+            "bottom_gap_pct": 0.225,
+            "neck_height_pct": 4.282
+          },
+          "name": "DOUBLE_BOTTOM",
+          "relation_to_trade": "SUPPORTS"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.757,
+          "effect_if_used_as_filter": "HURT",
+          "evidence": {
+            "max_bottom_gap_pct": 0.64,
+            "peak1_height_pct": 1.53,
+            "peak2_height_pct": 4.466
+          },
+          "name": "TRIPLE_BOTTOM",
+          "relation_to_trade": "SUPPORTS"
+        }
+      ],
+      "side": "LONG",
+      "signal_close_ms": 1791460800000
     }
   ],
   "interpretation": "HELPED = pattern supported a winner or opposed a loser; HURT = pattern supported a loser or opposed a winner.",
@@ -1438,12 +1492,12 @@
     },
     "DOUBLE_BOTTOM": {
       "helped": 6,
-      "hurt": 6,
-      "losses_when_present": 7,
+      "hurt": 7,
+      "losses_when_present": 8,
       "no_effect": 0,
       "opposes_trade": 9,
-      "seen": 12,
-      "supports_trade": 3,
+      "seen": 13,
+      "supports_trade": 4,
       "wins_when_present": 5
     },
     "DOUBLE_TOP": {
@@ -1498,12 +1552,12 @@
     },
     "TRIPLE_BOTTOM": {
       "helped": 2,
-      "hurt": 4,
-      "losses_when_present": 4,
+      "hurt": 5,
+      "losses_when_present": 5,
       "no_effect": 0,
       "opposes_trade": 4,
-      "seen": 6,
-      "supports_trade": 2,
+      "seen": 7,
+      "supports_trade": 3,
       "wins_when_present": 2
     }
   },
