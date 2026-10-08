@@ -42,6 +42,8 @@ MACD_SIGNAL = 9
 VOL_MA_FAST = 5
 VOL_MA_SLOW = 10
 RECENT_SPIKE_LOOKBACK = 5
+LONG_MAX_1BAR_RISE_PCT = 3.0
+SHORT_OPPOSING_BULL_PATTERN_MIN_CONFIDENCE = 0.70
 SIGNAL_MINUTES = int(os.getenv("LIVE_SIGNAL_MINUTES", "15"))
 MAX_DRAWDOWN_PCT = Decimal(os.getenv("LIVE_MAX_DRAWDOWN_PCT", "0.10"))
 if SIGNAL_MINUTES == 5:
@@ -705,7 +707,7 @@ def _pattern_pivots(bars, start, end, field, kind, wing=2):
 
 
 def detect_chart_patterns(bars, i, lookback=40):
-    """Passive 15m pattern detector. It NEVER changes an entry/exit decision."""
+    """Detect 15m chart patterns for diagnostics and the SHORT entry risk filter."""
     if i < 19:
         return []
 
@@ -1474,6 +1476,32 @@ def volume_concentration_filter(inst, signal_close_ms):
     return result
 
 
+def entry_risk_rejection(side, return_1bar_pct=None, chart_patterns=None):
+    """Additional entry filters; returns (reject_reason, evidence)."""
+    if side == "LONG":
+        if return_1bar_pct is None:
+            return "LONG_MISSING_1BAR_RETURN", {}
+        rise = float(return_1bar_pct)
+        if rise >= LONG_MAX_1BAR_RISE_PCT:
+            return "LONG_1BAR_RISE_GE_3PCT", {
+                "return_1bar_pct": rise,
+                "threshold_pct": LONG_MAX_1BAR_RISE_PCT,
+            }
+    elif side == "SHORT":
+        opposing = [
+            pattern for pattern in (chart_patterns or [])
+            if str(pattern.get("bias") or "").upper() == "LONG"
+            and float(pattern.get("confidence") or 0) >=
+            SHORT_OPPOSING_BULL_PATTERN_MIN_CONFIDENCE
+        ]
+        if opposing:
+            return "SHORT_BULL_PATTERN_CONFIDENCE_GE_70PCT", {
+                "opposing_patterns": opposing,
+                "minimum_confidence": SHORT_OPPOSING_BULL_PATTERN_MIN_CONFIDENCE,
+            }
+    return None, {}
+
+
 def evaluate_signals(state, top10):
     data = {}
     latest_idx = {}
@@ -1511,6 +1539,26 @@ def evaluate_signals(state, top10):
             side = "LONG"
 
         if side:
+            previous_close = float(bars[i - 1]["c"]) if i > 0 else 0.0
+            one_bar_return = (
+                (float(bars[i]["c"]) / previous_close - 1.0) * 100.0
+                if previous_close > 0 else None
+            )
+            chart_patterns = detect_chart_patterns(bars, i) if side == "SHORT" else []
+            reject_reason, reject_details = entry_risk_rejection(
+                side, one_bar_return, chart_patterns
+            )
+            if reject_reason:
+                append_technical_event(
+                    "ENTRY_FILTER_BLOCKED",
+                    f"{inst} {side}: {reject_reason}",
+                    inst=inst, side=side, rank=ranks[inst],
+                    signal_close_ms=close_ms,
+                    extra={"reason": reject_reason, **reject_details},
+                )
+                print(f"ENTRY FILTER {inst} {side}: {reject_reason} {reject_details}")
+                continue
+
             concentration = volume_concentration_filter(inst, close_ms)
             state.setdefault("last_volume_concentration", {})[inst] = concentration
             if not concentration["allowed"]:
@@ -1522,7 +1570,6 @@ def evaluate_signals(state, top10):
                 )
                 print(f"VOLUME FILTER {inst} {side}: {concentration}")
                 continue
-            # Patterns are recorded for analysis only and never block a LIVE entry.
             signal_age_ms = scan_now_ms - close_ms
             if 0 <= signal_age_ms <= SIGNAL_MAX_AGE_MS:
                 candidates.append((ranks[inst], inst, side, close_ms))
@@ -2041,6 +2088,36 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
             f"{inst}: stale signal ({signal_age_ms / 1000:.1f}s old; "
             f"max {SIGNAL_MAX_AGE_MS / 1000:.0f}s)"
         )
+
+    # Revalidate the same entry guards immediately before sending a LIVE order.
+    if signal_snapshot.get("snapshot_error"):
+        raise RuntimeError(
+            f"{inst}: entry filter could not verify snapshot: "
+            f"{signal_snapshot['snapshot_error']}"
+        )
+    if side == "SHORT" and not isinstance(signal_snapshot.get("chart_patterns"), list):
+        raise RuntimeError(f"{inst}: missing chart patterns for SHORT filter")
+    reject_reason, reject_details = entry_risk_rejection(
+        side,
+        signal_snapshot.get("return_1bar_pct"),
+        signal_snapshot.get("chart_patterns"),
+    )
+    signal_snapshot["entry_risk_filter"] = {
+        "allowed": reject_reason is None,
+        "long_max_1bar_rise_pct": LONG_MAX_1BAR_RISE_PCT,
+        "short_opposing_bull_pattern_min_confidence":
+            SHORT_OPPOSING_BULL_PATTERN_MIN_CONFIDENCE,
+        "reject_reason": reject_reason,
+    }
+    if reject_reason:
+        append_technical_event(
+            "ENTRY_FILTER_BLOCKED",
+            f"{inst} {side}: {reject_reason} (pre-order revalidation)",
+            inst=inst, side=side, rank=rank,
+            signal_close_ms=signal_close_ms,
+            extra={"reason": reject_reason, **reject_details},
+        )
+        raise RuntimeError(f"{inst} {side}: entry rejected: {reject_reason}")
 
     market_reference = d(tickers[inst]["last"])
     available = get_available_usdt()
