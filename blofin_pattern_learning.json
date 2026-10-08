@@ -1465,6 +1465,40 @@
       "reviews": [],
       "side": "LONG",
       "signal_close_ms": 1791477000000
+    },
+    {
+      "closed_ms": 1791480857954,
+      "inst": "DOS-USDT",
+      "net_pnl_usdt": -0.2934,
+      "patterns": [
+        {
+          "bias": "LONG",
+          "confidence": 0.744,
+          "evidence": {
+            "cup_depth_pct": 2.535,
+            "handle_drop_pct": 0.649,
+            "rim_gap_pct": 1.923
+          },
+          "name": "CUP_AND_HANDLE"
+        }
+      ],
+      "result": "LOSS",
+      "reviews": [
+        {
+          "bias": "LONG",
+          "confidence": 0.744,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "cup_depth_pct": 2.535,
+            "handle_drop_pct": 0.649,
+            "rim_gap_pct": 1.923
+          },
+          "name": "CUP_AND_HANDLE",
+          "relation_to_trade": "OPPOSES"
+        }
+      ],
+      "side": "SHORT",
+      "signal_close_ms": 1791480600000
     }
   ],
   "interpretation": "HELPED = pattern supported a winner or opposed a loser; HURT = pattern supported a loser or opposed a winner.",
@@ -1491,12 +1525,12 @@
       "wins_when_present": 3
     },
     "CUP_AND_HANDLE": {
-      "helped": 1,
+      "helped": 2,
       "hurt": 1,
-      "losses_when_present": 1,
+      "losses_when_present": 2,
       "no_effect": 0,
-      "opposes_trade": 2,
-      "seen": 2,
+      "opposes_trade": 3,
+      "seen": 3,
       "supports_trade": 0,
       "wins_when_present": 1
     },
