@@ -1499,20 +1499,74 @@
       ],
       "side": "SHORT",
       "signal_close_ms": 1791480600000
+    },
+    {
+      "closed_ms": 1791483749989,
+      "inst": "UAI-USDT",
+      "net_pnl_usdt": 0.33,
+      "patterns": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.9,
+          "evidence": {
+            "neck_depth_pct": 7.739,
+            "peak_gap_pct": 0.551
+          },
+          "name": "DOUBLE_TOP"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.7,
+          "evidence": {
+            "high_slope_pct_per_bar": 0.061,
+            "low_slope_pct_per_bar": 0.2844,
+            "width_ratio": 0.392
+          },
+          "name": "ASCENDING_TRIANGLE"
+        }
+      ],
+      "result": "WIN",
+      "reviews": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.9,
+          "effect_if_used_as_filter": "HURT",
+          "evidence": {
+            "neck_depth_pct": 7.739,
+            "peak_gap_pct": 0.551
+          },
+          "name": "DOUBLE_TOP",
+          "relation_to_trade": "OPPOSES"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.7,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "high_slope_pct_per_bar": 0.061,
+            "low_slope_pct_per_bar": 0.2844,
+            "width_ratio": 0.392
+          },
+          "name": "ASCENDING_TRIANGLE",
+          "relation_to_trade": "SUPPORTS"
+        }
+      ],
+      "side": "LONG",
+      "signal_close_ms": 1791483300000
     }
   ],
   "interpretation": "HELPED = pattern supported a winner or opposed a loser; HURT = pattern supported a loser or opposed a winner.",
   "mode": "PASSIVE_ONLY_DOES_NOT_BLOCK_TRADES",
   "summary": {
     "ASCENDING_TRIANGLE": {
-      "helped": 1,
+      "helped": 2,
       "hurt": 0,
       "losses_when_present": 0,
       "no_effect": 0,
       "opposes_trade": 0,
-      "seen": 1,
-      "supports_trade": 1,
-      "wins_when_present": 1
+      "seen": 2,
+      "supports_trade": 2,
+      "wins_when_present": 2
     },
     "BULL_FLAG": {
       "helped": 2,
@@ -1556,13 +1610,13 @@
     },
     "DOUBLE_TOP": {
       "helped": 0,
-      "hurt": 6,
+      "hurt": 7,
       "losses_when_present": 5,
       "no_effect": 0,
-      "opposes_trade": 1,
-      "seen": 6,
+      "opposes_trade": 2,
+      "seen": 7,
       "supports_trade": 5,
-      "wins_when_present": 1
+      "wins_when_present": 2
     },
     "FALLING_WEDGE": {
       "helped": 3,
