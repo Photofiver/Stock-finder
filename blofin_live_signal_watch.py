@@ -160,6 +160,8 @@ def persist_learning_12h(
                     "price return over last 4 bars >= -2%",
                     "price return over last 4 bars <= 1%",
                     "price return over last 20 bars <= 10%",
+                    "RSI14 >= 55",
+                    "-0.10 <= ((MACD histogram now - previous) / close * 100) <= 0",
                     "no detected LONG-bias chart pattern"
                 ],
                 "LONG": [
@@ -184,7 +186,10 @@ def persist_learning_12h(
             "lower wick <= 50% of candle range",
             "price return over last 4 bars >= -2%",
             "price return over last 4 bars <= 1%",
-            "price return over last 20 bars <= 10%"
+            "price return over last 20 bars <= 10%",
+            "RSI14 >= 55",
+            "-0.10 <= ((MACD histogram now - previous) / close * 100) <= 0",
+            "no detected LONG-bias chart pattern"
         ],
         "LONG": [
             "MACD cross up",
@@ -400,6 +405,8 @@ def build_live_diagnostic(state, top7):
                 ("RETURN4_GE_MINUS_2PCT", s["return_4_bars_min_minus_2pct"]),
                 ("RETURN4_LE_1PCT", s["return_4_bars_max_1pct"]),
                 ("RETURN20_LE_10PCT", s["return_20_bars_max_10pct"]),
+                ("RSI_GE_55", s["short_rsi_min_55"]),
+                ("MACD_HIST_DELTA_PCT_CLOSE_IN_RANGE", s["short_macd_hist_delta_ok"]),
                 ("NO_LONG_BIAS_PATTERN", not short_opposing_patterns),
             ]
             l_checks = [
@@ -464,6 +471,13 @@ def build_live_diagnostic(state, top7):
                     "return_4_bars_max_pct": 1.0,
                     "return_20_bars_pct": float(s["return_20_bars_pct"]),
                     "return_20_bars_max_pct": 10.0,
+                    "rsi14": s["rsi14"],
+                    "rsi_min_inclusive": 55.0,
+                    "rsi_filter_ok": bool(s["short_rsi_min_55"]),
+                    "macd_hist_delta_pct_close": float(s["macd_hist_delta_pct_close"]),
+                    "macd_hist_delta_min_pct": -0.10,
+                    "macd_hist_delta_max_pct": 0.0,
+                    "macd_hist_delta_filter_ok": bool(s["short_macd_hist_delta_ok"]),
                     "pattern_filter_ok": not short_opposing_patterns,
                     "opposing_patterns": short_opposing_patterns,
                 },
@@ -509,6 +523,8 @@ def build_live_diagnostic(state, top7):
                 f"| lower wick={s['lower_wick_pct_range']:.1f}% <=50% "
                 f"| RETURN4={s['return_4_bars_pct']:+.3f}% in [-2%, +1%] "
                 f"| RETURN20={s['return_20_bars_pct']:+.3f}% <=10% "
+                f"| RSI14={fmt(s['rsi14'], 4)} >=55 "
+                f"| MACD dH/close={s['macd_hist_delta_pct_close']:+.4f}% in [-0.10%, 0%] "
                 f"| brak: {', '.join(s_missing) if s_missing else 'NIC'}"
             )
             lines.append(
