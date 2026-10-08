@@ -693,6 +693,60 @@
       ],
       "side": "SHORT",
       "signal_close_ms": 1791414000000
+    },
+    {
+      "closed_ms": 1791417707067,
+      "inst": "PROM-USDT",
+      "net_pnl_usdt": -0.3833379713958993,
+      "patterns": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.731,
+          "evidence": {
+            "neck_depth_pct": 2.22,
+            "peak_gap_pct": 0.457
+          },
+          "name": "DOUBLE_TOP"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.861,
+          "evidence": {
+            "cup_depth_pct": 6.027,
+            "handle_drop_pct": 1.677,
+            "rim_gap_pct": 0.989
+          },
+          "name": "CUP_AND_HANDLE"
+        }
+      ],
+      "result": "LOSS",
+      "reviews": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.731,
+          "effect_if_used_as_filter": "HURT",
+          "evidence": {
+            "neck_depth_pct": 2.22,
+            "peak_gap_pct": 0.457
+          },
+          "name": "DOUBLE_TOP",
+          "relation_to_trade": "SUPPORTS"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.861,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "cup_depth_pct": 6.027,
+            "handle_drop_pct": 1.677,
+            "rim_gap_pct": 0.989
+          },
+          "name": "CUP_AND_HANDLE",
+          "relation_to_trade": "OPPOSES"
+        }
+      ],
+      "side": "SHORT",
+      "signal_close_ms": 1791416700000
     }
   ],
   "interpretation": "HELPED = pattern supported a winner or opposed a loser; HURT = pattern supported a loser or opposed a winner.",
@@ -719,12 +773,12 @@
       "wins_when_present": 1
     },
     "CUP_AND_HANDLE": {
-      "helped": 0,
+      "helped": 1,
       "hurt": 1,
-      "losses_when_present": 0,
+      "losses_when_present": 1,
       "no_effect": 0,
-      "opposes_trade": 1,
-      "seen": 1,
+      "opposes_trade": 2,
+      "seen": 2,
       "supports_trade": 0,
       "wins_when_present": 1
     },
@@ -750,12 +804,12 @@
     },
     "DOUBLE_TOP": {
       "helped": 0,
-      "hurt": 2,
-      "losses_when_present": 1,
+      "hurt": 3,
+      "losses_when_present": 2,
       "no_effect": 0,
       "opposes_trade": 1,
-      "seen": 2,
-      "supports_trade": 1,
+      "seen": 3,
+      "supports_trade": 2,
       "wins_when_present": 1
     },
     "FALLING_WEDGE": {
