@@ -476,6 +476,15 @@ def short_entry_metrics(bars, i):
         if close_20_bars_ago is not None and close_20_bars_ago > 0
         else float("inf")
     )
+    rsi14 = cur.get("rsi")
+    short_rsi_min_55 = rsi14 is not None and float(rsi14) >= 55.0
+    close_price = float(cur["c"])
+    macd_hist_delta_pct_close = (
+        ((float(cur["macd_hist"]) - float(prev["macd_hist"])) / close_price) * 100.0
+        if close_price > 0
+        else float("inf")
+    )
+    short_macd_hist_delta_ok = -0.10 <= macd_hist_delta_pct_close <= 0.0
 
     return {
         "macd_cross_down": macd_cross_down,
@@ -490,6 +499,10 @@ def short_entry_metrics(bars, i):
         "return_4_bars_max_1pct": return_4_bars_pct <= 1.0,
         "return_20_bars_pct": return_20_bars_pct,
         "return_20_bars_max_10pct": return_20_bars_pct <= 10.0,
+        "rsi14": None if rsi14 is None else float(rsi14),
+        "short_rsi_min_55": short_rsi_min_55,
+        "macd_hist_delta_pct_close": macd_hist_delta_pct_close,
+        "short_macd_hist_delta_ok": short_macd_hist_delta_ok,
         "volume": float(cur["v"]),
         "last_green_volume": last_green_volume,
         "macd_dif": float(cur["macd_dif"]),
@@ -509,6 +522,8 @@ def short_entry_signal(bars, i):
         and metrics["return_4_bars_min_minus_2pct"]
         and metrics["return_4_bars_max_1pct"]
         and metrics["return_20_bars_max_10pct"]
+        and metrics["short_rsi_min_55"]
+        and metrics["short_macd_hist_delta_ok"]
     )
 
 
