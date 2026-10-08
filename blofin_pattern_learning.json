@@ -1357,6 +1357,40 @@
       "reviews": [],
       "side": "LONG",
       "signal_close_ms": 1791450000000
+    },
+    {
+      "closed_ms": 1791452071703,
+      "inst": "JTO-USDT",
+      "net_pnl_usdt": 0.39387,
+      "patterns": [
+        {
+          "bias": "LONG",
+          "confidence": 0.67,
+          "evidence": {
+            "flag_move_pct": 0.138,
+            "flag_range_pct": 2.211,
+            "impulse_pct": 3.839
+          },
+          "name": "BULL_FLAG"
+        }
+      ],
+      "result": "WIN",
+      "reviews": [
+        {
+          "bias": "LONG",
+          "confidence": 0.67,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "flag_move_pct": 0.138,
+            "flag_range_pct": 2.211,
+            "impulse_pct": 3.839
+          },
+          "name": "BULL_FLAG",
+          "relation_to_trade": "SUPPORTS"
+        }
+      ],
+      "side": "LONG",
+      "signal_close_ms": 1791450900000
     }
   ],
   "interpretation": "HELPED = pattern supported a winner or opposed a loser; HURT = pattern supported a loser or opposed a winner.",
@@ -1373,14 +1407,14 @@
       "wins_when_present": 1
     },
     "BULL_FLAG": {
-      "helped": 1,
+      "helped": 2,
       "hurt": 3,
       "losses_when_present": 2,
       "no_effect": 0,
       "opposes_trade": 3,
-      "seen": 4,
-      "supports_trade": 1,
-      "wins_when_present": 2
+      "seen": 5,
+      "supports_trade": 2,
+      "wins_when_present": 3
     },
     "CUP_AND_HANDLE": {
       "helped": 1,
