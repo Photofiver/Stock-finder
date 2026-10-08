@@ -159,7 +159,8 @@ def persist_learning_12h(
                     "lower wick <= 50% of candle range",
                     "price return over last 4 bars >= -2%",
                     "price return over last 4 bars <= 1%",
-                    "price return over last 20 bars <= 10%"
+                    "price return over last 20 bars <= 10%",
+                    "no detected LONG-bias chart pattern"
                 ],
                 "LONG": [
                     "MACD cross up",
@@ -169,6 +170,7 @@ def persist_learning_12h(
                     "close >= 2% vs 10 bars earlier",
                     "no Stochastic 14,1,3 cross DOWN in last 3 candles",
                     "RSI14 < 70",
+                    "no detected SHORT-bias chart pattern",
                 ],
             },
             "scans": [],
@@ -382,6 +384,14 @@ def build_live_diagnostic(state, top7):
                 records.append({"rank": rank, "inst": inst, "error": "missing_macd_or_volume"})
                 continue
 
+            chart_patterns = bot.detect_chart_patterns(bars, i)
+            short_opposing_patterns = [
+                p for p in chart_patterns if str(p.get("bias") or "").upper() == "LONG"
+            ]
+            long_opposing_patterns = [
+                p for p in chart_patterns if str(p.get("bias") or "").upper() == "SHORT"
+            ]
+
             s_checks = [
                 ("RED", s["red_candle"]),
                 ("RED_VOL_GT_GREEN", s["volume_higher_than_last_green"]),
@@ -390,6 +400,7 @@ def build_live_diagnostic(state, top7):
                 ("RETURN4_GE_MINUS_2PCT", s["return_4_bars_min_minus_2pct"]),
                 ("RETURN4_LE_1PCT", s["return_4_bars_max_1pct"]),
                 ("RETURN20_LE_10PCT", s["return_20_bars_max_10pct"]),
+                ("NO_LONG_BIAS_PATTERN", not short_opposing_patterns),
             ]
             l_checks = [
                 ("GREEN", l["green_candle"]),
@@ -398,6 +409,7 @@ def build_live_diagnostic(state, top7):
                 ("RISE10_GE_2PCT", l["rise_10_bars_min_2pct"]),
                 ("STOCH_NO_DOWN_LAST3", l["stoch_long_ok"]),
                 ("RSI_LT_70", l["rsi_below_70"]),
+                ("NO_SHORT_BIAS_PATTERN", not long_opposing_patterns),
             ]
 
             s_ok = sum(1 for _, ok in s_checks if ok)
@@ -435,9 +447,9 @@ def build_live_diagnostic(state, top7):
                     "cross_down": bool(s["macd_cross_down"]),
                     "cross_up": bool(l["macd_cross_up"]),
                 },
-                "chart_patterns": bot.detect_chart_patterns(bars, i),
+                "chart_patterns": chart_patterns,
                 "short": {
-                    "score": f"{s_ok}/7",
+                    "score": f"{s_ok}/{len(s_checks)}",
                     "missing": s_missing,
                     "red_candle": bool(s["red_candle"]),
                     "body_pct_close": float(s["red_body_pct_close"]),
@@ -452,9 +464,11 @@ def build_live_diagnostic(state, top7):
                     "return_4_bars_max_pct": 1.0,
                     "return_20_bars_pct": float(s["return_20_bars_pct"]),
                     "return_20_bars_max_pct": 10.0,
+                    "pattern_filter_ok": not short_opposing_patterns,
+                    "opposing_patterns": short_opposing_patterns,
                 },
                 "long": {
-                    "score": f"{l_ok}/6",
+                    "score": f"{l_ok}/{len(l_checks)}",
                     "missing": l_missing,
                     "green_candle": bool(l["green_candle"]),
                     "body_pct_range": float(l["green_body_ratio"]) * 100.0,
@@ -471,6 +485,8 @@ def build_live_diagnostic(state, top7):
                     "rsi14": l["rsi14"],
                     "rsi_max_exclusive": 70.0,
                     "rsi_below_70": bool(l["rsi_below_70"]),
+                    "pattern_filter_ok": not long_opposing_patterns,
+                    "opposing_patterns": long_opposing_patterns,
                 },
             }
             records.append(record)
@@ -487,7 +503,7 @@ def build_live_diagnostic(state, top7):
                 f"UP={'TAK' if l['macd_cross_up'] else 'NIE'}"
             )
             lines.append(
-                f"   SHORT {s_ok}/7: candle RED={'TAK' if s['red_candle'] else 'NIE'} | "
+                f"   SHORT {s_ok}/{len(s_checks)}: candle RED={'TAK' if s['red_candle'] else 'NIE'} | "
                 f"VOL={fmt(current_volume)} vs last GREEN={fmt(s['last_green_volume'])} "
                 f"({fmt(vol_vs_green_pct, 4)}%) | body={s['red_body_pct_close']:.3f}% <=1% "
                 f"| lower wick={s['lower_wick_pct_range']:.1f}% <=50% "
@@ -496,7 +512,7 @@ def build_live_diagnostic(state, top7):
                 f"| brak: {', '.join(s_missing) if s_missing else 'NIC'}"
             )
             lines.append(
-                f"   LONG  {l_ok}/6: candle GREEN={'TAK' if l['green_candle'] else 'NIE'} | "
+                f"   LONG  {l_ok}/{len(l_checks)}: candle GREEN={'TAK' if l['green_candle'] else 'NIE'} | "
                 f"VOL={fmt(current_volume)} vs last RED={fmt(l['last_red_volume'])} "
                 f"({fmt(vol_vs_red_pct, 4)}%) | body={l['green_body_ratio'] * 100:.1f}% >=60% "
                 f"| 10BAR={l['rise_10_bars_pct']:+.3f}% >=2% "
