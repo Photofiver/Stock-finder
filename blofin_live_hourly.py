@@ -1426,6 +1426,69 @@ def init_arm_from_history(inst, bars, latest_index, state):
     }
 
 
+
+# One-minute concentration inside the closed 15m signal candle.
+_VOLUME_CONCENTRATION_CACHE = {}
+
+
+def volume_concentration_filter(inst, signal_close_ms):
+    key = (str(inst), int(signal_close_ms))
+    if key in _VOLUME_CONCENTRATION_CACHE:
+        return dict(_VOLUME_CONCENTRATION_CACHE[key])
+    result = {
+        "allowed": False,
+        "threshold_pct": 85.0,
+        "signal_close_ms": int(signal_close_ms),
+        "concentration_pct": None,
+        "reason": "VOLUME_1M_DATA_UNAVAILABLE",
+    }
+    try:
+        if SIGNAL_MS != 900000:
+            raise ValueError("Volume concentration filter requires 15m signals")
+        end = int(signal_close_ms)
+        if end % 900000 or end > now_ms():
+            raise ValueError("Signal must be an aligned, closed 15m candle")
+        start = end - 900000
+        raw = market_get(
+            "/api/v1/market/candles",
+            {"instId": inst, "bar": "1m", "after": str(end), "limit": "30"},
+        )
+        volumes = {}
+        for row in raw:
+            ts = int(row[0])
+            if not start <= ts < end:
+                continue
+            if len(row) < 9 or str(row[8]) != "1":
+                continue
+            value = Decimal(str(row[5]))
+            if not value.is_finite() or value < 0 or ts in volumes:
+                raise ValueError("Invalid or duplicate 1m volume")
+            volumes[ts] = value
+        if set(volumes) != set(range(start, end, 60000)):
+            raise ValueError("Missing confirmed 1m candles")
+        total = sum(volumes.values(), Decimal("0"))
+        if total <= 0:
+            raise ValueError("Signal candle has zero total volume")
+        largest = max(volumes.values())
+        blocked = largest * 100 >= total * 85
+        result.update(
+            allowed=not blocked,
+            concentration_pct=float(largest / total * 100),
+            total_volume=str(total),
+            max_1m_volume=str(largest),
+            minute_volumes=[str(volumes[ts]) for ts in sorted(volumes)],
+            reason="VOLUME_CONCENTRATION_GE_85PCT" if blocked else "PASS",
+        )
+    except Exception as exc:
+        result["error"] = f"{type(exc).__name__}: {exc}"
+    # Cache successful data only; transient failures can be retried.
+    if result["concentration_pct"] is not None:
+        if len(_VOLUME_CONCENTRATION_CACHE) >= 100:
+            _VOLUME_CONCENTRATION_CACHE.clear()
+        _VOLUME_CONCENTRATION_CACHE[key] = dict(result)
+    return result
+
+
 def evaluate_signals(state, top10):
     data = {}
     latest_idx = {}
@@ -1463,6 +1526,17 @@ def evaluate_signals(state, top10):
             side = "LONG"
 
         if side:
+            concentration = volume_concentration_filter(inst, close_ms)
+            state.setdefault("last_volume_concentration", {})[inst] = concentration
+            if not concentration["allowed"]:
+                append_technical_event(
+                    concentration["reason"],
+                    f"{inst} {side}: 1m volume filter blocked entry",
+                    inst=inst, side=side, rank=ranks[inst],
+                    signal_close_ms=close_ms, extra=concentration,
+                )
+                print(f"VOLUME FILTER {inst} {side}: {concentration}")
+                continue
             pattern_filter = pattern_entry_filter(bars, i, side)
             if not pattern_filter["allowed"]:
                 opposing_names = [
@@ -1986,10 +2060,20 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         raise RuntimeError("HARD STOP active: 10% drawdown limit reached")
 
     rank, inst, side, signal_close_ms = candidate
+    concentration = volume_concentration_filter(inst, signal_close_ms)
+    if not concentration["allowed"]:
+        append_technical_event(
+            concentration["reason"],
+            f"{inst} {side}: 1m volume filter blocked order",
+            inst=inst, side=side, rank=rank,
+            signal_close_ms=signal_close_ms, extra=concentration,
+        )
+        raise RuntimeError(f"{inst}: volume concentration filter: {concentration}")
     signal_age_ms = now_ms() - int(signal_close_ms)
     signal_snapshot = build_signal_snapshot(
         inst, side, signal_close_ms, rank
     )
+    signal_snapshot["volume_concentration_1m"] = concentration
     if signal_age_ms < 0 or signal_age_ms > SIGNAL_MAX_AGE_MS:
         raise RuntimeError(
             f"{inst}: stale signal ({signal_age_ms / 1000:.1f}s old; "
