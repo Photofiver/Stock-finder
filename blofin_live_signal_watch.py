@@ -162,7 +162,7 @@ def persist_learning_12h(
                     "price return over last 20 bars <= 10%",
                     "RSI14 >= 55",
                     "-0.10 <= ((MACD histogram now - previous) / close * 100) <= 0",
-                    "no detected LONG-bias chart pattern"
+                    "no LONG-bias pattern with confidence >= 70%"
                 ],
                 "LONG": [
                     "MACD cross up",
@@ -172,7 +172,7 @@ def persist_learning_12h(
                     "close >= 2% vs 10 bars earlier",
                     "no Stochastic 14,1,3 cross DOWN in last 3 candles",
                     "RSI14 < 70",
-                    "no detected SHORT-bias chart pattern",
+                    "15m close increase vs prior close < 3%",
                 ],
             },
             "scans": [],
@@ -189,7 +189,7 @@ def persist_learning_12h(
             "price return over last 20 bars <= 10%",
             "RSI14 >= 55",
             "-0.10 <= ((MACD histogram now - previous) / close * 100) <= 0",
-            "no detected LONG-bias chart pattern"
+            "no LONG-bias pattern with confidence >= 70%"
         ],
         "LONG": [
             "MACD cross up",
@@ -199,6 +199,7 @@ def persist_learning_12h(
             "close >= 2% vs 10 bars earlier",
             "no Stochastic 14,1,3 cross DOWN in last 3 candles",
             "RSI14 < 70",
+            "15m close increase vs prior close < 3%",
         ],
     }
 
@@ -365,8 +366,8 @@ def build_live_diagnostic(state, top7):
 
     lines = [
         f"{bot.SIGNAL_LABEL} TOP{bot.TOP_N} — BRAK WEJSCIA",
-        "SHORT: RED + RED volume > ostatni GREEN + korpus <=1% ceny close + dolny knot <=50% zakresu + -2% <= return4 <=1% + return20 <=10%",
-        "LONG: GREEN + GREEN volume > ostatni RED + korpus >=60% zakresu + close >=2% vs 10 swiec wczesniej + brak Stoch 14,1,3 cross DOWN w ostatnich 3 swiecach + RSI14 <70",
+        "SHORT: RED + RED volume > ostatni GREEN + korpus <=1% ceny close + dolny knot <=50% zakresu + -2% <= return4 <=1% + return20 <=10% + brak wzrostowej formacji z pewnoscia >=70%",
+        "LONG: GREEN + GREEN volume > ostatni RED + korpus >=60% zakresu + close >=2% vs 10 swiec wczesniej + brak Stoch 14,1,3 cross DOWN w ostatnich 3 swiecach + RSI14 <70 + wzrost ostatniej swiecy <3%",
         "",
     ]
     records = []
@@ -396,6 +397,20 @@ def build_live_diagnostic(state, top7):
             long_opposing_patterns = [
                 p for p in chart_patterns if str(p.get("bias") or "").upper() == "SHORT"
             ]
+            blocking_short_patterns = [
+                p for p in short_opposing_patterns
+                if float(p.get("confidence") or 0) >=
+                bot.SHORT_OPPOSING_BULL_PATTERN_MIN_CONFIDENCE
+            ]
+            previous_close = float(prev["c"])
+            long_one_bar_gain_pct = (
+                (float(cur["c"]) / previous_close - 1.0) * 100.0
+                if previous_close > 0 else None
+            )
+            long_one_bar_rise_ok = (
+                long_one_bar_gain_pct is not None
+                and long_one_bar_gain_pct < bot.LONG_MAX_1BAR_RISE_PCT
+            )
 
             s_checks = [
                 ("RED", s["red_candle"]),
@@ -407,6 +422,7 @@ def build_live_diagnostic(state, top7):
                 ("RETURN20_LE_10PCT", s["return_20_bars_max_10pct"]),
                 ("RSI_GE_55", s["short_rsi_min_55"]),
                 ("MACD_HIST_DELTA_PCT_CLOSE_IN_RANGE", s["short_macd_hist_delta_ok"]),
+                ("NO_BULL_PATTERN_GE_70PCT", not blocking_short_patterns),
             ]
             l_checks = [
                 ("GREEN", l["green_candle"]),
@@ -415,6 +431,7 @@ def build_live_diagnostic(state, top7):
                 ("RISE10_GE_2PCT", l["rise_10_bars_min_2pct"]),
                 ("STOCH_NO_DOWN_LAST3", l["stoch_long_ok"]),
                 ("RSI_LT_70", l["rsi_below_70"]),
+                ("ONE_BAR_RISE_LT_3PCT", long_one_bar_rise_ok),
             ]
 
             s_ok = sum(1 for _, ok in s_checks if ok)
@@ -476,8 +493,10 @@ def build_live_diagnostic(state, top7):
                     "macd_hist_delta_min_pct": -0.10,
                     "macd_hist_delta_max_pct": 0.0,
                     "macd_hist_delta_filter_ok": bool(s["short_macd_hist_delta_ok"]),
-                    "pattern_filter_active": False,
+                    "pattern_filter_active": True,
                     "opposing_patterns": short_opposing_patterns,
+                    "blocking_opposing_patterns": blocking_short_patterns,
+                    "minimum_opposing_pattern_confidence": bot.SHORT_OPPOSING_BULL_PATTERN_MIN_CONFIDENCE,
                 },
                 "long": {
                     "score": f"{l_ok}/{len(l_checks)}",
@@ -490,6 +509,9 @@ def build_live_diagnostic(state, top7):
                     "volume_vs_last_red_pct": vol_vs_red_pct,
                     "rise_10_bars_pct": float(l["rise_10_bars_pct"]),
                     "rise_10_bars_min_pct": 2.0,
+                    "rise_1bar_pct": long_one_bar_gain_pct,
+                    "max_rise_1bar_pct_exclusive": bot.LONG_MAX_1BAR_RISE_PCT,
+                    "rise_1bar_filter_ok": long_one_bar_rise_ok,
                     "stoch_k": l["stoch_k"],
                     "stoch_d": l["stoch_d"],
                     "stoch_cross_down_recent_3": bool(l["stoch_cross_down_recent_3"]),
@@ -523,6 +545,7 @@ def build_live_diagnostic(state, top7):
                 f"| RETURN20={s['return_20_bars_pct']:+.3f}% <=10% "
                 f"| RSI14={fmt(s['rsi14'], 4)} >=55 "
                 f"| MACD dH/close={s['macd_hist_delta_pct_close']:+.4f}% in [-0.10%, 0%] "
+                f"| bullish patterns >=70%={len(blocking_short_patterns)} "
                 f"| brak: {', '.join(s_missing) if s_missing else 'NIC'}"
             )
             lines.append(
@@ -530,6 +553,7 @@ def build_live_diagnostic(state, top7):
                 f"VOL={fmt(current_volume)} vs last RED={fmt(l['last_red_volume'])} "
                 f"({fmt(vol_vs_red_pct, 4)}%) | body={l['green_body_ratio'] * 100:.1f}% >=60% "
                 f"| 10BAR={l['rise_10_bars_pct']:+.3f}% >=2% "
+                f"| 1BAR={fmt(long_one_bar_gain_pct, 4)}% <3% "
                 f"| STOCH K={fmt(l['stoch_k'], 4)} D={fmt(l['stoch_d'], 4)} "
                 f"| DOWN last3={'TAK' if l['stoch_cross_down_recent_3'] else 'NIE'} "
                 f"| RSI14={fmt(l['rsi14'], 4)} <70 "
