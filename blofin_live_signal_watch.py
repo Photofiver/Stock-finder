@@ -407,7 +407,6 @@ def build_live_diagnostic(state, top7):
                 ("RETURN20_LE_10PCT", s["return_20_bars_max_10pct"]),
                 ("RSI_GE_55", s["short_rsi_min_55"]),
                 ("MACD_HIST_DELTA_PCT_CLOSE_IN_RANGE", s["short_macd_hist_delta_ok"]),
-                ("NO_LONG_BIAS_PATTERN", not short_opposing_patterns),
             ]
             l_checks = [
                 ("GREEN", l["green_candle"]),
@@ -416,7 +415,6 @@ def build_live_diagnostic(state, top7):
                 ("RISE10_GE_2PCT", l["rise_10_bars_min_2pct"]),
                 ("STOCH_NO_DOWN_LAST3", l["stoch_long_ok"]),
                 ("RSI_LT_70", l["rsi_below_70"]),
-                ("NO_SHORT_BIAS_PATTERN", not long_opposing_patterns),
             ]
 
             s_ok = sum(1 for _, ok in s_checks if ok)
@@ -478,7 +476,7 @@ def build_live_diagnostic(state, top7):
                     "macd_hist_delta_min_pct": -0.10,
                     "macd_hist_delta_max_pct": 0.0,
                     "macd_hist_delta_filter_ok": bool(s["short_macd_hist_delta_ok"]),
-                    "pattern_filter_ok": not short_opposing_patterns,
+                    "pattern_filter_active": False,
                     "opposing_patterns": short_opposing_patterns,
                 },
                 "long": {
@@ -499,7 +497,7 @@ def build_live_diagnostic(state, top7):
                     "rsi14": l["rsi14"],
                     "rsi_max_exclusive": 70.0,
                     "rsi_below_70": bool(l["rsi_below_70"]),
-                    "pattern_filter_ok": not long_opposing_patterns,
+                    "pattern_filter_active": False,
                     "opposing_patterns": long_opposing_patterns,
                 },
             }
