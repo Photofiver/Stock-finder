@@ -747,6 +747,60 @@
       ],
       "side": "SHORT",
       "signal_close_ms": 1791416700000
+    },
+    {
+      "closed_ms": 1791419245501,
+      "inst": "RAY-USDT",
+      "net_pnl_usdt": 0.1824,
+      "patterns": [
+        {
+          "bias": "LONG",
+          "confidence": 0.695,
+          "evidence": {
+            "bottom_gap_pct": 0.288,
+            "neck_height_pct": 1.494
+          },
+          "name": "DOUBLE_BOTTOM"
+        },
+        {
+          "bias": "SHORT",
+          "confidence": 0.802,
+          "evidence": {
+            "dome_height_pct": 4.274,
+            "floor_gap_pct": 1.567,
+            "handle_rise_pct": 0.572
+          },
+          "name": "INVERSE_CUP_AND_HANDLE"
+        }
+      ],
+      "result": "WIN",
+      "reviews": [
+        {
+          "bias": "LONG",
+          "confidence": 0.695,
+          "effect_if_used_as_filter": "HURT",
+          "evidence": {
+            "bottom_gap_pct": 0.288,
+            "neck_height_pct": 1.494
+          },
+          "name": "DOUBLE_BOTTOM",
+          "relation_to_trade": "OPPOSES"
+        },
+        {
+          "bias": "SHORT",
+          "confidence": 0.802,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "dome_height_pct": 4.274,
+            "floor_gap_pct": 1.567,
+            "handle_rise_pct": 0.572
+          },
+          "name": "INVERSE_CUP_AND_HANDLE",
+          "relation_to_trade": "SUPPORTS"
+        }
+      ],
+      "side": "SHORT",
+      "signal_close_ms": 1791418500000
     }
   ],
   "interpretation": "HELPED = pattern supported a winner or opposed a loser; HURT = pattern supported a loser or opposed a winner.",
@@ -794,13 +848,13 @@
     },
     "DOUBLE_BOTTOM": {
       "helped": 4,
-      "hurt": 4,
+      "hurt": 5,
       "losses_when_present": 5,
       "no_effect": 0,
-      "opposes_trade": 5,
-      "seen": 8,
+      "opposes_trade": 6,
+      "seen": 9,
       "supports_trade": 3,
-      "wins_when_present": 3
+      "wins_when_present": 4
     },
     "DOUBLE_TOP": {
       "helped": 0,
@@ -820,6 +874,16 @@
       "opposes_trade": 3,
       "seen": 3,
       "supports_trade": 0,
+      "wins_when_present": 1
+    },
+    "INVERSE_CUP_AND_HANDLE": {
+      "helped": 1,
+      "hurt": 0,
+      "losses_when_present": 0,
+      "no_effect": 0,
+      "opposes_trade": 0,
+      "seen": 1,
+      "supports_trade": 1,
       "wins_when_present": 1
     },
     "RISING_WEDGE": {
