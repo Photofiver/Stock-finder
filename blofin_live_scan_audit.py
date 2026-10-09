@@ -199,6 +199,58 @@ def live_executions_for_signal(state, signal_close_ms):
     return executions
 
 
+def refresh_real_live_trade_outcomes(history, state):
+    """Replace paper assumptions with actual broker-recorded outcomes when available."""
+    by_key = {
+        (int(row.get("signal_close_ms") or 0), str(row.get("inst") or ""),
+         str(row.get("side") or "").upper()): row
+        for row in state.get("trade_history", [])
+        if isinstance(row, dict)
+    }
+    changed = False
+    for scan in history.get("scans", [])[-32:]:
+        signal_ms = int(scan.get("signal_close_ms") or 0)
+        for record in scan.get("live_executions_at_signal", []):
+            trade = by_key.get((
+                signal_ms,
+                str(record.get("inst") or ""),
+                str(record.get("side") or "").upper(),
+            ))
+            if trade is None:
+                continue
+            signal_row = next(
+                (item for item in scan.get("instruments", [])
+                 if item.get("inst") == record.get("inst")), {}
+            )
+            signal_price = float((signal_row.get("candle") or {}).get("close") or 0)
+            actual_entry = float(trade.get("open_price") or 0)
+            side = record.get("side")
+            gap = (
+                (actual_entry / signal_price - 1) * 100
+                if side == "LONG" and signal_price and actual_entry else
+                (1 - actual_entry / signal_price) * 100
+                if side == "SHORT" and signal_price and actual_entry else None
+            )
+            outcome = {
+                "result": trade.get("result"),
+                "actual_net_pnl_usdt_after_fees": trade.get("net_pnl_usdt"),
+                "gross_pnl_usdt": trade.get("gross_pnl_usdt"),
+                "fee_usdt": trade.get("fee_usdt"),
+                "actual_open_price": trade.get("open_price"),
+                "actual_close_price": trade.get("close_price"),
+                "signal_close_price": signal_price or None,
+                "actual_adverse_entry_gap_pct": gap,
+                "closed_ms": trade.get("closed_ms"),
+                "reason": trade.get("reason"),
+            }
+            if record.get("actual_closed_trade") != outcome:
+                record["actual_closed_trade"] = outcome
+                record["closed_ms"] = trade.get("closed_ms")
+                record["actual_net_pnl_usdt_if_closed"] = trade.get("net_pnl_usdt")
+                changed = True
+    return changed
+
+
 def rank_all_choices_after_15m(scan):
     """Ex-post rankings, strictly separated from information available at entry."""
     choices = []
@@ -218,9 +270,16 @@ def rank_all_choices_after_15m(scan):
                 "rsi14", "adx14", "obv_rising_5", "macd_hist_pct_close",
                 "stoch_k", "stoch_d", "volume_vs_ma5_pct",
             )
+            quality = next(
+                (entry for entry in scan.get("pretrade_quality_ranking", {}).get("scores", [])
+                 if entry.get("inst") == row.get("inst") and entry.get("side") == side),
+                {},
+            )
             entry = {
                 "inst": row.get("inst"),
                 "side": side,
+                "pretrade_quality_score": quality.get("score"),
+                "pretrade_qualified": quality.get("live_candidate"),
                 "rank_at_signal": row.get("rank"),
                 "indicators_at_signal": {
                     key: indicators_at_signal.get(key)
@@ -408,6 +467,11 @@ def record_current_scan(history, cache):
         "diagnostic_generated_at_ms": diagnostic.get("generated_at_ms"),
         "strategy_result": diagnostic.get("result"),
         "live_executions_at_signal": live_executions_for_signal(state, signal_close_ms),
+        "pretrade_quality_ranking": (
+            state.get("last_pretrade_ranking")
+            if int((state.get("last_pretrade_ranking") or {}).get("generated_at_ms") or 0)
+            >= signal_close_ms else {"status": "UNAVAILABLE"}
+        ),
         "top7": state.get("last_top7") or diagnostic.get("top7"),
         "instruments": instruments,
         "next_candle_review_complete": False,
@@ -427,6 +491,7 @@ def main():
     cache = {}
     updated = review_previous(history, cache)
     updated = record_current_scan(history, cache) or updated
+    updated = refresh_real_live_trade_outcomes(history, bot.load_state()) or updated
     if updated or not HISTORY_FILE.exists():
         history["updated_at_utc"] = utc_now()
         history["scan_count"] = len(history["scans"])
