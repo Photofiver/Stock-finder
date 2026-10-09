@@ -8,9 +8,15 @@ from pathlib import Path
 
 import blofin_live_hourly as bot
 
-HISTORY_FILE = Path("blofin_live_scans/live_watch_history.json")
+HISTORY_FILE = (Path("blofin_live_scans/live_watch_history.json") if bot.SIGNAL_MINUTES == 15
+                else Path(f"blofin_live_scans/live_watch_history_{bot.SIGNAL_MINUTES}m.json"))
+REVIEW_LABEL = f"{bot.SIGNAL_MINUTES}m"
+COMPARISON_KEY = f"best_coin_comparison_after_{REVIEW_LABEL}"
+INDICATOR_CHANGE_KEY = f"indicator_change_over_{REVIEW_LABEL}"
+INDICATORS_AFTER_KEY = f"indicators_after_{REVIEW_LABEL}"
+NET_CLOSE_KEY = f"net_at_{REVIEW_LABEL}_close_pct_estimated"
 FEE_PCT_ASSUMED = 0.12
-MAX_SCANS = 5000  # ~52 days at 15-minute intervals; bound GitHub file size.
+MAX_SCANS = 5000  # Bounded diagnostic history; old 15m scans stored separately.
 MAX_REVIEWS_PER_RUN = 2
 
 
@@ -38,10 +44,10 @@ def load_history():
             "assumed_roundtrip_fees_pct": FEE_PCT_ASSUMED,
             "price_thresholds_tested_pct": [0.5, 1.0],
             "indicator_definitions": {
-                "adx14": "Wilder ADX(14), 15m CLOSED candle",
-                "obv_rising_5": "OBV close minus OBV 5 bars earlier > 0; 15m CLOSED candles",
-                "indicator_change_over_15m": "after next closed 15m bar minus value at entry signal",
-                "best_coin_comparison_after_15m": "ex-post only, 7 assets x 2 hypothetical directions",
+                "adx14": f"Wilder ADX(14), {REVIEW_LABEL} CLOSED candle",
+                "obv_rising_5": f"OBV close minus OBV 5 bars earlier > 0; {REVIEW_LABEL} CLOSED candles",
+                INDICATOR_CHANGE_KEY: f"after next closed {REVIEW_LABEL} bar minus value at entry signal",
+                COMPARISON_KEY: "ex-post only, 7 assets x 2 hypothetical directions",
             },
             "notes": (
                 "Hypothetical entry at signal candle close; no spread or slippage. "
@@ -251,7 +257,7 @@ def refresh_real_live_trade_outcomes(history, state):
     return changed
 
 
-def rank_all_choices_after_15m(scan):
+def rank_all_choices_after_interval(scan):
     """Ex-post rankings, strictly separated from information available at entry."""
     choices = []
     executed = {(r["inst"], r["side"]) for r in scan.get("live_executions_at_signal", [])}
@@ -285,8 +291,8 @@ def rank_all_choices_after_15m(scan):
                     key: indicators_at_signal.get(key)
                     for key in indicator_comparison_fields
                 },
-                "indicator_changes_after_15m": outcome.get("indicator_change_over_15m"),
-                "net_at_15m_close_pct_estimated": result.get("estimated_next_close_net_pct_after_assumed_fees"),
+                f"indicator_changes_after_{REVIEW_LABEL}": outcome.get(INDICATOR_CHANGE_KEY),
+                NET_CLOSE_KEY: result.get("estimated_next_close_net_pct_after_assumed_fees"),
                 "tp_sl_1pct_first_touch": result.get("outcome_1_0"),
                 "tp_sl_0_5pct_first_touch": result.get("outcome_0_5"),
                 "live_executed": (row.get("inst"), side) in executed,
@@ -294,7 +300,7 @@ def rank_all_choices_after_15m(scan):
                 "missing_candle_filters_at_signal": missing,
             }
             choices.append(entry)
-    choices.sort(key=lambda x: x["net_at_15m_close_pct_estimated"], reverse=True)
+    choices.sort(key=lambda x: x[NET_CLOSE_KEY], reverse=True)
     for position, entry in enumerate(choices, 1):
         entry["rank_ex_post"] = position
     eligible = [x for x in choices if x["passed_candle_filters_at_signal"] is True]
@@ -304,8 +310,8 @@ def rank_all_choices_after_15m(scan):
     return {
         "status": "DONE" if len(choices) == 14 else "PARTIAL",
         "interpretation": (
-            "Hindsight only: entry at 15m signal candle CLOSE; exit after exactly "
-            "one next 15m candle CLOSE with assumed 0.12% round-trip fees. "
+            f"Hindsight only: entry at {REVIEW_LABEL} signal candle CLOSE; exit after exactly "
+            f"one next {REVIEW_LABEL} candle CLOSE with assumed 0.12% round-trip fees. "
             "Not actual fills, not a usable advance selection rule."
         ),
         "all_long_and_short_options": choices,
@@ -385,8 +391,8 @@ def review_previous(history, cache):
                 "close": float(following["c"]),
                 "LONG": outcome_for_side("LONG", float(entry), following),
                 "SHORT": outcome_for_side("SHORT", float(entry), following),
-                "indicators_after_15m": indicator_after,
-                "indicator_change_over_15m": indicator_changes(
+                INDICATORS_AFTER_KEY: indicator_after,
+                INDICATOR_CHANGE_KEY: indicator_changes(
                     row.get("indicators_at_signal"), indicator_after
                 ),
             }
@@ -396,7 +402,7 @@ def review_previous(history, cache):
             for row in scan.get("instruments", [])
         )
         scan["reviewed_at_utc"] = utc_now()
-        scan["best_coin_comparison_after_15m"] = rank_all_choices_after_15m(scan)
+        scan[COMPARISON_KEY] = rank_all_choices_after_interval(scan)
         changed = True
         done = sum(
             row.get("next_candle_review", {}).get("status") == "DONE"
@@ -413,9 +419,9 @@ MAX_MINUTE_BACKFILLS_PER_RUN = 16
 
 
 def confirmed_minutes(inst, start_ms, end_ms):
-    """Fetch all 15 confirmed 1m candles; never infer order from partial OHLC."""
-    if end_ms - start_ms != 15 * MINUTE_MS:
-        raise ValueError("Expected exactly one 15m interval")
+    """Fetch confirmed 1m candles for one signal interval; no partial OHLC."""
+    if end_ms - start_ms != bot.SIGNAL_MS:
+        raise ValueError(f"Expected exactly one {REVIEW_LABEL} interval")
     raw = bot.market_get(
         "/api/v1/market/candles",
         {"instId": inst, "bar": "1m", "after": str(end_ms), "limit": "35"},
@@ -436,7 +442,7 @@ def confirmed_minutes(inst, start_ms, end_ms):
     expected = set(range(start_ms, end_ms, MINUTE_MS))
     if set(minutes) != expected:
         raise ValueError(
-            f"Incomplete 1m candles: found {len(minutes)} of 15; "
+            f"Incomplete 1m candles: found {len(minutes)} of {bot.SIGNAL_MINUTES}; "
             f"missing {len(expected - set(minutes))}"
         )
     return [minutes[ts] for ts in sorted(minutes)]
@@ -485,7 +491,7 @@ def resolve_first_touch(side, entry, threshold_pct, minutes):
 
 
 def backfill_first_touch(history):
-    """Refine existing and new ambiguous 15m outcomes from historical 1m bars."""
+    """Refine ambiguous signal outcomes from historical 1m bars."""
     changed, requests = False, 0
     for scan in reversed(history["scans"]):
         if requests >= MAX_MINUTE_BACKFILLS_PER_RUN:
@@ -537,7 +543,7 @@ def backfill_first_touch(history):
                 scan_changed = True
                 print(f"AUDIT_1M_RETRY inst={inst} scan={start_ms} error={exc}")
         if scan_changed:
-            scan["best_coin_comparison_after_15m"] = rank_all_choices_after_15m(scan)
+            scan[COMPARISON_KEY] = rank_all_choices_after_interval(scan)
             changed = True
     if requests:
         print(f"AUDIT_1M_FIRST_TOUCH requests={requests}")
@@ -550,7 +556,7 @@ def nearest_volume_shadow(history):
     net_lo, net_hi = 1.0, 1.0
     totals = {
         "scans": len(history["scans"]), "selected": 0, "no_volume": 0,
-        "tp": 0, "sl": 0, "closed_after_15m": 0,
+        "tp": 0, "sl": 0, f"closed_after_{REVIEW_LABEL}": 0,
         "ambiguous": 0, "pending": 0,
     }
     for scan in history["scans"]:
@@ -619,8 +625,8 @@ def nearest_volume_shadow(history):
                 continue
             gross_range, entry["status"] = (
                 float(directional_close), float(directional_close)
-            ), "CLOSE_AFTER_15M"
-            totals["closed_after_15m"] += 1
+            ), f"CLOSE_AFTER_{REVIEW_LABEL.upper()}"
+            totals[f"closed_after_{REVIEW_LABEL}"] += 1
         elif result == "BOTH_ORDER_UNKNOWN":
             gross_range, entry["status"] = (-0.5, 0.5), "AMBIGUOUS_1M"
             totals["ambiguous"] += 1
@@ -725,7 +731,7 @@ def record_current_scan(history, cache):
         "top7": state.get("last_top7") or diagnostic.get("top7"),
         "instruments": instruments,
         "next_candle_review_complete": False,
-        "best_coin_comparison_after_15m": {"status": "PENDING"},
+        COMPARISON_KEY: {"status": "PENDING"},
     }
     history["scans"].append(scan)
     if len(history["scans"]) > MAX_SCANS:
