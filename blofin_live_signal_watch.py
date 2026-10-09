@@ -236,9 +236,14 @@ def persist_learning_12h(
             if not isinstance(metrics, dict):
                 continue
             missing = list(metrics.get("missing") or [])
-            metrics["decision"] = "CANDIDATE" if not missing else "REJECTED"
-            metrics["rejected_because"] = missing
-            metrics["selected_candidate"] = (inst, label) in candidate_keys
+            selected_candidate = (inst, label) in candidate_keys
+            metrics["decision"] = (
+                "CANDIDATE" if selected_candidate else
+                "NOT_SELECTED" if bot.NEAREST_VOLUME else
+                "CANDIDATE" if not missing else "REJECTED"
+            )
+            metrics["rejected_because"] = [] if selected_candidate else missing
+            metrics["selected_candidate"] = selected_candidate
             metrics["executed_live"] = (inst, label) in executed_keys
 
     all_events = load_technical_events()
@@ -364,12 +369,21 @@ def build_live_diagnostic(state, top7):
             return None
         return ((float(current) / float(reference)) - 1.0) * 100.0
 
-    lines = [
-        f"{bot.SIGNAL_LABEL} TOP{bot.TOP_N} — BRAK WEJSCIA",
-        "SHORT: RED + RED volume > ostatni GREEN + korpus <=1% ceny close + dolny knot <=50% zakresu + -2% <= return4 <=1% + return20 <=10% + brak wzrostowej formacji z pewnoscia >=70%",
-        "LONG: GREEN + GREEN volume > ostatni RED + korpus >=60% zakresu + close >=2% vs 10 swiec wczesniej + brak Stoch 14,1,3 cross DOWN w ostatnich 3 swiecach + RSI14 <67 + wzrost ostatniej swiecy <3%",
-        "",
-    ]
+    if bot.NEAREST_VOLUME:
+        lines = [
+            f"{bot.SIGNAL_LABEL} TOP{bot.TOP_N} — NEAREST_VOLUME",
+            "LIVE picks the fewest missing conditions (10 SHORT / 7 LONG).",
+            "MANDATORY: directional candle + its volume > preceding opposite-color candle.",
+            "All other conditions are scoring, not entry vetoes.",
+            "",
+        ]
+    else:
+        lines = [
+            f"{bot.SIGNAL_LABEL} TOP{bot.TOP_N} — BRAK WEJSCIA",
+            "SHORT: RED + RED volume > ostatni GREEN + korpus <=1% ceny close + dolny knot <=50% zakresu + -2% <= return4 <=1% + return20 <=10% + brak wzrostowej formacji z pewnoscia >=70%",
+            "LONG: GREEN + GREEN volume > ostatni RED + korpus >=60% zakresu + close >=2% vs 10 swiec wczesniej + brak Stoch 14,1,3 cross DOWN w ostatnich 3 swiecach + RSI14 <67 + wzrost ostatniej swiecy <3%",
+            "",
+        ]
     records = []
 
     for rank, inst in enumerate(top7, start=1):
@@ -614,7 +628,26 @@ def main():
     bot.sync_all_tracked_positions(state)
     bot.evaluate_all_tracked_exit_signals(state, expected_close_ms)
     bot.ensure_tp1_for_all_tracked_positions(state)
-    candidates = bot.evaluate_signals(state, top7)
+    if (
+        bot.NEAREST_VOLUME
+        and state.get("bankroll_mode") != "NEAREST_VOLUME_V1"
+        and bot.get_tracked_positions(state)
+    ):
+        # The old position must exit under its original broker-side protection
+        # before starting the new 10 USDT bankroll, to avoid overspending.
+        print("NEAREST_VOLUME: existing LIVE positions still open; migration deferred.")
+        state["last_pretrade_ranking"] = {
+            "generated_at_ms": bot.now_ms(),
+            "strategy": "NEAREST_VOLUME",
+            "eligible_entry_order": [],
+            "migration_waiting_for_existing_positions": True,
+        }
+        candidates = []
+    else:
+        if bot.NEAREST_VOLUME:
+            if bot.nearest_volume.initialize_bankroll(state):
+                print("NEAREST_VOLUME: initialized 10 USDT strategy bankroll")
+        candidates = bot.evaluate_signals(state, top7)
 
     for rank, inst, side, signal_close_ms in candidates:
         if int(signal_close_ms) != expected_close_ms:
@@ -635,6 +668,18 @@ def main():
     state["last_diagnostic"]["result"] = (
         "CANDIDATES_FOUND" if candidates else "NO_ENTRY"
     )
+    if bot.NEAREST_VOLUME:
+        state["last_diagnostic"]["nearest_volume_entry"] = {
+            "chosen": (state.get("last_pretrade_ranking") or {}).get(
+                "eligible_entry_order", []
+            ),
+            "executed": executed,
+            "trade_hard_volume_gate": True,
+            "tp_pct": 1,
+            "sl_pct": 1,
+            "hold_max_minutes": 60,
+            "bankroll_usdt": bot.clean_decimal(bot.current_live_bankroll(state)),
+        }
 
     if not candidates:
         print(diagnostic)
