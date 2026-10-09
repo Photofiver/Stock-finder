@@ -31,7 +31,7 @@ def save_json(path, payload):
 def load_history():
     if not HISTORY_FILE.exists():
         return {
-            "format_version": 4,
+            "format_version": 5,
             "source": "BloFin LIVE signal watch; read-only retrospective audit",
             "analysis_only": True,
             "signal_minutes": bot.SIGNAL_MINUTES,
@@ -45,7 +45,7 @@ def load_history():
             },
             "notes": (
                 "Hypothetical entry at signal candle close; no spread or slippage. "
-                "When a candle hits both TP and SL, first-hit order is unknown."
+                "1m candles resolve first-touch order when possible; both within one minute remain unknown."
             ),
             "scans": [],
             "dropped_oldest_scans": 0,
@@ -53,7 +53,7 @@ def load_history():
     history = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
     if not isinstance(history, dict) or not isinstance(history.get("scans"), list):
         raise ValueError("Invalid existing audit history; refusing to overwrite it")
-    history["format_version"] = 4
+    history["format_version"] = 5
     return history
 
 
@@ -406,6 +406,256 @@ def review_previous(history, cache):
     return changed
 
 
+
+# Historical checks below are read-only; they never affect LIVE order eligibility.
+MINUTE_MS = 60_000
+MAX_MINUTE_BACKFILLS_PER_RUN = 16
+
+
+def confirmed_minutes(inst, start_ms, end_ms):
+    """Fetch all 15 confirmed 1m candles; never infer order from partial OHLC."""
+    if end_ms - start_ms != 15 * MINUTE_MS:
+        raise ValueError("Expected exactly one 15m interval")
+    raw = bot.market_get(
+        "/api/v1/market/candles",
+        {"instId": inst, "bar": "1m", "after": str(end_ms), "limit": "35"},
+    )
+    minutes = {}
+    for bar in raw:
+        try:
+            ts = int(bar[0])
+        except (ValueError, TypeError, IndexError):
+            continue
+        if start_ms <= ts < end_ms:
+            if len(bar) < 9 or str(bar[8]) != "1" or ts in minutes:
+                raise ValueError("Unconfirmed or duplicate 1m candle")
+            minutes[ts] = {
+                "ts": ts, "o": float(bar[1]), "h": float(bar[2]),
+                "l": float(bar[3]), "c": float(bar[4]),
+            }
+    expected = set(range(start_ms, end_ms, MINUTE_MS))
+    if set(minutes) != expected:
+        raise ValueError(
+            f"Incomplete 1m candles: found {len(minutes)} of 15; "
+            f"missing {len(expected - set(minutes))}"
+        )
+    return [minutes[ts] for ts in sorted(minutes)]
+
+
+def resolve_first_touch(side, entry, threshold_pct, minutes):
+    """Report the first TP/SL minute; do not invent an order within one minute."""
+    offset = threshold_pct / 100.0
+    tp = entry * (1 + offset if side == "LONG" else 1 - offset)
+    sl = entry * (1 - offset if side == "LONG" else 1 + offset)
+    result = {
+        "method": "BloFin confirmed historical 1m OHLC",
+        "status": "NO_TOUCH",
+        "outcome": "NEITHER",
+        "tp_price": tp,
+        "sl_price": sl,
+        "minute_bars_checked": len(minutes),
+        "first_touch_minute_ms": None,
+        "first_touch_minute_utc": None,
+    }
+    for minute in minutes:
+        opening_tp = minute["o"] >= tp if side == "LONG" else minute["o"] <= tp
+        opening_sl = minute["o"] <= sl if side == "LONG" else minute["o"] >= sl
+        tp_hit = minute["h"] >= tp if side == "LONG" else minute["l"] <= tp
+        sl_hit = minute["l"] <= sl if side == "LONG" else minute["h"] >= sl
+        if not (tp_hit or sl_hit):
+            continue
+        result["first_touch_minute_ms"] = minute["ts"]
+        result["first_touch_minute_utc"] = datetime.fromtimestamp(
+            minute["ts"] / 1000, timezone.utc
+        ).isoformat()
+        result["first_touch_minute_ohlc"] = {
+            k: minute[k] for k in ("o", "h", "l", "c")
+        }
+        if opening_tp or (tp_hit and not sl_hit):
+            result["status"] = "TP_FIRST"
+            result["outcome"] = "TP_HIT"
+        elif opening_sl or (sl_hit and not tp_hit):
+            result["status"] = "SL_FIRST"
+            result["outcome"] = "SL_HIT"
+        else:
+            result["status"] = "BOTH_SAME_MINUTE_UNKNOWN"
+            result["outcome"] = "BOTH_ORDER_UNKNOWN"
+        return result
+    return result
+
+
+def backfill_first_touch(history):
+    """Refine existing and new ambiguous 15m outcomes from historical 1m bars."""
+    changed, requests = False, 0
+    for scan in reversed(history["scans"]):
+        if requests >= MAX_MINUTE_BACKFILLS_PER_RUN:
+            break
+        start_ms = int(scan.get("signal_close_ms") or 0)
+        end_ms = start_ms + bot.SIGNAL_MS
+        scan_changed = False
+        for row in scan.get("instruments", []):
+            if requests >= MAX_MINUTE_BACKFILLS_PER_RUN:
+                break
+            review = row.get("next_candle_review") or {}
+            if review.get("status") != "DONE":
+                continue
+            unresolved = []
+            for side in ("LONG", "SHORT"):
+                side_review = review.get(side) or {}
+                for threshold in (0.5, 1.0):
+                    label = str(threshold).replace(".", "_")
+                    if side_review.get("outcome_" + label) != "BOTH_ORDER_UNKNOWN":
+                        continue
+                    details = side_review.get("first_touch_" + label) or {}
+                    if details.get("status") in (
+                        "TP_FIRST", "SL_FIRST", "BOTH_SAME_MINUTE_UNKNOWN"
+                    ):
+                        continue
+                    unresolved.append((side_review, side, threshold, label))
+            if not unresolved:
+                continue
+            requests += 1
+            inst = row.get("inst")
+            try:
+                minutes = confirmed_minutes(inst, start_ms, end_ms)
+                for side_review, side, threshold, label in unresolved:
+                    details = resolve_first_touch(
+                        side, float((row.get("candle") or {})["close"]),
+                        threshold, minutes,
+                    )
+                    side_review["first_touch_" + label] = details
+                    if details["outcome"] in ("TP_HIT", "SL_HIT"):
+                        side_review["outcome_" + label] = details["outcome"]
+                scan_changed = True
+            except Exception as exc:
+                for side_review, _, _, label in unresolved:
+                    side_review["first_touch_" + label] = {
+                        "status": "RETRY_PENDING",
+                        "method": "BloFin confirmed historical 1m OHLC",
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                scan_changed = True
+                print(f"AUDIT_1M_RETRY inst={inst} scan={start_ms} error={exc}")
+        if scan_changed:
+            scan["best_coin_comparison_after_15m"] = rank_all_choices_after_15m(scan)
+            changed = True
+    if requests:
+        print(f"AUDIT_1M_FIRST_TOUCH requests={requests}")
+    return changed
+
+
+def nearest_volume_shadow(history):
+    """Choose highest-compliance eligible side at the signal, without hindsight."""
+    gross_lo, gross_hi = 1.0, 1.0
+    net_lo, net_hi = 1.0, 1.0
+    totals = {
+        "scans": len(history["scans"]), "selected": 0, "no_volume": 0,
+        "tp": 0, "sl": 0, "closed_after_15m": 0,
+        "ambiguous": 0, "pending": 0,
+    }
+    for scan in history["scans"]:
+        options = []
+        for item in scan.get("instruments", []):
+            color = (item.get("candle") or {}).get("color")
+            for side in ("LONG", "SHORT"):
+                metrics = item.get(side.lower()) or {}
+                try:
+                    score_num, score_den = (int(s) for s in metrics["score"].split("/"))
+                    if not score_den:
+                        continue
+                    volume = float(metrics[
+                        "volume_vs_last_red_pct" if side == "LONG"
+                        else "volume_vs_last_green_pct"
+                    ])
+                except (KeyError, TypeError, ValueError, ZeroDivisionError):
+                    continue
+                if color != ("GREEN" if side == "LONG" else "RED") or volume <= 0:
+                    continue
+                options.append({
+                    "inst": item.get("inst"), "side": side,
+                    "score": metrics["score"], "missing": metrics.get("missing") or [],
+                    "points_ratio": score_num / score_den,
+                    "volume_advantage_pct": volume, "rank": item.get("rank") or 999,
+                    "item": item,
+                })
+        options.sort(key=lambda x: (
+            len(x["missing"]), -x["points_ratio"], -x["volume_advantage_pct"],
+            x["rank"], str(x["inst"]), x["side"]
+        ))
+        if not options:
+            scan["nearest_volume_shadow"] = {
+                "status": "SKIP_NO_VOLUME", "selected": None
+            }
+            totals["no_volume"] += 1
+            continue
+        chosen = options[0]
+        totals["selected"] += 1
+        side_review = (
+            (chosen["item"].get("next_candle_review") or {}).get(chosen["side"]) or {}
+        )
+        result = side_review.get("outcome_0_5")
+        entry = {
+            "inst": chosen["inst"], "side": chosen["side"],
+            "score": chosen["score"],
+            "missing_rules": chosen["missing"],
+            "volume_advantage_pct": chosen["volume_advantage_pct"],
+            "volume_rule_passed": True,
+            "tp_pct": 0.5, "sl_pct": 0.5,
+            "first_touch_1m": side_review.get("first_touch_0_5"),
+            "source": "Hypothetical entry at signal candle close; not actual fill",
+        }
+        if result == "TP_HIT":
+            gross_range, entry["status"] = (0.5, 0.5), "TP"
+            totals["tp"] += 1
+        elif result == "SL_HIT":
+            gross_range, entry["status"] = (-0.5, -0.5), "SL"
+            totals["sl"] += 1
+        elif result == "NEITHER":
+            directional_close = side_review.get("directional_close_pct")
+            if directional_close is None:
+                entry["status"] = "PENDING"
+                totals["pending"] += 1
+                scan["nearest_volume_shadow"] = entry
+                continue
+            gross_range, entry["status"] = (
+                float(directional_close), float(directional_close)
+            ), "CLOSE_AFTER_15M"
+            totals["closed_after_15m"] += 1
+        elif result == "BOTH_ORDER_UNKNOWN":
+            gross_range, entry["status"] = (-0.5, 0.5), "AMBIGUOUS_1M"
+            totals["ambiguous"] += 1
+        else:
+            entry["status"] = "PENDING"
+            totals["pending"] += 1
+            scan["nearest_volume_shadow"] = entry
+            continue
+        entry["gross_pct_min"], entry["gross_pct_max"] = gross_range
+        entry["net_pct_min"] = gross_range[0] - FEE_PCT_ASSUMED
+        entry["net_pct_max"] = gross_range[1] - FEE_PCT_ASSUMED
+        scan["nearest_volume_shadow"] = entry
+        gross_lo *= 1 + gross_range[0] / 100
+        gross_hi *= 1 + gross_range[1] / 100
+        net_lo *= 1 + (gross_range[0] - FEE_PCT_ASSUMED) / 100
+        net_hi *= 1 + (gross_range[1] - FEE_PCT_ASSUMED) / 100
+    history["nearest_volume_shadow_summary"] = {
+        **totals,
+        "status": (
+            "COMPLETE" if not totals["ambiguous"] and not totals["pending"]
+            else "PARTIAL"
+        ),
+        "gross_compounded_min_pct": round((gross_lo - 1) * 100, 6),
+        "gross_compounded_max_pct": round((gross_hi - 1) * 100, 6),
+        "net_compounded_min_pct": round((net_lo - 1) * 100, 6),
+        "net_compounded_max_pct": round((net_hi - 1) * 100, 6),
+        "roundtrip_fee_assumed_pct": FEE_PCT_ASSUMED,
+        "notice": (
+            "Bounds exclude pending scans. No execution spread/slippage. "
+            "If both targets were touched in the same minute, order remains unknown."
+        ),
+    }
+    return True
+
+
 def record_current_scan(history, cache):
     state = bot.load_state()
     diagnostic = state.get("last_diagnostic") or {}
@@ -492,6 +742,8 @@ def main():
     updated = review_previous(history, cache)
     updated = record_current_scan(history, cache) or updated
     updated = refresh_real_live_trade_outcomes(history, bot.load_state()) or updated
+    updated = backfill_first_touch(history) or updated
+    updated = nearest_volume_shadow(history) or updated
     if updated or not HISTORY_FILE.exists():
         history["updated_at_utc"] = utc_now()
         history["scan_count"] = len(history["scans"])
