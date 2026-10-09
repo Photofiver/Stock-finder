@@ -53,6 +53,7 @@ def load_history():
     history = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
     if not isinstance(history, dict) or not isinstance(history.get("scans"), list):
         raise ValueError("Invalid existing audit history; refusing to overwrite it")
+    history["format_version"] = 4
     return history
 
 
@@ -212,10 +213,20 @@ def rank_all_choices_after_15m(scan):
                 continue
             original = row.get(side.lower()) or {}
             missing = original.get("missing") if isinstance(original, dict) else None
+            indicators_at_signal = row.get("indicators_at_signal") or {}
+            indicator_comparison_fields = (
+                "rsi14", "adx14", "obv_rising_5", "macd_hist_pct_close",
+                "stoch_k", "stoch_d", "volume_vs_ma5_pct",
+            )
             entry = {
                 "inst": row.get("inst"),
                 "side": side,
                 "rank_at_signal": row.get("rank"),
+                "indicators_at_signal": {
+                    key: indicators_at_signal.get(key)
+                    for key in indicator_comparison_fields
+                },
+                "indicator_changes_after_15m": outcome.get("indicator_change_over_15m"),
                 "net_at_15m_close_pct_estimated": result.get("estimated_next_close_net_pct_after_assumed_fees"),
                 "tp_sl_1pct_first_touch": result.get("outcome_1_0"),
                 "tp_sl_0_5pct_first_touch": result.get("outcome_0_5"),
