@@ -1517,6 +1517,68 @@
       "signal_label": "10m",
       "timestamp_ms": 1791576678340,
       "timestamp_utc": "2026-10-09T20:11:18.340436+00:00"
+    },
+    {
+      "event_type": "ENTRY_SPREAD_BLOCKED",
+      "extra": {
+        "adverse_gap_pct": 0.050998725031874206,
+        "ask": "0.11771",
+        "bid": "0.11737",
+        "expected_fill": "0.11771",
+        "max_adverse_gap_pct": 0.25,
+        "max_spread_pct": 0.25,
+        "quote_age_ms": 130,
+        "signal_close": "0.11765",
+        "spread_pct": 0.2892632295388804
+      },
+      "inst": "MAGIC-USDT",
+      "message": "Too wide bid/ask spread before market order",
+      "side": "LONG",
+      "signal_label": "10m",
+      "timestamp_ms": 1791577278633,
+      "timestamp_utc": "2026-10-09T20:21:18.633894+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 1
+      },
+      "inst": "MAGIC-USDT",
+      "message": "MAGIC-USDT LONG skipped; trying next volume-eligible coin: RuntimeError: MAGIC-USDT LONG: spread 0.289% > 0.25%",
+      "rank": 2,
+      "side": "LONG",
+      "signal_close_ms": 1791577200000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791577278636,
+      "timestamp_utc": "2026-10-09T20:21:18.636588+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 2
+      },
+      "inst": "BAT-USDT",
+      "message": "BAT-USDT LONG: PRE_ORDER_REJECTED: RuntimeError: BAT-USDT: minimum contract/lot exceeds live cap 0.0787 USDT",
+      "rank": 4,
+      "side": "LONG",
+      "signal_close_ms": 1791577200000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791577279537,
+      "timestamp_utc": "2026-10-09T20:21:19.537723+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 3
+      },
+      "inst": "US-USDT",
+      "message": "US-USDT LONG skipped; trying next volume-eligible coin: RuntimeError: US-USDT: stale market quote age=19485ms (max 15000ms)",
+      "rank": 1,
+      "side": "LONG",
+      "signal_close_ms": 1791577200000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791577279881,
+      "timestamp_utc": "2026-10-09T20:21:19.881670+00:00"
     }
   ],
   "version": 1
