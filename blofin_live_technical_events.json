@@ -1765,6 +1765,54 @@
       "signal_label": "10m",
       "timestamp_ms": 1791584476086,
       "timestamp_utc": "2026-10-09T22:21:16.086449+00:00"
+    },
+    {
+      "event_type": "ENTRY_CHASE_BLOCKED",
+      "extra": {
+        "adverse_gap_pct": 1.646774437226167,
+        "ask": "0.13456",
+        "bid": "0.13443",
+        "expected_fill": "0.13456",
+        "max_adverse_gap_pct": 0.25,
+        "max_spread_pct": 0.25,
+        "quote_age_ms": 10798,
+        "signal_close": "0.13238",
+        "spread_pct": 0.09665786832224246
+      },
+      "inst": "BAT-USDT",
+      "message": "Entry quote too far from LONG signal candle close",
+      "side": "LONG",
+      "signal_label": "10m",
+      "timestamp_ms": 1791585080329,
+      "timestamp_utc": "2026-10-09T22:31:20.329810+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 1
+      },
+      "inst": "BAT-USDT",
+      "message": "BAT-USDT LONG skipped; trying next volume-eligible coin: RuntimeError: BAT-USDT LONG: adverse price move 1.647% > 0.25% from signal close",
+      "rank": 4,
+      "side": "LONG",
+      "signal_close_ms": 1791585000000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791585080332,
+      "timestamp_utc": "2026-10-09T22:31:20.332877+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 2
+      },
+      "inst": "MAGIC-USDT",
+      "message": "MAGIC-USDT LONG: PRE_ORDER_REJECTED: RuntimeError: MAGIC-USDT: minimum contract/lot exceeds live cap 0.0289 USDT",
+      "rank": 2,
+      "side": "LONG",
+      "signal_close_ms": 1791585000000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791585081190,
+      "timestamp_utc": "2026-10-09T22:31:21.190709+00:00"
     }
   ],
   "version": 1
