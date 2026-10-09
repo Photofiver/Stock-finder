@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 import blofin_selection_rank as selection_rank
+import blofin_nearest_volume as nearest_volume
 
 BASE = "https://openapi.blofin.com"
 API_KEY = os.getenv("BLOFIN_API_KEY", "").strip()
@@ -25,7 +26,11 @@ TECH_EVENTS_LIMIT = 5000
 PATTERN_AUDIT_FILE = os.getenv("LIVE_PATTERN_AUDIT_FILE", "blofin_pattern_learning.json")
 PATTERN_AUDIT_LIMIT = 5000
 LIVE_ENABLED = os.getenv("BLOFIN_LIVE_ENABLED", "").strip().lower() == "true"
-MAX_NOTIONAL_USDT = Decimal(os.getenv("LIVE_MAX_BANKROLL_USDT", "10.64"))
+MAX_NOTIONAL_USDT = Decimal(os.getenv("LIVE_MAX_BANKROLL_USDT", "10"))
+ENTRY_STRATEGY = os.getenv("LIVE_ENTRY_STRATEGY", "STRICT").strip().upper()
+if ENTRY_STRATEGY not in ("STRICT", "NEAREST_VOLUME"):
+    raise RuntimeError("LIVE_ENTRY_STRATEGY must be STRICT or NEAREST_VOLUME")
+NEAREST_VOLUME = ENTRY_STRATEGY == "NEAREST_VOLUME"
 LEVERAGE = "1"
 MARGIN_MODE = "isolated"
 TOP_N = 7
@@ -1510,6 +1515,8 @@ def entry_risk_rejection(side, return_1bar_pct=None, chart_patterns=None):
 
 
 def evaluate_signals(state, top10):
+    if NEAREST_VOLUME:
+        return nearest_volume.select_signals(state, top10)
     data = {}
     latest_idx = {}
     ranks = {inst: idx + 1 for idx, inst in enumerate(top10)}
@@ -2183,19 +2190,33 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         raise RuntimeError("HARD STOP active: 10% drawdown limit reached")
 
     rank, inst, side, signal_close_ms = candidate
-    concentration = volume_concentration_filter(inst, signal_close_ms)
-    if not concentration["allowed"]:
-        append_technical_event(
-            concentration["reason"],
-            f"{inst} {side}: 1m volume filter blocked order",
-            inst=inst, side=side, rank=rank,
-            signal_close_ms=signal_close_ms, extra=concentration,
-        )
-        raise RuntimeError(f"{inst}: volume concentration filter: {concentration}")
     signal_age_ms = now_ms() - int(signal_close_ms)
     signal_snapshot = build_signal_snapshot(
         inst, side, signal_close_ms, rank
     )
+    if NEAREST_VOLUME:
+        # Hard volume gate applies to every LIVE order, including revalidation.
+        # The separate 85% minute concentration test was not part of the
+        # user-approved 10/7 scoring backtest and is not an entry rule here.
+        if not nearest_volume.volume_snapshot_passes(signal_snapshot, side):
+            raise RuntimeError(
+                f"{inst} {side}: mandatory candle color/volume rule failed "
+                "at pre-order revalidation; no order sent"
+            )
+        concentration = {
+            "allowed": True, "reason": "NEAREST_VOLUME_DIRECTIONAL_GATE",
+            "directional_15m_volume_revalidated": True,
+        }
+    else:
+        concentration = volume_concentration_filter(inst, signal_close_ms)
+        if not concentration["allowed"]:
+            append_technical_event(
+                concentration["reason"],
+                f"{inst} {side}: 1m volume filter blocked order",
+                inst=inst, side=side, rank=rank,
+                signal_close_ms=signal_close_ms, extra=concentration,
+            )
+            raise RuntimeError(f"{inst}: volume concentration filter: {concentration}")
     signal_snapshot["volume_concentration_1m"] = concentration
     if signal_age_ms < 0 or signal_age_ms > SIGNAL_MAX_AGE_MS:
         raise RuntimeError(
@@ -2217,13 +2238,14 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         signal_snapshot.get("chart_patterns"),
     )
     signal_snapshot["entry_risk_filter"] = {
-        "allowed": reject_reason is None,
+        "allowed": reject_reason is None or NEAREST_VOLUME,
+        "scored_but_not_mandatory": NEAREST_VOLUME,
         "long_max_1bar_rise_pct": LONG_MAX_1BAR_RISE_PCT,
         "short_opposing_bull_pattern_min_confidence":
             SHORT_OPPOSING_BULL_PATTERN_MIN_CONFIDENCE,
         "reject_reason": reject_reason,
     }
-    if reject_reason:
+    if reject_reason and not NEAREST_VOLUME:
         append_technical_event(
             "ENTRY_FILTER_BLOCKED",
             f"{inst} {side}: {reject_reason} (pre-order revalidation)",
@@ -2237,7 +2259,7 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
     # late/chasing entries. This executes before the order is submitted.
     quote_check = checked_preorder_quote(inst, side, signal_snapshot["close"])
     signal_snapshot["pre_order_price_guard"] = quote_check
-    if side == "LONG":
+    if side == "LONG" and not NEAREST_VOLUME:
         current_rsi = signal_snapshot.get("rsi14")
         if current_rsi is None or float(current_rsi) >= LONG_RSI_MAX_EXCLUSIVE:
             raise RuntimeError(f"{inst} LONG: RSI14 must be below {LONG_RSI_MAX_EXCLUSIVE} before order")
