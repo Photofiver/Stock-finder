@@ -2324,6 +2324,9 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         "reduceOnly": "false",
         "clientOrderId": client_id,
     }
+    if NEAREST_VOLUME:
+        # Fallback is forbidden after this line, even if a POST times out.
+        state["_nearest_volume_order_post_started"] = True
     data = private_request("POST", "/api/v1/trade/order", body=body)
     row = data[0] if isinstance(data, list) and data else (data or {})
     if str(row.get("code", "0")) != "0":
@@ -2722,6 +2725,10 @@ def place_live_trade_multi(
 
 
 def execute_candidate_batch(state, candidates, tickers, instruments):
+    if NEAREST_VOLUME:
+        return nearest_volume.execute_with_fallback(
+            state, candidates, tickers, instruments
+        )
     if risk_stop_active(state):
         print("HARD STOP active: skipping all new entries.")
         for rank, inst, side, signal_close_ms in candidates:
