@@ -1,0 +1,27 @@
+name: BloFin read-only audit tests
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_live_scan_audit.py'
+      - 'tests/test_blofin_audit_touch.py'
+      - '.github/workflows/blofin_audit_quality.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit_tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Compile read-only audit
+        run: python -m py_compile blofin_live_scan_audit.py tests/test_blofin_audit_touch.py
+      - name: Test TP and SL minute chronology and volume-gated shadow
+        run: python -m unittest discover -s tests -p 'test_blofin_audit_touch.py' -v
