@@ -81,6 +81,15 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          # Read-only diagnostics run AFTER LIVE execution, never before placing orders.
+          # A diagnostics/API failure must never block saving LIVE state.
+          if [ -f blofin_live_state.json ]; then
+            LIVE_SIGNAL_MINUTES=15 python blofin_live_scan_audit.py || echo 'AUDIT_ERROR: scan diagnostics failed; preserving LIVE state'
+            if [ -f blofin_live_scans/live_watch_history.json ]; then
+              git add -- blofin_live_scans/live_watch_history.json
+            fi
+          fi
           git add blofin_signal_state.json
           if [ -f blofin_pending_signal.json ]; then
             git add blofin_pending_signal.json
