@@ -1,0 +1,56 @@
+name: BloFin shadow audit (read-only)
+
+on:
+  workflow_run:
+    workflows:
+      - BloFin LIVE signal watch
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: blofin-shadow-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout latest saved state
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Review past shadow scans and record latest signal diagnostics
+        env:
+          LIVE_SIGNAL_MINUTES: '15'
+        run: python blofin_live_scan_audit.py
+
+      - name: Persist shadow audit files only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A -- blofin_live_scans/
+          if ! git diff --cached --quiet; then
+            git commit -m 'Save read-only BloFin shadow scan diagnostics'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          else
+            echo 'No new shadow scan data'
+          fi
