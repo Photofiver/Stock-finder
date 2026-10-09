@@ -1,0 +1,44 @@
+name: BloFin 24h volume selection analysis
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - analyze_nearest_24h.py
+      - .github/workflows/blofin_nearest_24h_analysis.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blofin-nearest-volume-analysis
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install -r requirements.txt
+
+      - name: Verify analysis only, without private exchange credentials
+        run: python -m py_compile analyze_nearest_24h.py
+
+      - name: Compare 24-hour nearest signals vs volume-priority signals
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python analyze_nearest_24h.py
+
+      - name: Save backtest result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blofin-nearest-volume-24h
+          path: blofin_live_scans/nearest_24h_2026-10-09.json
+          if-no-files-found: warn
