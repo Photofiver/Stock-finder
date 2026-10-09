@@ -3,7 +3,7 @@ name: BloFin LIVE signal watch
 on:
   workflow_dispatch:
   schedule:
-    - cron: '1,16,31,46 * * * *'
+    - cron: '1,11,21,31,41,51 * * * *'
 
 permissions:
   contents: write
@@ -22,7 +22,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Align pre-trigger to the 15m candle close
+      - name: Align pre-trigger to the 10m candle close
         if: github.event_name == 'push'
         shell: bash
         run: |
@@ -34,7 +34,7 @@ jobs:
           REM=$((MIN % 10))
           WAIT=0
 
-          # Align early external triggers to the next 15m close.
+          # Align early external triggers to the next 10m close.
           # If a trigger arrives up to 1m59s after a close, run immediately
           # and process that just-closed candle instead of skipping to the next one.
           if [ "$REM" -eq 0 ]; then
@@ -48,7 +48,7 @@ jobs:
           fi
 
           if [ "$WAIT" -gt 0 ] && [ "$WAIT" -le 605 ]; then
-            echo "Pre-trigger received at ${MIN}:${SEC}; waiting ${WAIT}s for confirmed 15m close"
+            echo "Pre-trigger received at ${MIN}:${SEC}; waiting ${WAIT}s for confirmed 10m close"
             sleep "$WAIT"
           else
             echo "Running immediately at minute ${MIN}, second ${SEC}"
@@ -65,13 +65,13 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Scan 15m LIVE signal and execute AUTO after revalidation
+      - name: Scan 10m LIVE signal and execute AUTO after revalidation
         env:
           BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
           BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
           BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
           BLOFIN_LIVE_ENABLED: 'true'
-          LIVE_SIGNAL_MINUTES: '15'
+          LIVE_SIGNAL_MINUTES: '10'
           LIVE_SIGNAL_MAX_AGE_MS: '840000'
           LIVE_MAX_BANKROLL_USDT: '10.00'
           LIVE_ENTRY_STRATEGY: 'NEAREST_VOLUME'
@@ -86,9 +86,9 @@ jobs:
           # Read-only diagnostics run AFTER LIVE execution, never before placing orders.
           # A diagnostics/API failure must never block saving LIVE state.
           if [ -f blofin_live_state.json ]; then
-            LIVE_SIGNAL_MINUTES=15 python blofin_live_scan_audit.py || echo 'AUDIT_ERROR: scan diagnostics failed; preserving LIVE state'
-            if [ -f blofin_live_scans/live_watch_history.json ]; then
-              git add -- blofin_live_scans/live_watch_history.json
+            LIVE_SIGNAL_MINUTES=10 python blofin_live_scan_audit.py || echo 'AUDIT_ERROR: scan diagnostics failed; preserving LIVE state'
+            if [ -f blofin_live_scans/live_watch_history_10m.json ]; then
+              git add -- blofin_live_scans/live_watch_history_10m.json
             fi
           fi
           git add blofin_signal_state.json
