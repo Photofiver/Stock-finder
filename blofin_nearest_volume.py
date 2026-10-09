@@ -162,11 +162,12 @@ def select_signals(state, top7):
             row["inst"], row["side"],
         ),
     )
-    winner = ordered[0] if ordered else None
     state["last_pretrade_ranking"] = {
         "generated_at_ms": bot.now_ms(),
         "strategy": "NEAREST_VOLUME",
         "volume_is_mandatory": True,
+        "max_new_positions_per_scan": 1,
+        "fallback_after_preorder_rejection": True,
         "not_a_profit_prediction": True,
         "scores": sorted(
             options,
@@ -176,22 +177,26 @@ def select_signals(state, top7):
         ),
         "errors": errors,
         "eligible_entry_order": [{
-            "inst": winner["inst"], "side": winner["side"],
-            "top7_rank": winner["rank_in_top7"],
-            "score": winner["score"],
-            "missing": winner["missing"],
-            "volume_advantage_pct": winner["volume_advantage_pct"],
-        }] if winner else [],
+            "inst": row["inst"], "side": row["side"],
+            "top7_rank": row["rank_in_top7"],
+            "score": row["score"],
+            "missing": row["missing"],
+            "volume_advantage_pct": row["volume_advantage_pct"],
+            "priority": idx,
+        } for idx, row in enumerate(ordered, start=1)],
+        "entry_attempts": [],
     }
-    if not winner:
-        print("NEAREST_VOLUME no entry: no confirmed candidate with mandatory volume")
+    if not ordered:
+        print("NEAREST_VOLUME no entry: no fresh volume-confirmed TOP7 candidate")
         return []
     print(
-        f"NEAREST_VOLUME selected {winner['inst']} {winner['side']} "
-        f"score={winner['score']} missing={winner['missing']} "
-        f"volume_advantage={winner['volume_advantage_pct']:.2f}%"
+        "NEAREST_VOLUME fallback order: " +
+        ", ".join(
+            f"{row['inst']} {row['side']} {row['score']}"
+            for row in ordered
+        )
     )
-    return [(
-        winner["rank_in_top7"], winner["inst"], winner["side"],
-        winner["signal_close_ms"],
-    )]
+    return [
+        (row["rank_in_top7"], row["inst"], row["side"], row["signal_close_ms"])
+        for row in ordered
+    ]
