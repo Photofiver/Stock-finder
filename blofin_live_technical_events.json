@@ -1579,6 +1579,40 @@
       "signal_label": "10m",
       "timestamp_ms": 1791577279881,
       "timestamp_utc": "2026-10-09T20:21:19.881670+00:00"
+    },
+    {
+      "event_type": "ENTRY_CHASE_BLOCKED",
+      "extra": {
+        "adverse_gap_pct": 0.5577162985249872,
+        "ask": "0.1357",
+        "bid": "0.13551",
+        "expected_fill": "0.13551",
+        "max_adverse_gap_pct": 0.25,
+        "max_spread_pct": 0.25,
+        "quote_age_ms": 9102,
+        "signal_close": "0.13627",
+        "spread_pct": 0.14011282769809372
+      },
+      "inst": "BAT-USDT",
+      "message": "Entry quote too far from SHORT signal candle close",
+      "side": "SHORT",
+      "signal_label": "10m",
+      "timestamp_ms": 1791577878634,
+      "timestamp_utc": "2026-10-09T20:31:18.634172+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 1
+      },
+      "inst": "BAT-USDT",
+      "message": "BAT-USDT SHORT skipped; trying next volume-eligible coin: RuntimeError: BAT-USDT SHORT: adverse price move 0.558% > 0.25% from signal close",
+      "rank": 4,
+      "side": "SHORT",
+      "signal_close_ms": 1791577800000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791577878636,
+      "timestamp_utc": "2026-10-09T20:31:18.636513+00:00"
     }
   ],
   "version": 1
