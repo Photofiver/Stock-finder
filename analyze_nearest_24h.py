@@ -16,8 +16,8 @@ import requests
 REPO = "Photofiver/Stock-finder"
 GH = "https://api.github.com/repos/" + REPO
 BLOFIN = "https://openapi.blofin.com/api/v1/market/candles"
-WINDOW_START = "2026-10-08T15:41:53Z"
-WINDOW_END = "2026-10-09T15:41:53Z"
+WINDOW_START = "2026-10-08T15:45:00Z"
+WINDOW_END = "2026-10-09T15:45:00Z"
 FEE_PCT = 0.12
 OUT = Path("blofin_live_scans/nearest_24h_2026-10-09.json")
 MS15 = 15 * 60 * 1000
@@ -63,15 +63,20 @@ def state_for_commit(commit):
 
 
 def all_states():
-    commits = github("/commits", {
-        "path": "blofin_live_state.json",
-        "since": "2026-10-08T15:40:00Z",
-        "until": "2026-10-09T15:42:00Z",
-        "per_page": 100,
-        "page": 1,
-    })
-    if not isinstance(commits, list):
-        raise RuntimeError(f"Unexpected commits API response: {commits}")
+    commits = []
+    for page in range(1, 4):
+        batch = github("/commits", {
+            "path": "blofin_live_state.json",
+            "since": "2026-10-08T15:40:00Z",
+            "until": "2026-10-09T16:02:00Z",
+            "per_page": 100,
+            "page": page,
+        })
+        if not isinstance(batch, list):
+            raise RuntimeError(f"Unexpected commits API response: {batch}")
+        commits.extend(batch)
+        if len(batch) < 100:
+            break
     print(f"Collected {len(commits)} commit references", flush=True)
     snapshots = []
     errors = []
@@ -184,22 +189,22 @@ def select(row, method):
             -x["volume_pct_vs_last_opposite"], x["top7_rank"], x["inst"]))
         return passing[0]
     if method == "volume_nearest_forced":
-        # ALWAYS choose exactly one; prioritise volume-confirmed entries.
-        eligible = passing if passing else choices
+        # Respect mandatory volume; no entry if nobody passes.
+        eligible = passing
         eligible.sort(key=lambda x: (
             x["missing"], -x["ratio"],
             -(x["volume_pct_vs_last_opposite"] or float("-inf")),
             x["top7_rank"], x["inst"]))
         return eligible[0]
     if method == "volume_strongest_forced":
-        # ALWAYS choose one: take the strongest relative volume from a
+        # Respect mandatory volume: strongest confirmed volume from a
         # direction-confirmed candle, then use scoring as a tie-break.
-        eligible = passing if passing else choices
+        eligible = passing
         eligible.sort(key=volume_strength)
         return eligible[0]
     if method == "volume_overscore":
         # Volume direction first; then use a score with volume contribution.
-        eligible = passing if passing else choices
+        eligible = passing
         eligible.sort(key=lambda x: (
             -(x["ratio"] + min(
                 max(x["volume_pct_vs_last_opposite"] or 0, 0), 400
@@ -381,7 +386,7 @@ def main():
             - baseline_zk["net_pct"] + actual_zk_pct, 6
         )
     report = {
-        "analysis_version": 2,
+        "analysis_version": 3,
         "start_utc": WINDOW_START,
         "end_utc": WINDOW_END,
         "created_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -396,6 +401,7 @@ def main():
             "does not model 60m LIVE exits, spread, capital constraint, "
             "live risk guards, or actual entry latency."
         ),
+        "scheduled_15m_slots": 96,
         "commits_seen": commit_count,
         "snapshot_count": len(snaps),
         "snapshot_errors": errors,
