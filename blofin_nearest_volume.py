@@ -200,3 +200,187 @@ def select_signals(state, top7):
         (row["rank_in_top7"], row["inst"], row["side"], row["signal_close_ms"])
         for row in ordered
     ]
+
+
+def execute_with_fallback(state, candidates, tickers, instruments):
+    """Try volume-eligible choices in ranked order, at most one new LIVE order.
+
+    Every rejection before the market-order POST may fall back. Once POST starts,
+    never try another coin, even if the broker status is uncertain; duplicate
+    orders are more dangerous than missing a 15m entry.
+    """
+    import blofin_live_hourly as bot
+
+    ranking = state.setdefault("last_pretrade_ranking", {})
+    attempts = ranking.setdefault("entry_attempts", [])
+    ranking["executed_candidate"] = None
+
+    def log_attempt(candidate, status, message="", priority=None):
+        rank, inst, side, signal_close_ms = candidate
+        record = {
+            "inst": inst, "side": side, "top7_rank": rank,
+            "signal_close_ms": signal_close_ms,
+            "priority": priority,
+            "status": status,
+            "reason": message,
+        }
+        attempts.append(record)
+        print(
+            f"NEAREST_VOLUME FALLBACK {inst} {side} "
+            f"priority={priority} status={status} reason={message}"
+        )
+        return record
+
+    if not candidates:
+        return []
+    if bot.risk_stop_active(state):
+        log_attempt(candidates[0], "BLOCKED_RISK_STOP", "10% max drawdown")
+        return []
+
+    positions = bot.get_tracked_positions(state)
+    open_rows = bot.get_open_positions()
+    account_open = {
+        str(row.get("instId")) for row in open_rows if row.get("instId")
+    }
+    untracked = sorted(account_open - set(positions))
+    if untracked:
+        log_attempt(
+            candidates[0], "BLOCKED_UNTRACKED_POSITIONS",
+            ", ".join(untracked),
+        )
+        return []
+    if len(account_open) >= bot.MAX_OPEN_POSITIONS:
+        log_attempt(
+            candidates[0], "BLOCKED_NO_SLOT",
+            f"All {bot.MAX_OPEN_POSITIONS} LIVE slots occupied",
+        )
+        return []
+
+    try:
+        exposure = sum(
+            (abs(bot.d(pos.get("notional_usdt") or "0"))
+             for pos in positions.values()), bot.Decimal("0")
+        )
+        if any(bot.d(pos.get("notional_usdt") or "0") <= 0
+               for pos in positions.values()):
+            raise ValueError("Tracked position notional missing or invalid")
+    except Exception as exc:
+        log_attempt(candidates[0], "BLOCKED_TRACKING_ERROR", str(exc))
+        return []
+
+    live_bankroll = bot.current_live_bankroll(state)
+    remaining_bankroll = live_bankroll - exposure
+    if remaining_bankroll <= 0:
+        log_attempt(
+            candidates[0], "BLOCKED_BANKROLL",
+            f"No free LIVE bankroll: {live_bankroll} USDT",
+        )
+        return []
+    available = bot.get_available_usdt()
+    budget = min(available, remaining_bankroll)
+    if budget <= 0:
+        log_attempt(candidates[0], "BLOCKED_NO_FUNDS", "No available USDT")
+        return []
+
+    for priority, candidate in enumerate(candidates, start=1):
+        rank, inst, side, signal_close_ms = candidate
+        if inst in account_open:
+            log_attempt(
+                candidate, "SKIPPED_ALREADY_OPEN",
+                "An open position already exists for this instrument",
+                priority,
+            )
+            continue
+        age_ms = bot.now_ms() - int(signal_close_ms)
+        if age_ms < 0 or age_ms > bot.SIGNAL_MAX_AGE_MS:
+            log_attempt(
+                candidate, "BLOCKED_STALE_SIGNAL",
+                f"Signal age {age_ms}ms exceeds allowed age",
+                priority,
+            )
+            break
+
+        # Preflight is entirely read-only and cannot open an exchange position.
+        # Keep the same directional volume and executable-price guards as
+        # place_live_trade(), which independently revalidates both again.
+        try:
+            snapshot = bot.build_signal_snapshot(
+                inst, side, signal_close_ms, rank
+            )
+            if not volume_snapshot_passes(snapshot, side):
+                raise ValueError(
+                    "Mandatory 15m candle color/volume condition failed"
+                )
+            bot.checked_preorder_quote(inst, side, snapshot["close"])
+        except Exception as exc:
+            reason = f"{type(exc).__name__}: {exc}"
+            log_attempt(candidate, "PRE_ORDER_REJECTED", reason, priority)
+            bot.append_technical_event(
+                "NEAREST_VOLUME_FALLBACK_PREORDER",
+                f"{inst} {side} skipped; trying next volume-eligible coin: {reason}",
+                inst=inst, side=side, rank=rank,
+                signal_close_ms=signal_close_ms,
+                extra={"priority": priority},
+            )
+            continue
+
+        # A new order must not be attempted after POST /trade/order begins;
+        # even a timeout can mean BloFin accepted the order.
+        state["_nearest_volume_order_post_started"] = False
+        try:
+            pos = bot.place_live_trade_multi(
+                state,
+                candidate,
+                tickers,
+                instruments,
+                budget,  # do not divide 10 USDT by number of fallback options
+                f"NEAREST_VOLUME priority {priority}; one order per scan; "
+                f"bankroll {live_bankroll:.4f} USDT",
+            )
+        except Exception as exc:
+            uncertain_order = bool(
+                state.get("_nearest_volume_order_post_started")
+            )
+            reason = f"{type(exc).__name__}: {exc}"
+            status = (
+                "ORDER_STATUS_UNCERTAIN_STOP"
+                if uncertain_order else "PRE_ORDER_REJECTED"
+            )
+            log_attempt(candidate, status, reason, priority)
+            bot.append_technical_event(
+                "NEAREST_VOLUME_FALLBACK_STOP" if uncertain_order
+                else "NEAREST_VOLUME_FALLBACK_PREORDER",
+                f"{inst} {side}: {status}: {reason}",
+                inst=inst, side=side, rank=rank,
+                signal_close_ms=signal_close_ms,
+                extra={"priority": priority},
+            )
+            if uncertain_order:
+                break
+            continue
+        finally:
+            # The flag never persists to JSON; outcome is in entry_attempts.
+            state.pop("_nearest_volume_order_post_started", None)
+
+        if not pos:
+            log_attempt(
+                candidate, "ORDER_ATTEMPT_UNCONFIRMED_STOP",
+                "Market order was attempted; no safe fallback is possible",
+                priority,
+            )
+            break
+
+        record = log_attempt(candidate, "EXECUTED", "", priority)
+        record["notional_usdt"] = pos.get("notional_usdt")
+        ranking["executed_candidate"] = {
+            "inst": inst, "side": side, "priority": priority,
+            "notional_usdt": pos.get("notional_usdt"),
+        }
+        return [{
+            "inst": inst, "side": side, "rank": int(rank),
+            "signal_close_ms": int(signal_close_ms),
+            "notional_usdt": pos.get("notional_usdt"),
+        }]
+    if not ranking.get("executed_candidate"):
+        print("NEAREST_VOLUME: exhausted safe fallback options; no new order")
+    return []
