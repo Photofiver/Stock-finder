@@ -1813,6 +1813,68 @@
       "signal_label": "10m",
       "timestamp_ms": 1791585081190,
       "timestamp_utc": "2026-10-09T22:31:21.190709+00:00"
+    },
+    {
+      "event_type": "ENTRY_CHASE_BLOCKED",
+      "extra": {
+        "adverse_gap_pct": 0.4547044421126268,
+        "ask": "0.057",
+        "bid": "0.05692",
+        "expected_fill": "0.05692",
+        "max_adverse_gap_pct": 0.25,
+        "max_spread_pct": 0.25,
+        "quote_age_ms": 14330,
+        "signal_close": "0.05718",
+        "spread_pct": 0.1404494382022472
+      },
+      "inst": "KAIA-USDT",
+      "message": "Entry quote too far from SHORT signal candle close",
+      "side": "SHORT",
+      "signal_label": "10m",
+      "timestamp_ms": 1791586877928,
+      "timestamp_utc": "2026-10-09T23:01:17.928556+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 1
+      },
+      "inst": "KAIA-USDT",
+      "message": "KAIA-USDT SHORT skipped; trying next volume-eligible coin: RuntimeError: KAIA-USDT SHORT: adverse price move 0.455% > 0.25% from signal close",
+      "rank": 3,
+      "side": "SHORT",
+      "signal_close_ms": 1791586800000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791586877930,
+      "timestamp_utc": "2026-10-09T23:01:17.930547+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 2
+      },
+      "inst": "BAT-USDT",
+      "message": "BAT-USDT LONG: PRE_ORDER_REJECTED: RuntimeError: BAT-USDT: minimum contract/lot exceeds live cap 0.4074 USDT",
+      "rank": 4,
+      "side": "LONG",
+      "signal_close_ms": 1791586800000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791586878981,
+      "timestamp_utc": "2026-10-09T23:01:18.981657+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 3
+      },
+      "inst": "US-USDT",
+      "message": "US-USDT LONG: PRE_ORDER_REJECTED: RuntimeError: US-USDT: minimum contract/lot exceeds live cap 0.4074 USDT",
+      "rank": 1,
+      "side": "LONG",
+      "signal_close_ms": 1791586800000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791586880004,
+      "timestamp_utc": "2026-10-09T23:01:20.004617+00:00"
     }
   ],
   "version": 1
