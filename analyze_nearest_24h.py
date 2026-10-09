@@ -116,12 +116,14 @@ def market(inst, interval, *, after=None, limit=240):
 
 
 def select(row, method):
+    """Use ONLY indicators captured at the time of the candidate signal."""
     choices = []
     for record in row["instruments"]:
         candle = record.get("candle") or {}
         ref = float(candle.get("close") or 0)
         if not ref:
             continue
+        color = str(candle.get("color") or "").upper()
         for side in ("LONG", "SHORT"):
             obj = record.get(side.lower()) or {}
             try:
@@ -129,6 +131,20 @@ def select(row, method):
                 missing = len(obj["missing"])
             except Exception:
                 continue
+            ratio_name = (
+                "volume_vs_last_red_pct" if side == "LONG"
+                else "volume_vs_last_green_pct"
+            )
+            volume_ratio = obj.get(ratio_name)
+            volume_ratio = (
+                float(volume_ratio)
+                if isinstance(volume_ratio, (int, float)) else None
+            )
+            color_matches = color == ("GREEN" if side == "LONG" else "RED")
+            volume_ok = (
+                color_matches and volume_ratio is not None
+                and volume_ratio > 0.0
+            )
             choices.append({
                 "inst": record["inst"], "side": side,
                 "score": f"{numerator}/{denominator}",
@@ -138,14 +154,58 @@ def select(row, method):
                 "top7_rank": record.get("rank") or 999,
                 "signal_close": ref,
                 "signal_close_ms": row["signal_close_ms"],
+                "volume_pct_vs_last_opposite": volume_ratio,
+                "directional_candle": color_matches,
+                "volume_rule_passed": volume_ok,
             })
+    if not choices:
+        return None
+    standard = lambda x: (x["missing"], -x["ratio"], x["top7_rank"], x["inst"], x["side"])
+    volume_strength = lambda x: (
+        -x["volume_pct_vs_last_opposite"]
+        if x["volume_pct_vs_last_opposite"] is not None else float("inf"),
+        x["missing"], -x["ratio"], x["top7_rank"], x["inst"],
+    )
+    passing = [x for x in choices if x["volume_rule_passed"]]
     if method == "minimum_missing":
-        choices.sort(key=lambda x: (x["missing"], -x["ratio"],
-                                    x["top7_rank"], x["inst"], x["side"]))
-    else:
-        choices.sort(key=lambda x: (-x["points"], x["top7_rank"],
-                                    x["inst"], x["side"]))
-    return choices[0] if choices else None
+        choices.sort(key=standard)
+        return choices[0]
+    if method == "highest_raw_score":
+        choices.sort(key=lambda x: (
+            -x["points"], x["top7_rank"], x["inst"], x["side"]))
+        return choices[0]
+    if method == "volume_gate_nearest":
+        # Strict reading of the original strategy: candle direction must match,
+        # and its volume must beat the last opposite-colour candle.
+        if not passing:
+            return None
+        passing.sort(key=lambda x: (
+            x["missing"], -x["ratio"],
+            -x["volume_pct_vs_last_opposite"], x["top7_rank"], x["inst"]))
+        return passing[0]
+    if method == "volume_nearest_forced":
+        # ALWAYS choose exactly one; prioritise volume-confirmed entries.
+        eligible = passing if passing else choices
+        eligible.sort(key=lambda x: (
+            x["missing"], -x["ratio"],
+            -(x["volume_pct_vs_last_opposite"] or float("-inf")),
+            x["top7_rank"], x["inst"]))
+        return eligible[0]
+    if method == "volume_strongest_forced":
+        # ALWAYS choose one: take the strongest relative volume from a
+        # direction-confirmed candle, then use scoring as a tie-break.
+        eligible = passing if passing else choices
+        eligible.sort(key=volume_strength)
+        return eligible[0]
+    if method == "volume_overscore":
+        # Volume direction first; then use a score with volume contribution.
+        eligible = passing if passing else choices
+        eligible.sort(key=lambda x: (
+            -(x["ratio"] + min(
+                max(x["volume_pct_vs_last_opposite"] or 0, 0), 400
+            ) / 400.0), x["missing"], x["top7_rank"], x["inst"]))
+        return eligible[0]
+    raise ValueError(f"Unknown selection: {method}")
 
 
 def calc_choice(pick, candles, minute_cache):
@@ -245,7 +305,11 @@ def main():
     scans = [x for x in snaps if start <= x["signal_close_ms"]
              and x["signal_close_ms"] + MS15 <= end]
     print(f"Analysing {len(scans)} completed 15m signals", flush=True)
-    methods = ("minimum_missing", "highest_raw_score")
+    methods = (
+        "minimum_missing", "volume_gate_nearest",
+        "volume_nearest_forced", "volume_strongest_forced",
+        "volume_overscore", "highest_raw_score"
+    )
     picks = {m: [select(row, m) for row in scans] for m in methods}
     instruments = sorted({
         p["inst"] for group in picks.values() for p in group if p
@@ -317,7 +381,7 @@ def main():
             - baseline_zk["net_pct"] + actual_zk_pct, 6
         )
     report = {
-        "analysis_version": 1,
+        "analysis_version": 2,
         "start_utc": WINDOW_START,
         "end_utc": WINDOW_END,
         "created_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -340,6 +404,14 @@ def main():
         "historical_actual_live_trades": actual_summary,
         "real_zk_net_pct": actual_zk_pct,
         "nearest_result_substituting_real_zk_pnl_pct_points": adjusted,
+        "strategy_definitions": {
+            "minimum_missing": "Fewest missing rules, regardless of volume",
+            "volume_gate_nearest": "Require candle matches direction and volume > last opposite-color candle, then choose fewest missing; skip if no pass",
+            "volume_nearest_forced": "Every 15m prefer volume+direction confirmed; then fewest missing, else fallback",
+            "volume_strongest_forced": "Every 15m prefer greatest % increase over last opposite candle; direction confirmed; else fallback",
+            "volume_overscore": "Every 15m prioritize confirmed directional volume, then combine fraction of passing rules + capped relative-volume bonus",
+            "highest_raw_score": "Highest numerator of 7/10 scoring with no normalization"
+        },
         "strategies": outcomes,
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
@@ -350,6 +422,16 @@ def main():
         "actual": actual_summary,
         "with_real_zk": adjusted,
         "market_errors": len(candle_errors),
+        "selected_sample": {
+            k: [{
+                "utc": z.get("signal_time_utc"), "inst": z.get("inst"),
+                "side": z.get("side"), "score": z.get("score"),
+                "volume_vs_opposite_pct": z.get("volume_pct_vs_last_opposite"),
+                "volume_rule_passed": z.get("volume_rule_passed"),
+                "outcome": z.get("status"), "net_pct": z.get("net_pct")
+            } for z in v["decisions"][-12:]]
+            for k, v in outcomes.items()
+        }
     }, ensure_ascii=False), flush=True)
 
 
