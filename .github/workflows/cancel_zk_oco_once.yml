@@ -1,0 +1,32 @@
+name: One-time cancel orphan ZK OCO 10028562149
+
+on:
+  push:
+    paths:
+      - '.github/workflows/cancel_zk_oco_once.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blofin-one-time-zk-oco-10028562149
+  cancel-in-progress: false
+
+jobs:
+  cleanup_exact_old_oco:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install authenticated market client dependencies
+        run: pip install -r requirements.txt
+      - name: Cancel only orphan ZK OCO if no ZK position exists
+        env:
+          BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
+          BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
+          BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
+        run: python cancel_zk_oco_once.py
