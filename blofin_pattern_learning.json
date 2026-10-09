@@ -2297,6 +2297,38 @@
       ],
       "side": "LONG",
       "signal_close_ms": 1791574200000
+    },
+    {
+      "closed_ms": 1791576019609,
+      "inst": "US-USDT",
+      "net_pnl_usdt": -0.1424134573629,
+      "patterns": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.765,
+          "evidence": {
+            "head_above_shoulders_pct": 2.302,
+            "shoulders_gap_pct": 0.169
+          },
+          "name": "HEAD_AND_SHOULDERS"
+        }
+      ],
+      "result": "LOSS",
+      "reviews": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.765,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "head_above_shoulders_pct": 2.302,
+            "shoulders_gap_pct": 0.169
+          },
+          "name": "HEAD_AND_SHOULDERS",
+          "relation_to_trade": "OPPOSES"
+        }
+      ],
+      "side": "LONG",
+      "signal_close_ms": 1791574800000
     }
   ],
   "interpretation": "HELPED = pattern supported a winner or opposed a loser; HURT = pattern supported a loser or opposed a winner.",
@@ -2381,6 +2413,16 @@
       "seen": 7,
       "supports_trade": 2,
       "wins_when_present": 4
+    },
+    "HEAD_AND_SHOULDERS": {
+      "helped": 1,
+      "hurt": 0,
+      "losses_when_present": 1,
+      "no_effect": 0,
+      "opposes_trade": 1,
+      "seen": 1,
+      "supports_trade": 0,
+      "wins_when_present": 0
     },
     "INVERSE_CUP_AND_HANDLE": {
       "helped": 2,
