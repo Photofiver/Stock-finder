@@ -31,7 +31,7 @@ def save_json(path, payload):
 def load_history():
     if not HISTORY_FILE.exists():
         return {
-            "format_version": 3,
+            "format_version": 4,
             "source": "BloFin LIVE signal watch; read-only retrospective audit",
             "analysis_only": True,
             "signal_minutes": bot.SIGNAL_MINUTES,
@@ -40,6 +40,8 @@ def load_history():
             "indicator_definitions": {
                 "adx14": "Wilder ADX(14), 15m CLOSED candle",
                 "obv_rising_5": "OBV close minus OBV 5 bars earlier > 0; 15m CLOSED candles",
+                "indicator_change_over_15m": "after next closed 15m bar minus value at entry signal",
+                "best_coin_comparison_after_15m": "ex-post only, 7 assets x 2 hypothetical directions",
             },
             "notes": (
                 "Hypothetical entry at signal candle close; no spread or slippage. "
@@ -119,6 +121,136 @@ def adx14_and_obv5(bars):
     return adx, obv_delta_5
 
 
+def snapshot_indicators(bars):
+    """Values calculated using only candles closed at the snapshot time."""
+    if not bars:
+        return None
+    cur = bars[-1]
+    adx, obv5 = adx14_and_obv5(bars)
+    close = float(cur["c"])
+    hist = cur.get("macd_hist")
+    long_metrics = bot.long_entry_metrics(bars, len(bars) - 1) or {}
+    ma5 = bot.volume_ma(bars, len(bars) - 1, 5)
+    vol = float(cur["v"])
+    return {
+        "rsi14": cur.get("rsi"),
+        "macd_dif": cur.get("macd_dif"),
+        "macd_dea": cur.get("macd_dea"),
+        "macd_hist": hist,
+        "macd_hist_pct_close": (float(hist) / close * 100) if hist is not None and close else None,
+        "adx14": adx,
+        "obv_delta_5": obv5,
+        "obv_rising_5": (obv5 > 0) if obv5 is not None else None,
+        "stoch_k": long_metrics.get("stoch_k"),
+        "stoch_d": long_metrics.get("stoch_d"),
+        "volume": vol,
+        "volume_ma5": ma5,
+        "volume_vs_ma5_pct": (vol / ma5 - 1) * 100 if ma5 else None,
+    }
+
+
+def indicator_changes(before, after):
+    """Numerical changes, not causal statements about why a trade won."""
+    if not before or not after:
+        return None
+    names = (
+        "rsi14", "macd_dif", "macd_dea", "macd_hist", "macd_hist_pct_close",
+        "adx14", "obv_delta_5", "stoch_k", "stoch_d",
+        "volume", "volume_vs_ma5_pct",
+    )
+    return {
+        key: (float(after[key]) - float(before[key]))
+        if before.get(key) is not None and after.get(key) is not None else None
+        for key in names
+    }
+
+
+def live_executions_for_signal(state, signal_close_ms):
+    """Read-only match against broker-tracked positions and closed trades."""
+    executions = []
+    seen = set()
+    positions = state.get("positions") or {}
+    if isinstance(positions, dict):
+        position_values = positions.values()
+    elif isinstance(positions, list):
+        position_values = positions
+    else:
+        position_values = []
+    for row in list(state.get("trade_history") or []) + list(position_values):
+        if not isinstance(row, dict):
+            continue
+        if int(row.get("signal_close_ms") or 0) != signal_close_ms:
+            continue
+        inst = str(row.get("inst") or "")
+        side = str(row.get("side") or "").upper()
+        if not inst or side not in ("LONG", "SHORT"):
+            continue
+        key = (inst, side)
+        if key in seen:
+            continue
+        seen.add(key)
+        executions.append({
+            "inst": inst, "side": side,
+            "opened_ms": row.get("opened_ms"),
+            "closed_ms": row.get("closed_ms"),
+            "actual_net_pnl_usdt_if_closed": row.get("net_pnl_usdt"),
+        })
+    return executions
+
+
+def rank_all_choices_after_15m(scan):
+    """Ex-post rankings, strictly separated from information available at entry."""
+    choices = []
+    executed = {(r["inst"], r["side"]) for r in scan.get("live_executions_at_signal", [])}
+    for row in scan.get("instruments", []):
+        outcome = row.get("next_candle_review") or {}
+        if outcome.get("status") != "DONE":
+            continue
+        for side in ("LONG", "SHORT"):
+            result = outcome.get(side) or {}
+            if not result:
+                continue
+            original = row.get(side.lower()) or {}
+            missing = original.get("missing") if isinstance(original, dict) else None
+            entry = {
+                "inst": row.get("inst"),
+                "side": side,
+                "rank_at_signal": row.get("rank"),
+                "net_at_15m_close_pct_estimated": result.get("estimated_next_close_net_pct_after_assumed_fees"),
+                "tp_sl_1pct_first_touch": result.get("outcome_1_0"),
+                "tp_sl_0_5pct_first_touch": result.get("outcome_0_5"),
+                "live_executed": (row.get("inst"), side) in executed,
+                "passed_candle_filters_at_signal": not missing if missing is not None else None,
+                "missing_candle_filters_at_signal": missing,
+            }
+            choices.append(entry)
+    choices.sort(key=lambda x: x["net_at_15m_close_pct_estimated"], reverse=True)
+    for position, entry in enumerate(choices, 1):
+        entry["rank_ex_post"] = position
+    eligible = [x for x in choices if x["passed_candle_filters_at_signal"] is True]
+    selected = [x for x in choices if x["live_executed"]]
+    best = choices[0] if choices else None
+    best_eligible = eligible[0] if eligible else None
+    return {
+        "status": "DONE" if len(choices) == 14 else "PARTIAL",
+        "interpretation": (
+            "Hindsight only: entry at 15m signal candle CLOSE; exit after exactly "
+            "one next 15m candle CLOSE with assumed 0.12% round-trip fees. "
+            "Not actual fills, not a usable advance selection rule."
+        ),
+        "all_long_and_short_options": choices,
+        "best_any_side_ex_post": best,
+        "best_long_ex_post": next((x for x in choices if x["side"] == "LONG"), None),
+        "best_short_ex_post": next((x for x in choices if x["side"] == "SHORT"), None),
+        "best_passing_initial_candle_filters_ex_post": best_eligible,
+        "actual_live_selections_in_ranking": selected,
+        "actual_live_choice_different_from_ex_post_best": (
+            any((x["inst"], x["side"]) != (best["inst"], best["side"]) for x in selected)
+            if selected and best else None
+        ),
+    }
+
+
 def fetch_cached(inst, cache):
     if inst not in cache:
         try:
@@ -168,6 +300,12 @@ def review_previous(history, cache):
                 }
                 changed = True
                 continue
+            bars_through_next = [bar for bar in bars if bot.bar_close_ms(bar) <= target_close_ms]
+            indicator_after = (
+                snapshot_indicators(bars_through_next)
+                if bars_through_next and bot.bar_close_ms(bars_through_next[-1]) == target_close_ms
+                else None
+            )
             row["next_candle_review"] = {
                 "status": "DONE",
                 "next_candle_close_ms": target_close_ms,
@@ -177,6 +315,10 @@ def review_previous(history, cache):
                 "close": float(following["c"]),
                 "LONG": outcome_for_side("LONG", float(entry), following),
                 "SHORT": outcome_for_side("SHORT", float(entry), following),
+                "indicators_after_15m": indicator_after,
+                "indicator_change_over_15m": indicator_changes(
+                    row.get("indicators_at_signal"), indicator_after
+                ),
             }
             changed = True
         scan["next_candle_review_complete"] = all(
@@ -184,6 +326,7 @@ def review_previous(history, cache):
             for row in scan.get("instruments", [])
         )
         scan["reviewed_at_utc"] = utc_now()
+        scan["best_coin_comparison_after_15m"] = rank_all_choices_after_15m(scan)
         changed = True
         done = sum(
             row.get("next_candle_review", {}).get("status") == "DONE"
@@ -210,6 +353,7 @@ def record_current_scan(history, cache):
         candle = item.get("candle") or {}
         inst = item.get("inst")
         adx14, obv_delta_5 = None, None
+        indicators_at_signal = None
         indicator_error = None
         if inst and candle.get("close"):
             bars = fetch_cached(inst, cache)
@@ -218,7 +362,9 @@ def record_current_scan(history, cache):
             else:
                 closed_bars = [bar for bar in bars if bot.bar_close_ms(bar) <= signal_close_ms]
                 if closed_bars and bot.bar_close_ms(closed_bars[-1]) == signal_close_ms:
-                    adx14, obv_delta_5 = adx14_and_obv5(closed_bars)
+                    indicators_at_signal = snapshot_indicators(closed_bars)
+                    adx14 = indicators_at_signal["adx14"]
+                    obv_delta_5 = indicators_at_signal["obv_delta_5"]
                 else:
                     indicator_error = "Signal candle not in available closed-bar history"
                     print(f"AUDIT_CANDLE_MISSING {inst} {signal_close_ms}")
@@ -228,6 +374,7 @@ def record_current_scan(history, cache):
             "signal_close_ms": item.get("close_ms"),
             "candle": candle,
             "rsi14": item.get("rsi14"),
+            "indicators_at_signal": indicators_at_signal,
             "adx14": adx14,
             "obv_delta_5": obv_delta_5,
             "obv_rising_5": (obv_delta_5 > 0) if obv_delta_5 is not None else None,
@@ -249,9 +396,11 @@ def record_current_scan(history, cache):
         "captured_utc": utc_now(),
         "diagnostic_generated_at_ms": diagnostic.get("generated_at_ms"),
         "strategy_result": diagnostic.get("result"),
+        "live_executions_at_signal": live_executions_for_signal(state, signal_close_ms),
         "top7": state.get("last_top7") or diagnostic.get("top7"),
         "instruments": instruments,
         "next_candle_review_complete": False,
+        "best_coin_comparison_after_15m": {"status": "PENDING"},
     }
     history["scans"].append(scan)
     if len(history["scans"]) > MAX_SCANS:
