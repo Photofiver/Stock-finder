@@ -224,8 +224,8 @@ def calc_choice(pick, candles, minute_cache):
     if candle is None:
         return {"status": "NO_EXCHANGE_CANDLE", "net_pct": None}
     side = pick["side"]
-    tp = ref * (1.01 if side == "LONG" else 0.99)
-    sl = ref * (0.99 if side == "LONG" else 1.01)
+    tp = ref * (1.005 if side == "LONG" else 0.995)
+    sl = ref * (0.995 if side == "LONG" else 1.005)
     tp_hit = candle["high"] >= tp if side == "LONG" else candle["low"] <= tp
     sl_hit = candle["low"] <= sl if side == "LONG" else candle["high"] >= sl
     first = None
@@ -260,8 +260,8 @@ def calc_choice(pick, candles, minute_cache):
     else:
         first = "TP" if tp_hit else "SL" if sl_hit else "NEITHER"
     net = (
-        1.00 - FEE_PCT if first == "TP" else
-        -1.00 - FEE_PCT if first == "SL" else
+        0.50 - FEE_PCT if first == "TP" else
+        -0.50 - FEE_PCT if first == "SL" else
         (candle["close"] / ref - 1.0) * 100 *
         (1 if side == "LONG" else -1) - FEE_PCT if first == "NEITHER" else None
     )
@@ -292,8 +292,8 @@ def summarise(rows):
         },
         "net_pct_points_known_only": round(net, 5),
         "compounded_pct_known_only": round(compounded, 5),
-        "minimum_if_unresolved_all_SL": round(net - len(unresolved) * 1.12, 5),
-        "maximum_if_unresolved_all_TP": round(net + len(unresolved) * 0.88, 5),
+        "minimum_if_unresolved_all_SL": round(net - len(unresolved) * 0.62, 5),
+        "maximum_if_unresolved_all_TP": round(net + len(unresolved) * 0.38, 5),
         "winning": sum(r["net_pct"] > 0 for r in resolved),
         "losing": sum(r["net_pct"] < 0 for r in resolved),
     }
@@ -391,7 +391,7 @@ def main():
         ),
         "assumptions": (
             "One position each 15m, price at signal candle close, "
-            "TP +1%, SL -1%, close after next 15m if neither; "
+            "TP +0.5%, SL -0.5%, close after next 15m if neither; "
             "0.12% combined fees, zero execution slippage; "
             "does not model 60m LIVE exits, spread, capital constraint, "
             "live risk guards, or actual entry latency."
