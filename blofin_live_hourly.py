@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 import requests
+import blofin_selection_rank as selection_rank
 
 BASE = "https://openapi.blofin.com"
 API_KEY = os.getenv("BLOFIN_API_KEY", "").strip()
@@ -44,6 +45,9 @@ VOL_MA_SLOW = 10
 RECENT_SPIKE_LOOKBACK = 5
 LONG_MAX_1BAR_RISE_PCT = 3.0
 SHORT_OPPOSING_BULL_PATTERN_MIN_CONFIDENCE = 0.70
+MAX_ADVERSE_ENTRY_GAP_PCT = Decimal(os.getenv("BLOFIN_MAX_ADVERSE_ENTRY_GAP_PCT", "0.25"))
+MAX_ENTRY_SPREAD_PCT = Decimal(os.getenv("BLOFIN_MAX_ENTRY_SPREAD_PCT", "0.25"))
+MAX_ENTRY_QUOTE_AGE_MS = 15000
 SIGNAL_MINUTES = int(os.getenv("LIVE_SIGNAL_MINUTES", "15"))
 MAX_DRAWDOWN_PCT = Decimal(os.getenv("LIVE_MAX_DRAWDOWN_PCT", "0.10"))
 if SIGNAL_MINUTES == 5:
@@ -1524,6 +1528,8 @@ def evaluate_signals(state, top10):
             )
 
     candidates = []
+    pretrade_ranking = []
+    signal_scores = {}
     scan_now_ms = now_ms()
     for inst, bars in data.items():
         i = latest_idx[inst]
@@ -1532,11 +1538,28 @@ def evaluate_signals(state, top10):
         if close_ms <= last_done:
             continue
 
-        side = None
-        if short_entry_signal(bars, i):
-            side = "SHORT"
-        elif long_entry_signal(bars, i):
-            side = "LONG"
+        strict_short = short_entry_signal(bars, i)
+        strict_long = long_entry_signal(bars, i)
+        for candidate_side in ("SHORT", "LONG"):
+            metrics = (
+                short_entry_metrics(bars, i) if candidate_side == "SHORT"
+                else long_entry_metrics(bars, i)
+            ) or {}
+            assessment = selection_rank.score_at_close(
+                bars, candidate_side, i, metrics
+            )
+            entry_passed = strict_short if candidate_side == "SHORT" else strict_long
+            assessment.update({
+                "inst": inst, "side": candidate_side,
+                "rank_in_top7": ranks[inst],
+                "signal_close_ms": close_ms,
+                "base_signal_passed": bool(entry_passed),
+                "live_candidate": False,
+            })
+            pretrade_ranking.append(assessment)
+            signal_scores[(inst, candidate_side)] = assessment
+
+        side = "SHORT" if strict_short else "LONG" if strict_long else None
 
         if side:
             previous_close = float(bars[i - 1]["c"]) if i > 0 else 0.0
@@ -1586,7 +1609,24 @@ def evaluate_signals(state, top10):
             int(state["last_processed_close_ms"].get(inst, 0) or 0), close_ms
         )
 
-    candidates.sort()
+    candidates = selection_rank.rank_signals(candidates, signal_scores)
+    admitted = {(str(item[1]), str(item[2])) for item in candidates}
+    for item in pretrade_ranking:
+        item["live_candidate"] = (item["inst"], item["side"]) in admitted
+    pretrade_ranking.sort(
+        key=lambda item: (-float(item["score"]), item["rank_in_top7"], item["side"])
+    )
+    state["last_pretrade_ranking"] = {
+        "generated_at_ms": now_ms(),
+        "strategy": "rank only already qualified entries; shadow-score every TOP7 LONG/SHORT",
+        "not_a_profit_prediction": True,
+        "scores": pretrade_ranking,
+        "eligible_entry_order": [
+            {"inst": c[1], "side": c[2], "top7_rank": c[0],
+             "quality_score": signal_scores[(c[1], c[2])]["score"]}
+            for c in candidates
+        ],
+    }
     return candidates
 
 
@@ -2067,6 +2107,74 @@ def evaluate_tracked_exit_signal(state, expected_close_ms=None):
     return True
 
 
+def checked_preorder_quote(inst, side, signal_close_price):
+    """Fail closed on stale/expensive entry quotes before a real market order."""
+    if side not in ("LONG", "SHORT"):
+        raise RuntimeError("Unknown entry side")
+    signal_price = d(signal_close_price)
+    if signal_price <= 0:
+        raise RuntimeError(f"{inst}: missing signal candle close")
+    rows = market_get("/api/v1/market/tickers", {"instId": inst})
+    row = next(
+        (item for item in rows if isinstance(item, dict) and item.get("instId") == inst),
+        None,
+    )
+    if row is None:
+        raise RuntimeError(f"{inst}: fresh ticker unavailable")
+    bid = d(row.get("bidPrice") or "0")
+    ask = d(row.get("askPrice") or "0")
+    if bid <= 0 or ask <= 0 or ask < bid:
+        raise RuntimeError(f"{inst}: invalid bid/ask quote")
+    quote_ts = int(row.get("ts") or 0)
+    quote_age_ms = now_ms() - quote_ts
+    if quote_ts <= 0 or quote_age_ms > MAX_ENTRY_QUOTE_AGE_MS or quote_age_ms < -5000:
+        raise RuntimeError(
+            f"{inst}: stale market quote age={quote_age_ms}ms "
+            f"(max {MAX_ENTRY_QUOTE_AGE_MS}ms)"
+        )
+    expected_fill = ask if side == "LONG" else bid
+    adverse_gap_pct = (
+        (expected_fill / signal_price - 1) * 100
+        if side == "LONG" else (1 - expected_fill / signal_price) * 100
+    )
+    spread_pct = (ask - bid) / ((ask + bid) / 2) * 100
+    data = {
+        "bid": str(bid), "ask": str(ask),
+        "quote_age_ms": quote_age_ms,
+        "signal_close": str(signal_price),
+        "expected_fill": str(expected_fill),
+        "adverse_gap_pct": float(adverse_gap_pct),
+        "spread_pct": float(spread_pct),
+        "max_adverse_gap_pct": float(MAX_ADVERSE_ENTRY_GAP_PCT),
+        "max_spread_pct": float(MAX_ENTRY_SPREAD_PCT),
+    }
+    if adverse_gap_pct > MAX_ADVERSE_ENTRY_GAP_PCT:
+        append_technical_event(
+            "ENTRY_CHASE_BLOCKED",
+            f"Entry quote too far from {bot_side(side)} signal candle close",
+            inst=inst, side=side, extra=data,
+        )
+        raise RuntimeError(
+            f"{inst} {side}: adverse price move {adverse_gap_pct:.3f}% "
+            f"> {MAX_ADVERSE_ENTRY_GAP_PCT}% from signal close"
+        )
+    if spread_pct > MAX_ENTRY_SPREAD_PCT:
+        append_technical_event(
+            "ENTRY_SPREAD_BLOCKED",
+            "Too wide bid/ask spread before market order",
+            inst=inst, side=side, extra=data,
+        )
+        raise RuntimeError(
+            f"{inst} {side}: spread {spread_pct:.3f}% "
+            f"> {MAX_ENTRY_SPREAD_PCT}%"
+        )
+    return data
+
+
+def bot_side(side):
+    return side
+
+
 def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allocation_label=None):
     if risk_stop_active(state):
         raise RuntimeError("HARD STOP active: 10% drawdown limit reached")
@@ -2122,7 +2230,11 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         )
         raise RuntimeError(f"{inst} {side}: entry rejected: {reject_reason}")
 
-    market_reference = d(tickers[inst]["last"])
+    # Use the executable bid/ask, not an old last-traded price, to reject
+    # late/chasing entries. This executes before the order is submitted.
+    quote_check = checked_preorder_quote(inst, side, signal_snapshot["close"])
+    signal_snapshot["pre_order_price_guard"] = quote_check
+    market_reference = d(quote_check["expected_fill"])
     available = get_available_usdt()
 
     # HARD SAFETY CAP: MAX_NOTIONAL_USDT is the bankroll for this bot, not the
@@ -2242,6 +2354,25 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         return
 
     fill_price = d(fill.get("averagePrice") or "0")
+    signal_price = d(signal_snapshot.get("close") or "0")
+    if signal_price > 0 and fill_price > 0:
+        actual_adverse_gap_pct = (
+            (fill_price / signal_price - 1) * 100 if side == "LONG"
+            else (1 - fill_price / signal_price) * 100
+        )
+        signal_snapshot["actual_fill_adverse_gap_pct"] = float(actual_adverse_gap_pct)
+        if actual_adverse_gap_pct > MAX_ADVERSE_ENTRY_GAP_PCT:
+            append_technical_event(
+                "ENTRY_FILL_PRICE_WARNING",
+                f"{inst} {side}: actual fill moved more than the pre-order allowance",
+                inst=inst, side=side, rank=rank, signal_close_ms=signal_close_ms,
+                extra={
+                    "actual_fill": str(fill_price),
+                    "signal_close": str(signal_price),
+                    "actual_adverse_gap_pct": float(actual_adverse_gap_pct),
+                    "maximum_adverse_gap_pct": float(MAX_ADVERSE_ENTRY_GAP_PCT),
+                },
+            )
     filled_size = d(fill.get("filledSize") or size)
     contract_value = d(instruments[inst].get("contractValue") or "0")
     actual_notional = (
