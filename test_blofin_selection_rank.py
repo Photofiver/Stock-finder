@@ -64,5 +64,29 @@ class RankingAndQuoteGuardTests(unittest.TestCase):
                 bot.checked_preorder_quote("ZK-USDT", "LONG", "0.013372")
 
 
+    def test_long_entry_rejects_rsi_67_and_above(self):
+        bars = [{
+            "o": 1.01, "h": 1.02, "l": 0.99, "c": 1.00, "v": 100,
+            "macd_dif": 0.01, "macd_dea": 0.02, "macd_hist": -0.01,
+            "rsi": 50.0,
+        } for _ in range(15)]
+        bars.append({
+            "o": 1.00, "h": 1.055, "l": 0.99, "c": 1.05, "v": 200,
+            "macd_dif": 0.03, "macd_dea": 0.02, "macd_hist": 0.01,
+            "rsi": 66.99,
+        })
+        stochastic = ([60.0] * len(bars), [55.0] * len(bars))
+        with patch.object(bot, "stochastic_kd_series", return_value=stochastic), \
+             patch.object(bot, "recent_stoch_cross_down", return_value=False):
+            self.assertTrue(bot.long_entry_signal(bars, len(bars) - 1))
+            bars[-1]["rsi"] = 67.00
+            self.assertFalse(bot.long_entry_signal(bars, len(bars) - 1))
+            bars[-1]["rsi"] = 68.82
+            self.assertFalse(bot.long_entry_signal(bars, len(bars) - 1))
+            bars[-1]["rsi"] = None
+            self.assertFalse(bot.long_entry_signal(bars, len(bars) - 1))
+
+
+
 if __name__ == "__main__":
     unittest.main()
