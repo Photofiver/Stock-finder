@@ -44,6 +44,7 @@ VOL_MA_FAST = 5
 VOL_MA_SLOW = 10
 RECENT_SPIKE_LOOKBACK = 5
 LONG_MAX_1BAR_RISE_PCT = 3.0
+LONG_RSI_MAX_EXCLUSIVE = 67.0
 SHORT_OPPOSING_BULL_PATTERN_MIN_CONFIDENCE = 0.70
 MAX_ADVERSE_ENTRY_GAP_PCT = Decimal(os.getenv("BLOFIN_MAX_ADVERSE_ENTRY_GAP_PCT", "0.25"))
 MAX_ENTRY_SPREAD_PCT = Decimal(os.getenv("BLOFIN_MAX_ENTRY_SPREAD_PCT", "0.25"))
@@ -628,6 +629,7 @@ def long_entry_metrics(bars, i):
     stoch_long_ok = not stoch_cross_down_recent_3
     rsi14 = cur.get("rsi")
     rsi_below_70 = rsi14 is not None and float(rsi14) < 70.0
+    rsi_below_67 = rsi14 is not None and float(rsi14) < LONG_RSI_MAX_EXCLUSIVE
 
     return {
         "macd_cross_up": macd_cross_up,
@@ -643,6 +645,7 @@ def long_entry_metrics(bars, i):
         "stoch_long_ok": stoch_long_ok,
         "rsi14": None if rsi14 is None else float(rsi14),
         "rsi_below_70": rsi_below_70,
+        "rsi_below_67": rsi_below_67,
         "volume": float(cur["v"]),
         "last_red_volume": last_red_volume,
         "macd_dif": float(cur["macd_dif"]),
@@ -660,7 +663,7 @@ def long_entry_signal(bars, i):
         and metrics["green_body_min_60pct"]
         and metrics["rise_10_bars_min_2pct"]
         and metrics["stoch_long_ok"]
-        and metrics["rsi_below_70"]
+        and metrics["rsi_below_67"]
     )
 
 
@@ -2234,6 +2237,10 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
     # late/chasing entries. This executes before the order is submitted.
     quote_check = checked_preorder_quote(inst, side, signal_snapshot["close"])
     signal_snapshot["pre_order_price_guard"] = quote_check
+    if side == "LONG":
+        current_rsi = signal_snapshot.get("rsi14")
+        if current_rsi is None or float(current_rsi) >= LONG_RSI_MAX_EXCLUSIVE:
+            raise RuntimeError(f"{inst} LONG: RSI14 must be below {LONG_RSI_MAX_EXCLUSIVE} before order")
     market_reference = d(quote_check["expected_fill"])
     available = get_available_usdt()
 
