@@ -1931,6 +1931,96 @@
       ],
       "side": "LONG",
       "signal_close_ms": 1791565200000
+    },
+    {
+      "closed_ms": 1791569645535,
+      "inst": "Q-USDT",
+      "net_pnl_usdt": -0.11037876,
+      "patterns": [
+        {
+          "bias": "LONG",
+          "confidence": 0.785,
+          "evidence": {
+            "head_below_shoulders_pct": 2.702,
+            "shoulders_gap_pct": 1.409
+          },
+          "name": "INVERSE_HEAD_AND_SHOULDERS"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.88,
+          "evidence": {
+            "cup_depth_pct": 9.35,
+            "handle_drop_pct": 2.116,
+            "rim_gap_pct": 0.782
+          },
+          "name": "CUP_AND_HANDLE"
+        }
+      ],
+      "result": "LOSS",
+      "reviews": [
+        {
+          "bias": "LONG",
+          "confidence": 0.785,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "head_below_shoulders_pct": 2.702,
+            "shoulders_gap_pct": 1.409
+          },
+          "name": "INVERSE_HEAD_AND_SHOULDERS",
+          "relation_to_trade": "OPPOSES"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.88,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "cup_depth_pct": 9.35,
+            "handle_drop_pct": 2.116,
+            "rim_gap_pct": 0.782
+          },
+          "name": "CUP_AND_HANDLE",
+          "relation_to_trade": "OPPOSES"
+        }
+      ],
+      "side": "SHORT",
+      "signal_close_ms": 1791566100000
+    },
+    {
+      "closed_ms": 1791569121392,
+      "inst": "ZK-USDT",
+      "net_pnl_usdt": -0.010365768,
+      "patterns": [
+        {
+          "bias": "LONG",
+          "confidence": 0.69,
+          "evidence": {
+            "high_slope_pct_per_bar": -0.0467,
+            "impulse_pct": 6.764,
+            "low_slope_pct_per_bar": 0.13,
+            "width_ratio": 0.625
+          },
+          "name": "BULL_PENNANT"
+        }
+      ],
+      "result": "LOSS",
+      "reviews": [
+        {
+          "bias": "LONG",
+          "confidence": 0.69,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "high_slope_pct_per_bar": -0.0467,
+            "impulse_pct": 6.764,
+            "low_slope_pct_per_bar": 0.13,
+            "width_ratio": 0.625
+          },
+          "name": "BULL_PENNANT",
+          "relation_to_trade": "OPPOSES"
+        }
+      ],
+      "side": "SHORT",
+      "signal_close_ms": 1791568800000
     }
   ],
   "interpretation": "HELPED = pattern supported a winner or opposed a loser; HURT = pattern supported a loser or opposed a winner.",
@@ -1956,13 +2046,23 @@
       "supports_trade": 2,
       "wins_when_present": 3
     },
-    "CUP_AND_HANDLE": {
-      "helped": 4,
-      "hurt": 1,
-      "losses_when_present": 2,
+    "BULL_PENNANT": {
+      "helped": 1,
+      "hurt": 0,
+      "losses_when_present": 1,
       "no_effect": 0,
-      "opposes_trade": 3,
-      "seen": 5,
+      "opposes_trade": 1,
+      "seen": 1,
+      "supports_trade": 0,
+      "wins_when_present": 0
+    },
+    "CUP_AND_HANDLE": {
+      "helped": 5,
+      "hurt": 1,
+      "losses_when_present": 3,
+      "no_effect": 0,
+      "opposes_trade": 4,
+      "seen": 6,
       "supports_trade": 2,
       "wins_when_present": 3
     },
@@ -2017,12 +2117,12 @@
       "wins_when_present": 2
     },
     "INVERSE_HEAD_AND_SHOULDERS": {
-      "helped": 2,
+      "helped": 3,
       "hurt": 0,
-      "losses_when_present": 1,
+      "losses_when_present": 2,
       "no_effect": 0,
-      "opposes_trade": 1,
-      "seen": 2,
+      "opposes_trade": 2,
+      "seen": 3,
       "supports_trade": 1,
       "wins_when_present": 1
     },
