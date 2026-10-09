@@ -172,7 +172,7 @@ def persist_learning_12h(
                     "close >= 2% vs 10 bars earlier",
                     "no Stochastic 14,1,3 cross DOWN in last 3 candles",
                     "RSI14 < 67",
-                    "15m close increase vs prior close < 3%",
+                    f"{bot.SIGNAL_LABEL} close increase vs prior close < 3%",
                 ],
             },
             "scans": [],
@@ -199,7 +199,7 @@ def persist_learning_12h(
             "close >= 2% vs 10 bars earlier",
             "no Stochastic 14,1,3 cross DOWN in last 3 candles",
             "RSI14 < 67",
-            "15m close increase vs prior close < 3%",
+            f"{bot.SIGNAL_LABEL} close increase vs prior close < 3%",
         ],
     }
 
