@@ -1069,6 +1069,42 @@
       "signal_label": "15m",
       "timestamp_ms": 1791547274943,
       "timestamp_utc": "2026-10-09T12:01:14.943970+00:00"
+    },
+    {
+      "event_type": "ENTRY_CHASE_BLOCKED",
+      "extra": {
+        "adverse_gap_pct": 0.4581982236007331,
+        "ask": "0.014139",
+        "bid": "0.014121",
+        "expected_fill": "0.014121",
+        "max_adverse_gap_pct": 0.25,
+        "max_spread_pct": 0.25,
+        "quote_age_ms": 12617,
+        "signal_close": "0.014186",
+        "spread_pct": 0.12738853503184713
+      },
+      "inst": "ZK-USDT",
+      "message": "Entry quote too far from SHORT signal candle close",
+      "side": "SHORT",
+      "signal_label": "15m",
+      "timestamp_ms": 1791564377007,
+      "timestamp_utc": "2026-10-09T16:46:17.007924+00:00"
+    },
+    {
+      "event_type": "ENTRY_ERROR",
+      "extra": {
+        "available_usdt": "92.637263028669157991",
+        "per_trade_cap_usdt": "10.000000000000000",
+        "stage": "entry"
+      },
+      "inst": "ZK-USDT",
+      "message": "RuntimeError: ZK-USDT SHORT: adverse price move 0.458% > 0.25% from signal close",
+      "rank": 5,
+      "side": "SHORT",
+      "signal_close_ms": 1791564300000,
+      "signal_label": "15m",
+      "timestamp_ms": 1791564377009,
+      "timestamp_utc": "2026-10-09T16:46:17.009655+00:00"
     }
   ],
   "version": 1
