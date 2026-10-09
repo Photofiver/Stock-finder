@@ -2815,6 +2815,38 @@
       ],
       "side": "SHORT",
       "signal_close_ms": 1791585600000
+    },
+    {
+      "closed_ms": 1791586962251,
+      "inst": "XDP-USDT",
+      "net_pnl_usdt": -0.1230304,
+      "patterns": [
+        {
+          "bias": "LONG",
+          "confidence": 0.682,
+          "evidence": {
+            "bottom_gap_pct": 0.177,
+            "neck_height_pct": 1.24
+          },
+          "name": "DOUBLE_BOTTOM"
+        }
+      ],
+      "result": "LOSS",
+      "reviews": [
+        {
+          "bias": "LONG",
+          "confidence": 0.682,
+          "effect_if_used_as_filter": "HURT",
+          "evidence": {
+            "bottom_gap_pct": 0.177,
+            "neck_height_pct": 1.24
+          },
+          "name": "DOUBLE_BOTTOM",
+          "relation_to_trade": "SUPPORTS"
+        }
+      ],
+      "side": "LONG",
+      "signal_close_ms": 1791586200000
     }
   ],
   "interpretation": "HELPED = pattern supported a winner or opposed a loser; HURT = pattern supported a loser or opposed a winner.",
@@ -2892,12 +2924,12 @@
     },
     "DOUBLE_BOTTOM": {
       "helped": 14,
-      "hurt": 10,
-      "losses_when_present": 12,
+      "hurt": 11,
+      "losses_when_present": 13,
       "no_effect": 0,
       "opposes_trade": 12,
-      "seen": 24,
-      "supports_trade": 12,
+      "seen": 25,
+      "supports_trade": 13,
       "wins_when_present": 12
     },
     "DOUBLE_TOP": {
