@@ -1,14 +1,7 @@
 name: BloFin shadow audit (read-only)
 
 on:
-  workflow_run:
-    workflows:
-      - BloFin LIVE signal watch
-    types:
-      - completed
   workflow_dispatch:
-  schedule:
-    - cron: '3,18,33,48 * * * *'
 
 permissions:
   contents: write
@@ -19,7 +12,6 @@ concurrency:
 
 jobs:
   audit:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
