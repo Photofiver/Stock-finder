@@ -9,6 +9,8 @@ on:
       - 'blofin_live_hourly.py'
       - 'blofin_live_signal_watch.py'
       - 'tests/test_blofin_nearest_live.py'
+      - 'cancel_zk_oco_once.py'
+      - 'tests/test_cancel_zk_oco_once.py'
       - 'tests/test_blofin_audit_touch.py'
       - '.github/workflows/blofin_audit_quality.yml'
 
@@ -26,6 +28,8 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt
       - name: Compile nearest-volume LIVE and audit modules (no orders)
-        run: python -m py_compile blofin_live_hourly.py blofin_live_signal_watch.py blofin_nearest_volume.py blofin_live_scan_audit.py tests/test_blofin_nearest_live.py tests/test_blofin_audit_touch.py
+        run: python -m py_compile blofin_live_hourly.py blofin_live_signal_watch.py blofin_nearest_volume.py blofin_live_scan_audit.py cancel_zk_oco_once.py tests/test_blofin_nearest_live.py tests/test_blofin_audit_touch.py tests/test_cancel_zk_oco_once.py
       - name: Test nearest-volume selection and audit without exchange access
         run: python -m unittest discover -s tests -p 'test_blofin_*.py' -v
+      - name: Verify targeted ZK OCO cancellation safety (mocked exchange)
+        run: python -m unittest discover -s tests -p 'test_cancel_zk_oco_once.py' -v
