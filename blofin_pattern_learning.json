@@ -2537,6 +2537,58 @@
       ],
       "side": "SHORT",
       "signal_close_ms": 1791579000000
+    },
+    {
+      "closed_ms": 1791580526361,
+      "inst": "BAT-USDT",
+      "net_pnl_usdt": -0.11772908,
+      "patterns": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.764,
+          "evidence": {
+            "neck_depth_pct": 2.872,
+            "peak_gap_pct": 0.094
+          },
+          "name": "DOUBLE_TOP"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.784,
+          "evidence": {
+            "bottom_gap_pct": 0.537,
+            "neck_height_pct": 3.282
+          },
+          "name": "DOUBLE_BOTTOM"
+        }
+      ],
+      "result": "LOSS",
+      "reviews": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.764,
+          "effect_if_used_as_filter": "HURT",
+          "evidence": {
+            "neck_depth_pct": 2.872,
+            "peak_gap_pct": 0.094
+          },
+          "name": "DOUBLE_TOP",
+          "relation_to_trade": "SUPPORTS"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.784,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "bottom_gap_pct": 0.537,
+            "neck_height_pct": 3.282
+          },
+          "name": "DOUBLE_BOTTOM",
+          "relation_to_trade": "OPPOSES"
+        }
+      ],
+      "side": "SHORT",
+      "signal_close_ms": 1791580200000
     }
   ],
   "interpretation": "HELPED = pattern supported a winner or opposed a loser; HURT = pattern supported a loser or opposed a winner.",
@@ -2613,23 +2665,23 @@
       "wins_when_present": 2
     },
     "DOUBLE_BOTTOM": {
-      "helped": 11,
+      "helped": 12,
       "hurt": 10,
-      "losses_when_present": 11,
+      "losses_when_present": 12,
       "no_effect": 0,
-      "opposes_trade": 11,
-      "seen": 21,
+      "opposes_trade": 12,
+      "seen": 22,
       "supports_trade": 10,
       "wins_when_present": 10
     },
     "DOUBLE_TOP": {
       "helped": 0,
-      "hurt": 10,
-      "losses_when_present": 5,
+      "hurt": 11,
+      "losses_when_present": 6,
       "no_effect": 0,
       "opposes_trade": 5,
-      "seen": 10,
-      "supports_trade": 5,
+      "seen": 11,
+      "supports_trade": 6,
       "wins_when_present": 5
     },
     "FALLING_WEDGE": {

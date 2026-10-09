@@ -1627,6 +1627,74 @@
       "signal_label": "10m",
       "timestamp_ms": 1791578485801,
       "timestamp_utc": "2026-10-09T20:41:25.801634+00:00"
+    },
+    {
+      "event_type": "ENTRY_CHASE_BLOCKED",
+      "extra": {
+        "adverse_gap_pct": 1.6962406015037594,
+        "ask": "0.032735",
+        "bid": "0.032686",
+        "expected_fill": "0.032686",
+        "max_adverse_gap_pct": 0.25,
+        "max_spread_pct": 0.25,
+        "quote_age_ms": 1124,
+        "signal_close": "0.03325",
+        "spread_pct": 0.1497989942067532
+      },
+      "inst": "US-USDT",
+      "message": "Entry quote too far from SHORT signal candle close",
+      "side": "SHORT",
+      "signal_label": "10m",
+      "timestamp_ms": 1791580877711,
+      "timestamp_utc": "2026-10-09T21:21:17.711941+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 1
+      },
+      "inst": "US-USDT",
+      "message": "US-USDT SHORT skipped; trying next volume-eligible coin: RuntimeError: US-USDT SHORT: adverse price move 1.696% > 0.25% from signal close",
+      "rank": 1,
+      "side": "SHORT",
+      "signal_close_ms": 1791580800000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791580877713,
+      "timestamp_utc": "2026-10-09T21:21:17.713779+00:00"
+    },
+    {
+      "event_type": "ENTRY_CHASE_BLOCKED",
+      "extra": {
+        "adverse_gap_pct": 0.39034263408992337,
+        "ask": "0.06944",
+        "bid": "0.06941",
+        "expected_fill": "0.06944",
+        "max_adverse_gap_pct": 0.25,
+        "max_spread_pct": 0.25,
+        "quote_age_ms": 9593,
+        "signal_close": "0.06917",
+        "spread_pct": 0.04321209938782859
+      },
+      "inst": "STRK-USDT",
+      "message": "Entry quote too far from LONG signal candle close",
+      "side": "LONG",
+      "signal_label": "10m",
+      "timestamp_ms": 1791580878131,
+      "timestamp_utc": "2026-10-09T21:21:18.131522+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 2
+      },
+      "inst": "STRK-USDT",
+      "message": "STRK-USDT LONG skipped; trying next volume-eligible coin: RuntimeError: STRK-USDT LONG: adverse price move 0.390% > 0.25% from signal close",
+      "rank": 6,
+      "side": "LONG",
+      "signal_close_ms": 1791580800000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791580878134,
+      "timestamp_utc": "2026-10-09T21:21:18.134053+00:00"
     }
   ],
   "version": 1
