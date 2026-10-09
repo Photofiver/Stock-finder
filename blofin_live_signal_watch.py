@@ -171,7 +171,7 @@ def persist_learning_12h(
                     "GREEN body >= 60% of candle range",
                     "close >= 2% vs 10 bars earlier",
                     "no Stochastic 14,1,3 cross DOWN in last 3 candles",
-                    "RSI14 < 70",
+                    "RSI14 < 67",
                     "15m close increase vs prior close < 3%",
                 ],
             },
@@ -198,7 +198,7 @@ def persist_learning_12h(
             "GREEN body >= 60% of candle range",
             "close >= 2% vs 10 bars earlier",
             "no Stochastic 14,1,3 cross DOWN in last 3 candles",
-            "RSI14 < 70",
+            "RSI14 < 67",
             "15m close increase vs prior close < 3%",
         ],
     }
@@ -367,7 +367,7 @@ def build_live_diagnostic(state, top7):
     lines = [
         f"{bot.SIGNAL_LABEL} TOP{bot.TOP_N} — BRAK WEJSCIA",
         "SHORT: RED + RED volume > ostatni GREEN + korpus <=1% ceny close + dolny knot <=50% zakresu + -2% <= return4 <=1% + return20 <=10% + brak wzrostowej formacji z pewnoscia >=70%",
-        "LONG: GREEN + GREEN volume > ostatni RED + korpus >=60% zakresu + close >=2% vs 10 swiec wczesniej + brak Stoch 14,1,3 cross DOWN w ostatnich 3 swiecach + RSI14 <70 + wzrost ostatniej swiecy <3%",
+        "LONG: GREEN + GREEN volume > ostatni RED + korpus >=60% zakresu + close >=2% vs 10 swiec wczesniej + brak Stoch 14,1,3 cross DOWN w ostatnich 3 swiecach + RSI14 <67 + wzrost ostatniej swiecy <3%",
         "",
     ]
     records = []
@@ -430,7 +430,7 @@ def build_live_diagnostic(state, top7):
                 ("BODY_GE_60PCT", l["green_body_min_60pct"]),
                 ("RISE10_GE_2PCT", l["rise_10_bars_min_2pct"]),
                 ("STOCH_NO_DOWN_LAST3", l["stoch_long_ok"]),
-                ("RSI_LT_70", l["rsi_below_70"]),
+                ("RSI_LT_67", l["rsi_below_67"]),
                 ("ONE_BAR_RISE_LT_3PCT", long_one_bar_rise_ok),
             ]
 
@@ -517,8 +517,8 @@ def build_live_diagnostic(state, top7):
                     "stoch_cross_down_recent_3": bool(l["stoch_cross_down_recent_3"]),
                     "stoch_long_ok": bool(l["stoch_long_ok"]),
                     "rsi14": l["rsi14"],
-                    "rsi_max_exclusive": 70.0,
-                    "rsi_below_70": bool(l["rsi_below_70"]),
+                    "rsi_max_exclusive": bot.LONG_RSI_MAX_EXCLUSIVE,
+                    "rsi_below_67": bool(l["rsi_below_67"]),
                     "pattern_filter_active": False,
                     "opposing_patterns": long_opposing_patterns,
                 },
@@ -556,7 +556,7 @@ def build_live_diagnostic(state, top7):
                 f"| 1BAR={fmt(long_one_bar_gain_pct, 4)}% <3% "
                 f"| STOCH K={fmt(l['stoch_k'], 4)} D={fmt(l['stoch_d'], 4)} "
                 f"| DOWN last3={'TAK' if l['stoch_cross_down_recent_3'] else 'NIE'} "
-                f"| RSI14={fmt(l['rsi14'], 4)} <70 "
+                f"| RSI14={fmt(l['rsi14'], 4)} <67 "
                 f"| brak: {', '.join(l_missing) if l_missing else 'NIC'}"
             )
         except Exception as exc:
