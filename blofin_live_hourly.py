@@ -1886,9 +1886,12 @@ def record_closed(state, reason_hint=None):
             )
         return False
 
-    gross_pnl = d(hist.get("realizedPnl") or "0")
+    # BloFin positions-history.realizedPnl already includes trading fees.
+    # The fee field is signed (negative for a charge, positive for a rebate).
+    # Do not subtract the signed fee from realizedPnl: that would inflate PnL.
+    net_pnl = d(hist.get("realizedPnl") or "0")
     fee = d(hist.get("fee") or "0")
-    net_pnl = gross_pnl - fee
+    gross_pnl = net_pnl - fee
     closed_ms = int(hist.get("updateTime") or now_ms())
     opened_ms = int(pos.get("opened_ms") or closed_ms)
     hold_minutes = max(0.0, (closed_ms - opened_ms) / 60000.0)
