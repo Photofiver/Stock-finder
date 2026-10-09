@@ -36,7 +36,7 @@ TRADE_LOG_DIR = Path("blofin_live_trades")
 SCAN_LOG_DIR = Path("blofin_live_scans")
 START_CAPITAL = Decimal("10")
 LEVERAGE = Decimal("1")
-TP_PCT = Decimal("0.5")
+TP_PCT = Decimal("0.7")
 SL_PCT = Decimal("0.5")
 MIN_TARGET_PCT = Decimal("0.5")
 
