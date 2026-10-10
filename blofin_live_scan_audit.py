@@ -128,6 +128,36 @@ def adx14_and_obv5(bars):
     return adx, obv_delta_5
 
 
+def sma10_20_snapshot(bars):
+    """Closed-price SMA10/20 values and actual cross on the latest CLOSED bar."""
+    if len(bars) < 21:
+        return {
+            "status": "INSUFFICIENT_CLOSED_BARS",
+            "ma10": None, "ma20": None,
+            "ma10_previous": None, "ma20_previous": None,
+            "cross": None,
+        }
+    closes = [float(bar["c"]) for bar in bars]
+    ma10_previous = sum(closes[-11:-1]) / 10
+    ma20_previous = sum(closes[-21:-1]) / 20
+    ma10 = sum(closes[-10:]) / 10
+    ma20 = sum(closes[-20:]) / 20
+    cross = (
+        "LONG" if ma10_previous <= ma20_previous and ma10 > ma20 else
+        "SHORT" if ma10_previous >= ma20_previous and ma10 < ma20 else None
+    )
+    return {
+        "status": "OK",
+        "ma10_previous": ma10_previous,
+        "ma20_previous": ma20_previous,
+        "ma10": ma10,
+        "ma20": ma20,
+        "cross": cross,
+        "bias": "LONG" if ma10 > ma20 else "SHORT" if ma10 < ma20 else "FLAT",
+        "signal_close_ms": bot.bar_close_ms(bars[-1]),
+    }
+
+
 def snapshot_indicators(bars):
     """Values calculated using only candles closed at the snapshot time."""
     if not bars:
@@ -153,6 +183,7 @@ def snapshot_indicators(bars):
         "volume": vol,
         "volume_ma5": ma5,
         "volume_vs_ma5_pct": (vol / ma5 - 1) * 100 if ma5 else None,
+        "sma10_20": sma10_20_snapshot(bars),
     }
 
 
@@ -214,7 +245,7 @@ def refresh_real_live_trade_outcomes(history, state):
         if isinstance(row, dict)
     }
     changed = False
-    for scan in history.get("scans", [])[-32:]:
+    for scan in history.get("scans", []):
         signal_ms = int(scan.get("signal_close_ms") or 0)
         for record in scan.get("live_executions_at_signal", []):
             trade = by_key.get((
@@ -239,6 +270,7 @@ def refresh_real_live_trade_outcomes(history, state):
             )
             outcome = {
                 "result": trade.get("result"),
+                "strategy": trade.get("strategy"),
                 "actual_net_pnl_usdt_after_fees": trade.get("net_pnl_usdt"),
                 "gross_pnl_usdt": trade.get("gross_pnl_usdt"),
                 "fee_usdt": trade.get("fee_usdt"),
@@ -248,6 +280,7 @@ def refresh_real_live_trade_outcomes(history, state):
                 "actual_adverse_entry_gap_pct": gap,
                 "closed_ms": trade.get("closed_ms"),
                 "reason": trade.get("reason"),
+                "actual_hold_minutes": trade.get("hold_minutes"),
             }
             if record.get("actual_closed_trade") != outcome:
                 record["actual_closed_trade"] = outcome
@@ -666,12 +699,31 @@ def record_current_scan(history, cache):
     state = bot.load_state()
     diagnostic = state.get("last_diagnostic") or {}
     signal_close_ms = int(state.get("last_scan_close_ms") or 0)
-    items = diagnostic.get("instruments") or []
-    if not signal_close_ms or not items:
-        print("AUDIT_NO_NEW_DIAGNOSTIC")
+    if not signal_close_ms:
+        print("AUDIT_NO_SIGNAL_CLOSE")
         return False
     if any(int(s.get("signal_close_ms") or 0) == signal_close_ms for s in history["scans"]):
         print(f"AUDIT_ALREADY_SAVED scan={signal_close_ms}")
+        return False
+
+    sma_event = state.get("ma_cross_last_scan") or {}
+    is_sma_scan = (
+        isinstance(sma_event, dict)
+        and sma_event.get("strategy") == "SMA10_SMA20_10m"
+        and int(sma_event.get("signal_close_ms") or 0) == signal_close_ms
+    )
+    if is_sma_scan:
+        # The SMA LIVE branch deliberately skips the legacy scanner diagnostic.
+        # Rebuild that identical diagnostic here, AFTER trading, without orders.
+        # Keep every historic indicator/filter/pattern available in the audit.
+        import blofin_live_signal_watch as legacy_scanner
+        legacy_scanner.build_live_diagnostic(state, state.get("last_top7") or [])
+        diagnostic = state.get("last_diagnostic") or {}
+        diagnostic["result"] = sma_event.get("status") or "SMA_CROSS"
+        diagnostic["strategy"] = "SMA10_SMA20_10m"
+    items = diagnostic.get("instruments") or []
+    if not items:
+        print("AUDIT_NO_NEW_DIAGNOSTIC")
         return False
 
     instruments = []
@@ -681,6 +733,7 @@ def record_current_scan(history, cache):
         adx14, obv_delta_5 = None, None
         indicators_at_signal = None
         indicator_error = None
+        sma_snapshot = None
         if inst and candle.get("close"):
             bars = fetch_cached(inst, cache)
             if isinstance(bars, Exception):
@@ -691,6 +744,7 @@ def record_current_scan(history, cache):
                     indicators_at_signal = snapshot_indicators(closed_bars)
                     adx14 = indicators_at_signal["adx14"]
                     obv_delta_5 = indicators_at_signal["obv_delta_5"]
+                    sma_snapshot = indicators_at_signal["sma10_20"]
                 else:
                     indicator_error = "Signal candle not in available closed-bar history"
                     print(f"AUDIT_CANDLE_MISSING {inst} {signal_close_ms}")
@@ -709,6 +763,7 @@ def record_current_scan(history, cache):
                 if adx14 is not None and obv_delta_5 is not None else None
             ),
             "macd": item.get("macd"),
+            "sma10_20": sma_snapshot,
             "chart_patterns": item.get("chart_patterns"),
             "short": item.get("short"),
             "long": item.get("long"),
@@ -722,7 +777,31 @@ def record_current_scan(history, cache):
         "captured_utc": utc_now(),
         "diagnostic_generated_at_ms": diagnostic.get("generated_at_ms"),
         "strategy_result": diagnostic.get("result"),
+        "strategy_name": diagnostic.get("strategy") if is_sma_scan else "LEGACY",
+        "sma10_20_live": sma_event if is_sma_scan else None,
+        "sma10_20_rules": {
+            "timeframe": "10m",
+            "fast": "SMA10 of close",
+            "slow": "SMA20 of close",
+            "entry": "confirmed MA cross on closed candle only",
+            "take_profit": "1% favorable PRICE move before fees",
+            "stop_loss": None,
+            "other_exit": "opposite SMA crossover",
+            "net_pnl_source": "actual BloFin realizedPnl including fees",
+        } if is_sma_scan else None,
         "live_executions_at_signal": live_executions_for_signal(state, signal_close_ms),
+        "sma10_20_open_positions": [
+            {
+                "inst": p.get("inst"), "side": p.get("side"),
+                "opened_ms": p.get("opened_ms"),
+                "entry": p.get("reference_entry"),
+                "tp": p.get("tp"),
+                "notional_usdt": p.get("notional_usdt"),
+                "status": p.get("protection_status"),
+            }
+            for p in (state.get("positions") or {}).values()
+            if isinstance(p, dict) and str(p.get("strategy") or "").startswith("SMA10_SMA20_")
+        ] if is_sma_scan else None,
         "pretrade_quality_ranking": (
             state.get("last_pretrade_ranking")
             if int((state.get("last_pretrade_ranking") or {}).get("generated_at_ms") or 0)
