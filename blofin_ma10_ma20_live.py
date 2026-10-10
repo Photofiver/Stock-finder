@@ -1,10 +1,42 @@
 """LIVE SMA10/SMA20 price crossover strategy for 10m BloFin TOP7.
 
-New SMA positions have no TP/SL or time exit: close on opposite SMA cross.
+New SMA positions use a broker take-profit at an estimated +1% NET return,
+with no stop-loss or time exit. Exit earlier on an opposite SMA cross.
 Legacy positions retain their original broker protection until naturally closed.
 Only one account position is permitted while this strategy is active.
 """
 import uuid
+
+
+NET_PROFIT_TARGET = 0.01
+EXPECTED_TAKER_EXIT_FEE_RATE = 0.0006
+
+
+def net_one_percent_tp(bot, side, entry, notional, entry_fee, tick):
+    """Compute broker TP for +1% expected net of both trading fees.
+
+    The fill and slippage of a market TP are not guaranteed, so final net
+    PnL can be lower than the target; actual fees come from BloFin history.
+    """
+    price = bot.d(entry)
+    value = bot.d(notional)
+    if price <= 0 or value <= 0:
+        raise ValueError("TP: invalid entry or notional")
+    actual_entry_fee_rate = (
+        abs(bot.d(entry_fee)) / value
+        if entry_fee not in (None, "") else bot.d(EXPECTED_TAKER_EXIT_FEE_RATE)
+    )
+    target = bot.d(NET_PROFIT_TARGET)
+    exit_rate = bot.d(EXPECTED_TAKER_EXIT_FEE_RATE)
+    if side == "LONG":
+        factor = (1 + target + actual_entry_fee_rate) / (1 - exit_rate)
+        return bot.price_step(price * factor, tick, bot.ROUND_CEILING)
+    if side == "SHORT":
+        factor = (1 - target - actual_entry_fee_rate) / (1 + exit_rate)
+        if factor <= 0:
+            raise ValueError("TP: short target underflow")
+        return bot.price_step(price * factor, tick, bot.ROUND_FLOOR)
+    raise ValueError("TP: invalid side")
 
 
 def crossover(bot, inst, expected_close_ms):
@@ -62,6 +94,7 @@ def open_position(bot, state, signal, rank, instruments):
     size, estimated_notional = sized
     bot.set_one_x(inst)
     client_id = ("livema" + uuid.uuid4().hex)[:32]
+    state["_sma_order_post_started"] = True
     order = bot.private_request(
         "POST", "/api/v1/trade/order",
         body={
@@ -95,13 +128,13 @@ def open_position(bot, state, signal, rank, instruments):
         "notional_usdt": bot.clean_decimal(estimated_notional),
         "tp": "",
         "sl": "",
-        "tp_policy": "NONE",
+        "tp_policy": "TP_NET1",
         "sl_policy": "NONE",
         "hold_policy": "SMA10_SMA20_OPPOSITE_CROSS",
-        "protection_status": "SMA_CROSS_ONLY_NO_BROKER_TPSL",
+        "protection_status": "SMA_NET1_TP_PENDING_NO_SL",
         "strategy": f"SMA10_SMA20_{side}_10m",
         "code_commit": bot.CODE_COMMIT,
-        "risk_profile": "ONE_POSITION_1X_NO_TPSL",
+        "risk_profile": "ONE_POSITION_1X_TP_NET1_NO_SL",
         "account_fraction": "",
         "allocation_label": f"SMA CROSS <= {bot.clean_decimal(cap)} USDT bankroll",
     }
@@ -120,16 +153,46 @@ def open_position(bot, state, signal, rank, instruments):
         bot._run_for_tracked_position(state, inst, bot.close_tracked_position, "SAFETY: invalid SMA fill")
         return False
     contract_value = bot.d(instruments[inst].get("contractValue") or "0")
+    actual_notional = filled_size * contract_value * actual_price
+    entry_fee = fill.get("fee")
     position.update({
         "reference_entry": bot.clean_decimal(actual_price),
         "filled_size": bot.clean_decimal(filled_size),
-        "notional_usdt": bot.clean_decimal(filled_size * contract_value * actual_price),
-        "entry_fee": str(fill.get("fee") or "0"),
+        "notional_usdt": bot.clean_decimal(actual_notional),
+        "entry_fee": str(entry_fee if entry_fee is not None else ""),
     })
+    try:
+        tp = net_one_percent_tp(
+            bot, side, actual_price, actual_notional, entry_fee,
+            bot.d(instruments[inst].get("tickSize") or "0.00000001"),
+        )
+        tpsl_id, tp_client_id = bot.place_tp_for_position(inst, side, tp)
+        position["tp"] = bot.clean_decimal(tp)
+        position["tpsl_id"] = tpsl_id
+        position["tpsl_client_order_id"] = tp_client_id
+        position["protection_status"] = "SMA_NET1_TP_ACTIVE_NO_SL"
+    except Exception as exc:
+        position["protection_status"] = "SMA_TP_SETUP_FAILED"
+        position["protection_error"] = str(exc)
+        bot.notify(
+            f"CRITICAL SMA CROSS {inst}: TP setup failed; closing position: {exc}",
+            "BloFin LIVE SAFETY",
+        )
+        try:
+            bot._run_for_tracked_position(
+                state, inst, bot.close_tracked_position, "SAFETY: SMA TP setup failed"
+            )
+        except Exception as close_exc:
+            position["protection_error"] += f"; safety close failed: {close_exc}"
+            bot.notify(
+                f"CRITICAL {inst}: TP and safety close both failed: {close_exc}",
+                "BloFin LIVE SAFETY",
+            )
+        return False
     bot.notify(
         f"OPEN {side} {inst} | SMA10/20 cross 10m | entry {actual_price} "
-        f"| {position['notional_usdt']} USDT | 1x | hold until opposite cross "
-        "| no broker TP/SL (price risk)",
+        f"| {position['notional_usdt']} USDT | 1x | net TP target ~+1% "
+        f"(trigger {position['tp']}) | no SL | exit also on opposite MA cross",
         "BloFin LIVE SMA CROSS",
     )
     return True
@@ -144,9 +207,6 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
     current_insts = list(bot.get_tracked_positions(state))
     wait_for_confirmed_close(list(dict.fromkeys(top7 + current_insts)), expected_close_ms)
     bot.sync_all_tracked_positions(state)
-    for pos in bot.get_tracked_positions(state).values():
-        if pos.get("hold_policy") == "SMA10_SMA20_OPPOSITE_CROSS":
-            pos["protection_status"] = "SMA_CROSS_ONLY_NO_BROKER_TPSL"
     # Legacy positions keep their existing broker TP/SL and 60m exit.
     bot.evaluate_all_tracked_exit_signals(state, expected_close_ms)
     tracked = bot.get_tracked_positions(state)
@@ -164,6 +224,13 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
         sig = crossover(bot, inst, expected_close_ms)
         last["events"].append(sig)
         if sig["side"] and sig["side"] != pos["side"] and expected_close_ms > int(pos.get("signal_close_ms") or 0):
+            # Cancel the existing TP before a reversal so its broker-side
+            # reduce-only trigger cannot interfere with the reversed position.
+            if pos.get("tpsl_id"):
+                bot.cancel_specific_tpsl(pos)
+                pos["tpsl_id"] = ""
+                pos["tpsl_client_order_id"] = ""
+                pos["tp"] = ""
             bot._run_for_tracked_position(
                 state, inst, bot.close_tracked_position,
                 f"SMA10/SMA20 opposite 10m cross: {sig['side']}",
@@ -173,7 +240,7 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
                 # Reverse only after exchange confirms the old position is flat.
                 last["reversed"] = open_position(bot, state, sig, top7.index(inst)+1 if inst in top7 else 0, instruments)
         else:
-            last["status"] = "HOLDING_UNTIL_OPPOSITE_CROSS"
+            last["status"] = "HOLDING_UNTIL_TP_OR_OPPOSITE_CROSS"
     else:
         account_open = bot.get_open_positions()
         if account_open:
@@ -194,6 +261,9 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
             # One coin maximum. Failed preflight can fall back; broker POST errors
             # must stop the scan (never send another uncertain order).
             for rank, sig in signals:
+                if state.get("_sma_order_post_started"):
+                    last["status"] = "ONE_ORDER_ALREADY_ATTEMPTED"
+                    break
                 try:
                     if open_position(bot, state, sig, rank, instruments):
                         last["status"] = "OPENED"
@@ -204,6 +274,7 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
                     last["error"] = str(exc)
                     bot.notify(f"SMA CROSS {sig['inst']} order attempt failed: {exc}", "BloFin LIVE ERROR")
                     break
+    state.pop("_sma_order_post_started", None)
     state["ma_cross_last_scan"] = last
     state.setdefault("last_diagnostic", {})["ma_cross"] = last
     state["last_diagnostic"]["result"] = last["status"]
