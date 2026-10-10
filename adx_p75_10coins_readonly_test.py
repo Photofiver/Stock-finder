@@ -245,6 +245,27 @@ def main():
     print("TOTALS",json.dumps(totals),flush=True)
     for mode,report in chronological.items():
         print("PORTFOLIO",mode,json.dumps({k:v for k,v in report.items() if k!="trade_log"}),flush=True)
+    for mode,report in chronological.items():
+        tr=report["trade_log"]
+        wins=[x for x in tr if x["gross_pct"]>0]
+        losses=[x for x in tr if x["gross_pct"]<0]
+        reasons={}
+        for t in tr:
+            k=t["reason"]+"_"+("WIN" if t["gross_pct"]>0 else "LOSS" if t["gross_pct"]<0 else "FLAT")
+            reasons[k]=reasons.get(k,0)+1
+        print("PNL_BREAKDOWN",mode,json.dumps({
+            "winning_trades":len(wins),
+            "average_win_pct":round(sum(x["gross_pct"] for x in wins)/len(wins),5) if wins else None,
+            "min_win_pct":round(min(x["gross_pct"] for x in wins),5) if wins else None,
+            "max_win_pct":round(max(x["gross_pct"] for x in wins),5) if wins else None,
+            "winning_sum_pct":round(sum(x["gross_pct"] for x in wins),5),
+            "losing_trades":len(losses),
+            "average_loss_pct":round(sum(x["gross_pct"] for x in losses)/len(losses),5) if losses else None,
+            "min_loss_pct":round(min(x["gross_pct"] for x in losses),5) if losses else None,
+            "max_loss_pct":round(max(x["gross_pct"] for x in losses),5) if losses else None,
+            "losing_sum_pct":round(sum(x["gross_pct"] for x in losses),5),
+            "by_reason":reasons,
+        }),flush=True)
     for row in selected:print("COIN",row["coin"],"P75",row["latest_p75"],"sign",row["cross_signals"],"methods",json.dumps(row["methods"]),flush=True)
 
 if __name__=="__main__":main()
