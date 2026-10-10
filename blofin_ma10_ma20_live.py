@@ -1,8 +1,10 @@
 """LIVE SMA10/SMA20 entry strategy for 10m BloFin TOP7.
 
 New entries require Wilder ADX(14) < 38 on the closed signal candle.
-New positions use broker TP +1% and broker SL at the last confirmed SMA10.
-The broker triggers the MA10 stop intrabar; its threshold is refreshed every 10m.
+New positions use broker TP +1% and SL at the LIVE SMA10 crossover level:
+the average of the nine previously CLOSED 10m candle closes.
+The broker triggers SL intrabar; the level refreshes at each 10m scan
+(subject to scheduling delays).
 Pre-existing SMA positions retain their original 1% SL / RSI / MA-cross exits.
 Legacy non-SMA positions retain their original protection until closed.
 Only one account position is permitted.
@@ -44,7 +46,7 @@ def gross_one_percent_sl(bot, side, entry, tick):
 
 
 def ma10_stop_price(bot, side, ma10, tick):
-    """Convert last closed SMA10 to a protective BloFin broker SL price."""
+    """Round the exact LIVE SMA10 price-cross level to the exchange tick."""
     value = bot.d(ma10)
     if value <= 0:
         raise ValueError("Missing SMA10 for stop")
@@ -68,6 +70,10 @@ def crossover(bot, inst, expected_close_ms, bars=None):
     old_slow = sum(closes[-21:-1]) / 20
     new_fast = sum(closes[-10:]) / 10
     new_slow = sum(closes[-20:]) / 20
+    # LIVE SMA10 during the next candle = (sum(last 9 closed prices) + live price) / 10.
+    # Solve live_price == LIVE_SMA10: crossing level = mean(last 9 closed prices).
+    # The level stays constant INTRA-candle so the exchange can trigger without polling.
+    ma10_live_cross_level = sum(closes[-9:]) / 9
     # Reuse the exact Wilder ADX(14) calculation from the historical audit.
     from blofin_live_scan_audit import adx14_and_obv5
     adx14, _ = adx14_and_obv5(bars)
@@ -83,6 +89,7 @@ def crossover(bot, inst, expected_close_ms, bars=None):
         "ma20_previous": old_slow,
         "ma10": new_fast,
         "ma20": new_slow,
+        "ma10_live_cross_level": ma10_live_cross_level,
         "adx14": adx14,
         "adx_entry_allowed": adx_allows_entry(adx14),
         "close": closes[-1],
@@ -148,7 +155,7 @@ def open_position(bot, state, signal, rank, instruments):
     # Fresh quotes and bid/ask spread checks still apply.
     quote = bot.checked_preorder_quote(inst, side, signal["close"], enforce_adverse_gap=False)
     tick = bot.d(instruments[inst].get("tickSize") or "0.00000001")
-    ma_sl = ma10_stop_price(bot, side, signal["ma10"], tick)
+    ma_sl = ma10_stop_price(bot, side, signal["ma10_live_cross_level"], tick)
     # Never open once the live quote has already crossed the proposed MA10 stop.
     if (side == "LONG" and bot.d(quote["bid"]) <= ma_sl) or (
         side == "SHORT" and bot.d(quote["ask"]) >= ma_sl
@@ -238,7 +245,7 @@ def open_position(bot, state, signal, rank, instruments):
             bot, side, actual_price,
             bot.d(instruments[inst].get("tickSize") or "0.00000001"),
         )
-        sl = ma10_stop_price(bot, side, signal["ma10"], tick)
+        sl = ma10_stop_price(bot, side, signal["ma10_live_cross_level"], tick)
         if (side == "LONG" and sl >= actual_price) or (
             side == "SHORT" and sl <= actual_price
         ):
@@ -348,7 +355,7 @@ def ensure_broker_sl_for_existing_sma(bot, state, instruments):
 
 
 def refresh_dynamic_ma10_stop(bot, state, pos, bars, expected_close_ms, instruments):
-    """Refresh live exchange SL to last CLOSED SMA10; exchange triggers intrabar."""
+    """Refresh exchange SL to the exact price crossing with LIVE 10m SMA10."""
     inst, side = pos["inst"], pos["side"]
     if expected_close_ms <= int(pos.get("signal_close_ms") or 0):
         return "HOLDING_INITIAL_MA10_STOP"
@@ -358,7 +365,7 @@ def refresh_dynamic_ma10_stop(bot, state, pos, bars, expected_close_ms, instrume
         # Never cancel the existing broker SL if a safe replacement is unavailable.
         return "HOLDING_OLD_MA10_STOP_NO_INSTRUMENT_METADATA"
     tick = bot.d(meta.get("tickSize") or "0.00000001")
-    target = ma10_stop_price(bot, side, sig["ma10"], tick)
+    target = ma10_stop_price(bot, side, sig["ma10_live_cross_level"], tick)
     old_sl = bot.d(pos.get("sl") or "0")
     if old_sl == target:
         return "HOLDING_MA10_STOP_CURRENT"
@@ -393,7 +400,7 @@ def refresh_dynamic_ma10_stop(bot, state, pos, bars, expected_close_ms, instrume
             pos["tpsl_client_order_id"] = ""
         bot._run_for_tracked_position(
             state, inst, bot.close_tracked_position,
-            f"MA10 stop reached at latest price {last}; confirmed SMA10 {target}",
+            f"Live SMA10 crossed at price {last}; broker threshold {target}",
         )
         return "MA10_STOP_MARKET_EXIT"
     if not pos.get("tpsl_id"):
@@ -402,35 +409,37 @@ def refresh_dynamic_ma10_stop(bot, state, pos, bars, expected_close_ms, instrume
             state, inst, bot.close_tracked_position, "SAFETY: MA10 TP/SL identifier missing"
         )
         return "MA10_MISSING_BROKER_ORDER_CLOSE_ATTEMPTED"
+    # Amend the existing exchange-native TP/SL in place. Never cancel it first:
+    # the previous stop remains active even if the amendment API fails.
     try:
-        bot.cancel_specific_tpsl(pos)
-    except Exception as exc:
-        # An unsuccessful cancel must not be followed by a second reduce-only order.
-        print(f"MA10 STOP {inst}: retaining prior broker TP/SL after cancel failure: {exc}")
-        return "MA10_STOP_UPDATE_CANCEL_FAILED"
-    pos["tpsl_id"] = ""
-    pos["tpsl_client_order_id"] = ""
-    try:
-        new_id, new_client = bot.place_tpsl_for_position(inst, side, tp, target)
-        if not new_id:
-            raise RuntimeError("Broker did not return new TP/SL identifier")
-    except Exception as exc:
-        # Cancelling succeeded: fail closed rather than leave a LIVE position unprotected.
-        pos["protection_status"] = "MA10_STOP_UPDATE_FAILED_CLOSE_REQUESTED"
-        pos["protection_error"] = str(exc)
-        bot.notify(f"CRITICAL {side} {inst}: MA10 SL replacement failed: {exc}; closing position",
-                   "BloFin LIVE SAFETY")
-        bot._run_for_tracked_position(
-            state, inst, bot.close_tracked_position, "SAFETY: MA10 stop replacement failed"
+        result = bot.private_request(
+            "POST", "/api/v1/trade/amend-tpsl",
+            body={
+                "instId": inst,
+                "tpslId": str(pos["tpsl_id"]),
+                "requestId": ("ma10sl" + uuid.uuid4().hex)[:32],
+                "newSlTriggerPrice": bot.clean_decimal(target),
+                "newSlTriggerPriceType": "last",
+                "newSlOrderPrice": "-1",
+            },
         )
-        return "MA10_STOP_REPLACEMENT_FAILED_CLOSE_ATTEMPTED"
-    pos["tpsl_id"] = new_id
-    pos["tpsl_client_order_id"] = new_client
+        row = result[0] if isinstance(result, list) and result else (result or {})
+        if str(row.get("code", "0")) != "0":
+            raise RuntimeError(f"Broker rejected MA10 SL update: {row}")
+    except Exception as exc:
+        pos["protection_error"] = str(exc)
+        pos["protection_status"] = "MA10_STOP_AMEND_FAILED_OLD_SL_RETAINED"
+        bot.notify(
+            f"MA10 SL UPDATE FAILED {side} {inst}: {exc}; previous broker SL retained",
+            "BloFin LIVE SAFETY",
+        )
+        return "MA10_STOP_AMEND_FAILED"
     pos["sl"] = bot.clean_decimal(target)
     pos["ma10_stop_signal_close_ms"] = expected_close_ms
     pos["protection_status"] = "SMA_MA10_TP_SL_ACTIVE"
-    print(f"MA10 STOP {side} {inst}: updated {old_sl} -> {target} (TP {tp})")
-    return "MA10_BROKER_STOP_UPDATED"
+    pos.pop("protection_error", None)
+    print(f"MA10 LIVE STOP {side} {inst}: amended {old_sl} -> {target} (TP {tp})")
+    return "MA10_BROKER_STOP_AMENDED"
 
 
 def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_confirmed_close):
