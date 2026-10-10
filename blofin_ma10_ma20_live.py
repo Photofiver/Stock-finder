@@ -1,15 +1,17 @@
 """LIVE SMA10/SMA20 price crossover strategy for 10m BloFin TOP7.
 
-New SMA positions use a broker take-profit at +1% PRICE (before fees).
-Exit on opposite RSI(14)/SMA(14) cross or opposite price SMA10/SMA20 cross
-on a confirmed 10m candle. RSI exit is software-driven, not a broker SL order.
-Legacy positions retain their original broker protection until naturally closed.
+New SMA positions use broker take-profit +1% and stop-loss -1% PRICE (before fees).
+Exit also on opposite RSI(14)/SMA(14) cross or opposite price SMA10/SMA20 cross
+on a confirmed 10m candle. Indicator exits are software-driven.
+Pre-existing SMA positions receive broker SL protection on the next scan.
+Legacy non-SMA positions retain their original protection until naturally closed.
 Only one account position is permitted while this strategy is active.
 """
 import uuid
 
 
 PRICE_TAKE_PROFIT_PCT = 0.01
+PRICE_STOP_LOSS_PCT = 0.01
 RSI_AVERAGE_PERIOD = 14
 
 
@@ -24,6 +26,20 @@ def gross_one_percent_tp(bot, side, entry, tick):
     if side == "SHORT":
         return bot.price_step(price * (1 - target), tick, bot.ROUND_FLOOR)
     raise ValueError("TP: invalid side")
+
+
+def gross_one_percent_sl(bot, side, entry, tick):
+    """Broker SL at about -1% unfavorable PRICE move, rounded protectively."""
+    price = bot.d(entry)
+    amount = bot.d(PRICE_STOP_LOSS_PCT)
+    if price <= 0:
+        raise ValueError("SL: invalid entry price")
+    if side == "LONG":
+        return bot.price_step(price * (1 - amount), tick, bot.ROUND_CEILING)
+    if side == "SHORT":
+        return bot.price_step(price * (1 + amount), tick, bot.ROUND_FLOOR)
+    raise ValueError("SL: invalid side")
+
 
 def crossover(bot, inst, expected_close_ms, bars=None):
     bars = bot.fetch_signal_bars(inst) if bars is None else bars
@@ -150,12 +166,12 @@ def open_position(bot, state, signal, rank, instruments):
         "tp": "",
         "sl": "",
         "tp_policy": "TP_GROSS1",
-        "sl_policy": "RSI14_SMA14_CROSS_EXIT_10M_SOFTWARE",
+        "sl_policy": "SL_GROSS1_BROKER",
         "hold_policy": "SMA10_SMA20_OPPOSITE_CROSS",
-        "protection_status": "SMA_PRICE1_TP_PENDING_RSI_SOFT_EXIT",
+        "protection_status": "SMA_PRICE1_TP_SL_PENDING",
         "strategy": f"SMA10_SMA20_{side}_10m",
         "code_commit": bot.CODE_COMMIT,
-        "risk_profile": "ONE_POSITION_1X_TP_GROSS1_RSI_CROSS_EXIT_NO_HARD_SL",
+        "risk_profile": "ONE_POSITION_1X_TP_GROSS1_SL_GROSS1_RSI_CROSS_EXIT",
         "account_fraction": "",
         "allocation_label": f"SMA CROSS <= {bot.clean_decimal(cap)} USDT bankroll",
     }
@@ -187,37 +203,108 @@ def open_position(bot, state, signal, rank, instruments):
             bot, side, actual_price,
             bot.d(instruments[inst].get("tickSize") or "0.00000001"),
         )
-        tpsl_id, tp_client_id = bot.place_tp_for_position(inst, side, tp)
+        sl = gross_one_percent_sl(
+            bot, side, actual_price,
+            bot.d(instruments[inst].get("tickSize") or "0.00000001"),
+        )
+        tpsl_id, tp_client_id = bot.place_tpsl_for_position(inst, side, tp, sl)
         position["tp"] = bot.clean_decimal(tp)
+        position["sl"] = bot.clean_decimal(sl)
         position["tpsl_id"] = tpsl_id
         position["tpsl_client_order_id"] = tp_client_id
-        position["protection_status"] = "SMA_PRICE1_TP_ACTIVE_RSI_CROSS_EXIT_NO_HARD_SL"
+        position["protection_status"] = "SMA_PRICE1_TP_SL_ACTIVE"
     except Exception as exc:
-        position["protection_status"] = "SMA_TP_SETUP_FAILED"
+        position["protection_status"] = "SMA_TP_SL_SETUP_FAILED"
         position["protection_error"] = str(exc)
         bot.notify(
-            f"CRITICAL SMA CROSS {inst}: TP setup failed; closing position: {exc}",
+            f"CRITICAL SMA CROSS {inst}: TP/SL setup failed; closing position: {exc}",
             "BloFin LIVE SAFETY",
         )
         try:
             bot._run_for_tracked_position(
-                state, inst, bot.close_tracked_position, "SAFETY: SMA TP setup failed"
+                state, inst, bot.close_tracked_position, "SAFETY: SMA TP/SL setup failed"
             )
         except Exception as close_exc:
             position["protection_error"] += f"; safety close failed: {close_exc}"
             bot.notify(
-                f"CRITICAL {inst}: TP and safety close both failed: {close_exc}",
+                f"CRITICAL {inst}: TP/SL setup and safety close both failed: {close_exc}",
                 "BloFin LIVE SAFETY",
             )
         return False
     bot.notify(
         f"OPEN {side} {inst} | SMA10/20 cross 10m | entry {actual_price} "
-        f"| {position['notional_usdt']} USDT | 1x | price TP +1% before fees "
-        f"(trigger {position['tp']}) | close on opposite RSI14/SMA14 cross " 
-        f"or opposite MA10/MA20 cross at confirmed 10m close | no broker SL",
+        f"| {position['notional_usdt']} USDT | 1x | broker TP +1% {position['tp']} "
+        f"| broker SL -1% {position['sl']} (price, before fees) | exits also on "
+        f"opposite RSI14/SMA14 or MA10/MA20 cross at confirmed 10m close",
         "BloFin LIVE SMA CROSS",
     )
     return True
+
+
+def ensure_broker_sl_for_existing_sma(bot, state, instruments):
+    """Upgrade an open SMA TP-only position to combined broker TP+SL protection."""
+    for inst, pos in list(bot.get_tracked_positions(state).items()):
+        if pos.get("hold_policy") != "SMA10_SMA20_OPPOSITE_CROSS":
+            continue
+        if pos.get("sl_policy") == "SL_GROSS1_BROKER" and pos.get("sl"):
+            continue
+        meta = instruments.get(inst)
+        if not meta:
+            bot.notify(
+                f"CRITICAL {inst}: cannot activate requested broker SL -1%; instrument metadata missing",
+                "BloFin LIVE SAFETY",
+            )
+            continue
+        try:
+            entry = bot.d(pos.get("reference_entry") or "0")
+            tick = bot.d(meta.get("tickSize") or "0.00000001")
+            if entry <= 0:
+                raise ValueError("missing SMA entry price")
+            side = pos["side"]
+            tp = bot.d(pos.get("tp") or gross_one_percent_tp(bot, side, entry, tick))
+            sl = gross_one_percent_sl(bot, side, entry, tick)
+            # Never issue an additional position-opening order. First cancel
+            # the existing broker TP; replace it with broker-side combined TP/SL.
+            if pos.get("tpsl_id"):
+                bot.cancel_specific_tpsl(pos)
+                pos["tpsl_id"] = ""
+                pos["tpsl_client_order_id"] = ""
+            try:
+                new_id, new_client = bot.place_tpsl_for_position(inst, side, tp, sl)
+            except Exception as exc:
+                # A position without broker protection must not remain open.
+                pos["protection_status"] = "SMA_TP_SL_MIGRATION_FAILED_CLOSE_REQUESTED"
+                bot.notify(
+                    f"CRITICAL {side} {inst}: new broker TP/SL rejected: {exc}. "
+                    "Requesting safety market close.",
+                    "BloFin LIVE SAFETY",
+                )
+                bot._run_for_tracked_position(
+                    state, inst, bot.close_tracked_position,
+                    "SAFETY: broker TP/SL replacement failed",
+                )
+                continue
+            pos["tp"] = bot.clean_decimal(tp)
+            pos["sl"] = bot.clean_decimal(sl)
+            pos["sl_policy"] = "SL_GROSS1_BROKER"
+            pos["risk_profile"] = "ONE_POSITION_1X_TP_GROSS1_SL_GROSS1_RSI_CROSS_EXIT"
+            pos["tpsl_id"] = new_id
+            pos["tpsl_client_order_id"] = new_client
+            pos["protection_status"] = "SMA_PRICE1_TP_SL_ACTIVE"
+            pos.pop("protection_error", None)
+            bot.notify(
+                f"{side} {inst}: existing position now has broker TP {tp} and SL {sl}",
+                "BloFin LIVE TP/SL",
+            )
+        except Exception as exc:
+            # Failed cancellation leaves the old TP intact; do not stack
+            # another uncertain conditional order on top of it.
+            pos["protection_error"] = str(exc)
+            bot.notify(
+                f"CRITICAL {inst}: broker SL -1% upgrade not completed: {exc}; "
+                "check current exchange protection.",
+                "BloFin LIVE SAFETY",
+            )
 
 
 def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_confirmed_close):
@@ -229,6 +316,7 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
     current_insts = list(bot.get_tracked_positions(state))
     wait_for_confirmed_close(list(dict.fromkeys(top7 + current_insts)), expected_close_ms)
     bot.sync_all_tracked_positions(state)
+    ensure_broker_sl_for_existing_sma(bot, state, instruments)
     # Legacy positions keep their existing broker TP/SL and 60m exit.
     bot.evaluate_all_tracked_exit_signals(state, expected_close_ms)
     tracked = bot.get_tracked_positions(state)
@@ -257,8 +345,8 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
         opposite_ma = after_entry and sig["side"] is not None and sig["side"] != pos["side"]
         opposite_rsi = after_entry and rsi_sig["cross"] is not None and rsi_sig["cross"] != pos["side"]
         if opposite_ma or opposite_rsi:
-            # Cancel the broker's reduce-only TP before an indicator-based
-            # market exit; a leftover TP could interfere with a future entry.
+            # Cancel the broker's combined reduce-only TP/SL before an
+            # indicator-based market exit; avoid leftover conditional orders.
             if pos.get("tpsl_id"):
                 bot.cancel_specific_tpsl(pos)
                 pos["tpsl_id"] = ""
