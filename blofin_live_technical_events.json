@@ -2731,6 +2731,88 @@
       "signal_label": "10m",
       "timestamp_ms": 1791613279044,
       "timestamp_utc": "2026-10-10T06:21:19.044244+00:00"
+    },
+    {
+      "event_type": "ENTRY_CHASE_BLOCKED",
+      "extra": {
+        "adverse_gap_pct": 0.36777583187390545,
+        "ask": "0.05731",
+        "bid": "0.05726",
+        "expected_fill": "0.05731",
+        "max_adverse_gap_pct": 0.25,
+        "max_spread_pct": 0.25,
+        "quote_age_ms": 478,
+        "signal_close": "0.0571",
+        "spread_pct": 0.08728288382648162
+      },
+      "inst": "KAIA-USDT",
+      "message": "Entry quote too far from LONG signal candle close",
+      "side": "LONG",
+      "signal_label": "10m",
+      "timestamp_ms": 1791613877402,
+      "timestamp_utc": "2026-10-10T06:31:17.402818+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 1
+      },
+      "inst": "KAIA-USDT",
+      "message": "KAIA-USDT LONG skipped; trying next volume-eligible coin: RuntimeError: KAIA-USDT LONG: adverse price move 0.368% > 0.25% from signal close",
+      "rank": 2,
+      "side": "LONG",
+      "signal_close_ms": 1791613800000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791613877407,
+      "timestamp_utc": "2026-10-10T06:31:17.407796+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 2
+      },
+      "inst": "BAT-USDT",
+      "message": "BAT-USDT LONG: PRE_ORDER_REJECTED: RuntimeError: BAT-USDT: minimum contract/lot exceeds live cap 0.0798 USDT",
+      "rank": 7,
+      "side": "LONG",
+      "signal_close_ms": 1791613800000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791613878390,
+      "timestamp_utc": "2026-10-10T06:31:18.390939+00:00"
+    },
+    {
+      "event_type": "ENTRY_CHASE_BLOCKED",
+      "extra": {
+        "adverse_gap_pct": 0.41881893061566383,
+        "ask": "0.007141",
+        "bid": "0.007133",
+        "expected_fill": "0.007133",
+        "max_adverse_gap_pct": 0.25,
+        "max_spread_pct": 0.25,
+        "quote_age_ms": 13444,
+        "signal_close": "0.007163",
+        "spread_pct": 0.1120919153706039
+      },
+      "inst": "PIXEL-USDT",
+      "message": "Entry quote too far from SHORT signal candle close",
+      "side": "SHORT",
+      "signal_label": "10m",
+      "timestamp_ms": 1791613878773,
+      "timestamp_utc": "2026-10-10T06:31:18.773777+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 3
+      },
+      "inst": "PIXEL-USDT",
+      "message": "PIXEL-USDT SHORT skipped; trying next volume-eligible coin: RuntimeError: PIXEL-USDT SHORT: adverse price move 0.419% > 0.25% from signal close",
+      "rank": 6,
+      "side": "SHORT",
+      "signal_close_ms": 1791613800000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791613878777,
+      "timestamp_utc": "2026-10-10T06:31:18.777661+00:00"
     }
   ],
   "version": 1
