@@ -1,8 +1,6 @@
 """LIVE SMA10/SMA20 entry strategy for 10m BloFin TOP7.
 
-New entries use direction-specific walk-forward ADX(14) filters on CLOSED candles.
-Until each side has >=24 suitable completed trades, its ADX fallback is <38.
-Adaptive policies can tighten but never expand the unobserved ADX>=38 range.
+New entries depend on the confirmed MA10/MA20 cross, not ADX.
 New positions use broker TP +1% and SL at the LIVE SMA10 crossover level:
 the average of the nine previously CLOSED 10m candle closes.
 The broker triggers SL intrabar; the level refreshes at each 10m scan
@@ -12,13 +10,11 @@ Legacy non-SMA positions retain their original protection until closed.
 Only one account position is permitted.
 """
 import uuid
-import blofin_adaptive_adx as adaptive
 
 
 PRICE_TAKE_PROFIT_PCT = 0.01
 PRICE_STOP_LOSS_PCT = 0.01
 RSI_AVERAGE_PERIOD = 14
-ADX_MAX_EXCLUSIVE = 38.0
 DYNAMIC_MA10_HOLD_POLICY = "SMA10_DYNAMIC_BROKER_STOP"
 
 
@@ -60,10 +56,6 @@ def ma10_stop_price(bot, side, ma10, tick):
     raise ValueError("Unknown side for MA10 stop")
 
 
-def adx_allows_entry(adx):
-    return adx is not None and 0 <= float(adx) < ADX_MAX_EXCLUSIVE
-
-
 def crossover(bot, inst, expected_close_ms, bars=None):
     bars = bot.fetch_signal_bars(inst) if bars is None else bars
     if len(bars) < 21 or bot.bar_close_ms(bars[-1]) != expected_close_ms:
@@ -77,10 +69,6 @@ def crossover(bot, inst, expected_close_ms, bars=None):
     # Solve live_price == LIVE_SMA10: crossing level = mean(last 9 closed prices).
     # The level stays constant INTRA-candle so the exchange can trigger without polling.
     ma10_live_cross_level = sum(closes[-9:]) / 9
-    # Reuse the exact Wilder ADX(14) calculation from the historical audit.
-    from blofin_live_scan_audit import adx14_and_obv5
-    adx14, _ = adx14_and_obv5(bars)
-    previous_adx14, _ = adx14_and_obv5(bars[:-1])
     side = None
     if old_fast <= old_slow and new_fast > new_slow:
         side = "LONG"
@@ -94,13 +82,6 @@ def crossover(bot, inst, expected_close_ms, bars=None):
         "ma10": new_fast,
         "ma20": new_slow,
         "ma10_live_cross_level": ma10_live_cross_level,
-        "adx14": adx14,
-        "adx14_previous": previous_adx14,
-        "adx_delta": (
-            adx14 - previous_adx14
-            if adx14 is not None and previous_adx14 is not None else None
-        ),
-        "adx_entry_allowed": adx_allows_entry(adx14),
         "close": closes[-1],
         "signal_close_ms": expected_close_ms,
     }
@@ -142,18 +123,6 @@ def rsi_average_crossover(bot, inst, expected_close_ms, bars=None):
 def open_position(bot, state, signal, rank, instruments):
     inst, side = signal["inst"], signal["side"]
     if side not in ("LONG", "SHORT"):
-        return False
-    # Verify again at the real order boundary, including old-policy reversals.
-    adx_rule = adaptive.decision_for_signal(state.get("trade_history") or [], signal)
-    signal["adx_filter"] = adx_rule
-    signal["adx_filter_version"] = adaptive.VERSION
-    signal["adx_entry_allowed"] = adx_rule["allowed"]
-    if not adx_rule["allowed"]:
-        print(
-            f"SMA CROSS {inst} {side}: ADX14={signal.get('adx14')} blocked "
-            f"({adx_rule['reason']}; {adx_rule['limit']}, {adx_rule['trend']}, "
-            f"{adx_rule['status']}, samples={adx_rule['usable_completed_trades']})"
-        )
         return False
     if bot.risk_stop_active(state):
         print("SMA CROSS entry blocked by existing 10% bankroll drawdown limit")
@@ -230,7 +199,7 @@ def open_position(bot, state, signal, rank, instruments):
         "protection_status": "SMA_MA10_TP_SL_PENDING",
         "strategy": f"SMA10_SMA20_{side}_10m",
         "code_commit": bot.CODE_COMMIT,
-        "risk_profile": "ONE_POSITION_1X_TP_GROSS1_SL_MA10_ADAPTIVE_ADX",
+        "risk_profile": "ONE_POSITION_1X_TP_GROSS1_SL_MA10",
         "account_fraction": "",
         "allocation_label": f"SMA CROSS <= {bot.clean_decimal(cap)} USDT bankroll",
     }
@@ -297,9 +266,7 @@ def open_position(bot, state, signal, rank, instruments):
     bot.notify(
         f"OPEN {side} {inst} | SMA10/20 cross 10m | entry {actual_price} "
         f"| {position['notional_usdt']} USDT | 1x | broker TP +1% {position['tp']} "
-        f"| broker MA10 stop {position['sl']} (updated every 10m; triggers intrabar) "
-        f"| ADX14 {signal['adx14']:.2f} < {adx_rule['limit']:.1f} "
-        f"({adx_rule['trend']}; {adx_rule['status']})",
+        f"| broker MA10 stop {position['sl']} (updated every 10m; triggers intrabar)"
         "BloFin LIVE SMA CROSS",
     )
     return True
@@ -479,15 +446,7 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
             "SMA10_SMA20_OPPOSITE_CROSS", DYNAMIC_MA10_HOLD_POLICY,
         )
     ]
-    last = {
-        "signal_close_ms": expected_close_ms,
-        "strategy": "SMA10_SMA20_10m",
-        "events": [],
-        "adx_adaptive_policies": {
-            side: adaptive.policy_for_side(state.get("trade_history") or [], side)
-            for side in ("LONG", "SHORT")
-        },
-    }
+    last = {"signal_close_ms": expected_close_ms, "strategy": "SMA10_SMA20_10m", "events": []}
     if previous_strategy_positions:
         print("SMA CROSS: waiting for pre-existing LIVE position to close under original rules")
         last["status"] = "WAITING_FOR_OLD_POSITION"
@@ -555,30 +514,11 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
                 try:
                     sig = crossover(bot, inst, expected_close_ms)
                     if sig["side"]:
-                        decision = adaptive.decision_for_signal(
-                            state.get("trade_history") or [], sig,
-                        )
-                        sig["adx_filter"] = decision
-                        sig["adx_filter_version"] = adaptive.VERSION
-                        sig["adx_entry_allowed"] = decision["allowed"]
-                        if not decision["allowed"]:
-                            last["events"].append({
-                                "inst": inst, "side": sig["side"],
-                                "status": "ADX_ADAPTIVE_BLOCKED",
-                                "adx14": sig.get("adx14"),
-                                "adx14_previous": sig.get("adx14_previous"),
-                                "adx_rule": decision,
-                            })
-                            continue
                         signals.append((rank, sig))
                 except Exception as exc:
                     last["events"].append({"inst": inst, "error": str(exc)})
             last["signals"] = [{"rank": rank, **sig} for rank, sig in signals]
-            last["status"] = (
-                "ADX_ADAPTIVE_BLOCKED"
-                if not signals and any(e.get("status") == "ADX_ADAPTIVE_BLOCKED" for e in last["events"])
-                else "NO_CROSS"
-            )
+            last["status"] = "NO_CROSS"
             # One coin maximum. Failed preflight can fall back; broker POST errors
             # must stop the scan (never send another uncertain order).
             for rank, sig in signals:
