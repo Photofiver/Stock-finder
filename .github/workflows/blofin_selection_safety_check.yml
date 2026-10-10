@@ -10,6 +10,7 @@ on:
       - blofin_ma10_ma20_live.py
       - blofin_adaptive_adx.py
       - test_blofin_adaptive_adx.py
+      - test_blofin_ma_no_adx.py
       - test_blofin_selection_rank.py
       - .github/workflows/blofin_selection_safety_check.yml
 
@@ -27,6 +28,6 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt
       - name: Compile Python modules
-        run: python -m py_compile blofin_live_hourly.py blofin_live_signal_watch.py blofin_live_scan_audit.py blofin_selection_rank.py blofin_ma10_ma20_live.py blofin_adaptive_adx.py test_blofin_adaptive_adx.py
+        run: python -m py_compile blofin_live_hourly.py blofin_live_signal_watch.py blofin_live_scan_audit.py blofin_selection_rank.py blofin_ma10_ma20_live.py blofin_adaptive_adx.py test_blofin_adaptive_adx.py test_blofin_ma_no_adx.py
       - name: Run offline trade-selection tests
-        run: python -m unittest -q test_blofin_selection_rank test_blofin_adaptive_adx
+        run: python -m unittest -q test_blofin_selection_rank test_blofin_adaptive_adx test_blofin_ma_no_adx
