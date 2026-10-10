@@ -18,6 +18,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install public HTTP client
+        run: python -m pip install requests
       - name: Compile independent test (no trading API)
         run: python -m py_compile adx_p75_10coins_readonly_test.py
       - name: Download public BloFin historical candles and compare 10 real coins
