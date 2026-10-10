@@ -145,10 +145,23 @@ def select_signals(state, top7):
             if signal_close_ms <= int(processed.get(inst) or 0):
                 continue
             for option in score_options(bot, bars, i):
+                # Keep the existing point-in-time quality model for TOP7
+                # comparisons. New 6/3 entry rules remain mandatory.
+                side = option["side"]
+                metrics = (
+                    bot.long_entry_metrics(bars, i) if side == "LONG"
+                    else bot.short_entry_metrics(bars, i)
+                )
+                quality = bot.selection_rank.score_at_close(
+                    bars, side, i, metrics
+                )
                 option.update({
                     "inst": inst, "rank_in_top7": rank,
                     "signal_close_ms": signal_close_ms,
                     "signal_age_ms": observed_ms - signal_close_ms,
+                    "quality_score": float(quality["score"]),
+                    "quality_factors": quality["factors"],
+                    "quality_model": "selection_rank.score_at_close",
                 })
                 options.append(option)
             processed[inst] = max(int(processed.get(inst) or 0), signal_close_ms)
@@ -156,33 +169,44 @@ def select_signals(state, top7):
             errors.append({"inst": inst, "error": f"{type(exc).__name__}: {exc}"})
             print(f"GT110 data unavailable {inst}: {exc}")
 
-    # Rank TOP7 first. If both directions qualify on one coin, prefer LONG.
+    # Compare ALL eligible LONG/SHORT directions across TOP7.
+    # Strict new filters gate entry; original quality score decides priority.
+    # TOP7 rank is only the deterministic tie-breaker.
     ordered = sorted(
         [row for row in options
          if row["entry_eligible"]
          and 0 <= row["signal_age_ms"] <= bot.SIGNAL_MAX_AGE_MS],
-        key=lambda row: (row["rank_in_top7"], row["inst"],
-                         0 if row["side"] == "LONG" else 1),
+        key=lambda row: (-row["quality_score"], row["rank_in_top7"],
+                         row["inst"], row["side"]),
     )
     state["last_pretrade_ranking"] = {
         "generated_at_ms": bot.now_ms(),
         "strategy": "HISTORICAL_GT110_STRICT",
         "conditions_long": 6,
         "conditions_short": 3,
+        "selection_method": "HIGHEST_QUALITY_SCORE_AMONG_STRICT_GT110_SIGNALS",
+        "quality_model": "selection_rank.score_at_close",
+        "quality_model_not_profit_prediction": True,
         "max_new_positions_per_scan": 1,
         "fallback_after_preorder_rejection": True,
         "not_a_profit_prediction": True,
         "scores": sorted(
             options,
-            key=lambda row: (row["missing_count"],
-                             row["rank_in_top7"],
-                             0 if row["side"] == "LONG" else 1),
+            key=lambda row: (
+                not row["entry_eligible"],
+                -row["quality_score"],
+                row["missing_count"],
+                row["rank_in_top7"],
+                row["inst"], row["side"],
+            ),
         ),
         "errors": errors,
         "eligible_entry_order": [{
             "inst": row["inst"], "side": row["side"],
             "top7_rank": row["rank_in_top7"],
             "score": row["score"],
+            "quality_score": row["quality_score"],
+            "quality_factors": row["quality_factors"],
             "missing": row["missing"],
             "priority": idx,
         } for idx, row in enumerate(ordered, start=1)],
@@ -191,8 +215,9 @@ def select_signals(state, top7):
     if not ordered:
         print("GT110 no entry: no fresh fully qualified TOP7 candidate")
         return []
-    print("GT110 strict entry order: " + ", ".join(
-        f"{row['inst']} {row['side']} {row['score']}" for row in ordered
+    print("GT110 quality-ranked entry order: " + ", ".join(
+        f"{row['inst']} {row['side']} {row['score']} "
+        f"quality={row['quality_score']:+.2f}" for row in ordered
     ))
     return [
         (row["rank_in_top7"], row["inst"], row["side"], row["signal_close_ms"])
