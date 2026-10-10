@@ -2118,7 +2118,7 @@ def evaluate_tracked_exit_signal(state, expected_close_ms=None):
     return True
 
 
-def checked_preorder_quote(inst, side, signal_close_price):
+def checked_preorder_quote(inst, side, signal_close_price, enforce_adverse_gap=True):
     """Fail closed on stale/expensive entry quotes before a real market order."""
     if side not in ("LONG", "SHORT"):
         raise RuntimeError("Unknown entry side")
@@ -2156,10 +2156,11 @@ def checked_preorder_quote(inst, side, signal_close_price):
         "expected_fill": str(expected_fill),
         "adverse_gap_pct": float(adverse_gap_pct),
         "spread_pct": float(spread_pct),
-        "max_adverse_gap_pct": float(MAX_ADVERSE_ENTRY_GAP_PCT),
+        "max_adverse_gap_pct": float(MAX_ADVERSE_ENTRY_GAP_PCT) if enforce_adverse_gap else None,
+        "adverse_gap_filter_enabled": bool(enforce_adverse_gap),
         "max_spread_pct": float(MAX_ENTRY_SPREAD_PCT),
     }
-    if adverse_gap_pct > MAX_ADVERSE_ENTRY_GAP_PCT:
+    if enforce_adverse_gap and adverse_gap_pct > MAX_ADVERSE_ENTRY_GAP_PCT:
         append_technical_event(
             "ENTRY_CHASE_BLOCKED",
             f"Entry quote too far from {bot_side(side)} signal candle close",
