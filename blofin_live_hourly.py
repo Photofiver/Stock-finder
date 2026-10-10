@@ -2196,17 +2196,17 @@ def place_live_trade(state, candidate, tickers, instruments, cap_usdt=None, allo
         inst, side, signal_close_ms, rank
     )
     if NEAREST_VOLUME:
-        # Hard volume gate applies to every LIVE order, including revalidation.
-        # The separate 85% minute concentration test was not part of the
-        # user-approved 10/7 scoring backtest and is not an entry rule here.
+        # Revalidate every >110 historical-rule entry condition against
+        # the exact closed candle. The old candle-color/volume filter is
+        # NOT mandatory for SHORT under this user-selected strategy.
         if not nearest_volume.volume_snapshot_passes(signal_snapshot, side):
             raise RuntimeError(
-                f"{inst} {side}: mandatory candle color/volume rule failed "
+                f"{inst} {side}: >110 entry conditions failed "
                 "at pre-order revalidation; no order sent"
             )
         concentration = {
-            "allowed": True, "reason": "NEAREST_VOLUME_DIRECTIONAL_GATE",
-            "directional_15m_volume_revalidated": True,
+            "allowed": True, "reason": "STRICT_GT110_ENTRY_REVALIDATED",
+            "strict_gt110_entry_revalidated": True,
         }
     else:
         concentration = volume_concentration_filter(inst, signal_close_ms)
