@@ -356,7 +356,7 @@ def build_live_diagnostic(state, top7):
             "LIVE enters ONLY after all >110-frequency filters pass (LONG 6/6, SHORT 3/3).",
             "LONG: RSI<67, OBV5 rising, MACD hist<0 rising, volume<MA5 and >last RED.",
             "SHORT: OBV5 rising, MACD hist<0, RSI>=55.",
-            "Ranked TOP7, one new order per scan; LONG wins a same-coin conflict.",
+            "Among qualified TOP7 LONG/SHORT signals, select highest quality score; one order per scan.",
             "",
         ]
     else:
