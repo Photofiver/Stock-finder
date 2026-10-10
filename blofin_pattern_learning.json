@@ -3613,6 +3613,170 @@
       ],
       "side": "SHORT",
       "signal_close_ms": 1791607200000
+    },
+    {
+      "closed_ms": 1791608540359,
+      "inst": "KAIA-USDT",
+      "net_pnl_usdt": 0.06752626938159033,
+      "patterns": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.69,
+          "evidence": {
+            "high_slope_pct_per_bar": -0.0474,
+            "impulse_pct": -4.612,
+            "low_slope_pct_per_bar": 0.1856,
+            "width_ratio": 0.497
+          },
+          "name": "BEAR_PENNANT"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.66,
+          "evidence": {
+            "high_slope_pct_per_bar": -0.5984,
+            "low_slope_pct_per_bar": -0.5084,
+            "width_ratio": 0.469
+          },
+          "name": "FALLING_WEDGE"
+        },
+        {
+          "bias": "SHORT",
+          "confidence": 0.67,
+          "evidence": {
+            "flag_move_pct": 1.406,
+            "flag_range_pct": 2.368,
+            "impulse_pct": -6.083
+          },
+          "name": "BEAR_FLAG"
+        }
+      ],
+      "result": "WIN",
+      "reviews": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.69,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "high_slope_pct_per_bar": -0.0474,
+            "impulse_pct": -4.612,
+            "low_slope_pct_per_bar": 0.1856,
+            "width_ratio": 0.497
+          },
+          "name": "BEAR_PENNANT",
+          "relation_to_trade": "SUPPORTS"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.66,
+          "effect_if_used_as_filter": "HURT",
+          "evidence": {
+            "high_slope_pct_per_bar": -0.5984,
+            "low_slope_pct_per_bar": -0.5084,
+            "width_ratio": 0.469
+          },
+          "name": "FALLING_WEDGE",
+          "relation_to_trade": "OPPOSES"
+        },
+        {
+          "bias": "SHORT",
+          "confidence": 0.67,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "flag_move_pct": 1.406,
+            "flag_range_pct": 2.368,
+            "impulse_pct": -6.083
+          },
+          "name": "BEAR_FLAG",
+          "relation_to_trade": "SUPPORTS"
+        }
+      ],
+      "side": "SHORT",
+      "signal_close_ms": 1791606600000
+    },
+    {
+      "closed_ms": 1791608778102,
+      "inst": "MAGIC-USDT",
+      "net_pnl_usdt": -0.002404344,
+      "patterns": [
+        {
+          "bias": "LONG",
+          "confidence": 0.9,
+          "evidence": {
+            "bottom_gap_pct": 0.731,
+            "neck_height_pct": 8.25
+          },
+          "name": "DOUBLE_BOTTOM"
+        },
+        {
+          "bias": "SHORT",
+          "confidence": 0.827,
+          "evidence": {
+            "head_above_shoulders_pct": 3.535,
+            "shoulders_gap_pct": 1.226
+          },
+          "name": "HEAD_AND_SHOULDERS"
+        },
+        {
+          "bias": "SHORT",
+          "confidence": 0.7,
+          "evidence": {
+            "high_slope_pct_per_bar": -0.2566,
+            "low_slope_pct_per_bar": -0.0704,
+            "width_ratio": 0.499
+          },
+          "name": "DESCENDING_TRIANGLE"
+        }
+      ],
+      "result": "LOSS",
+      "reviews": [
+        {
+          "bias": "LONG",
+          "confidence": 0.9,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "bottom_gap_pct": 0.731,
+            "neck_height_pct": 8.25
+          },
+          "name": "DOUBLE_BOTTOM",
+          "relation_to_trade": "OPPOSES"
+        },
+        {
+          "bias": "SHORT",
+          "confidence": 0.827,
+          "effect_if_used_as_filter": "HURT",
+          "evidence": {
+            "head_above_shoulders_pct": 3.535,
+            "shoulders_gap_pct": 1.226
+          },
+          "name": "HEAD_AND_SHOULDERS",
+          "relation_to_trade": "SUPPORTS"
+        },
+        {
+          "bias": "SHORT",
+          "confidence": 0.7,
+          "effect_if_used_as_filter": "HURT",
+          "evidence": {
+            "high_slope_pct_per_bar": -0.2566,
+            "low_slope_pct_per_bar": -0.0704,
+            "width_ratio": 0.499
+          },
+          "name": "DESCENDING_TRIANGLE",
+          "relation_to_trade": "SUPPORTS"
+        }
+      ],
+      "side": "SHORT",
+      "signal_close_ms": 1791607800000
+    },
+    {
+      "closed_ms": 1791608531996,
+      "inst": "PIXEL-USDT",
+      "net_pnl_usdt": 0.00085487,
+      "patterns": [],
+      "result": "WIN",
+      "reviews": [],
+      "side": "LONG",
+      "signal_close_ms": 1791608400000
     }
   ],
   "interpretation": "HELPED = pattern supported a winner or opposed a loser; HURT = pattern supported a loser or opposed a winner.",
@@ -3629,24 +3793,24 @@
       "wins_when_present": 2
     },
     "BEAR_FLAG": {
-      "helped": 1,
+      "helped": 2,
       "hurt": 0,
       "losses_when_present": 0,
       "no_effect": 0,
       "opposes_trade": 0,
-      "seen": 1,
-      "supports_trade": 1,
-      "wins_when_present": 1
+      "seen": 2,
+      "supports_trade": 2,
+      "wins_when_present": 2
     },
     "BEAR_PENNANT": {
-      "helped": 1,
+      "helped": 2,
       "hurt": 0,
       "losses_when_present": 0,
       "no_effect": 0,
       "opposes_trade": 0,
-      "seen": 1,
-      "supports_trade": 1,
-      "wins_when_present": 1
+      "seen": 2,
+      "supports_trade": 2,
+      "wins_when_present": 2
     },
     "BULL_FLAG": {
       "helped": 2,
@@ -3680,21 +3844,21 @@
     },
     "DESCENDING_TRIANGLE": {
       "helped": 3,
-      "hurt": 1,
-      "losses_when_present": 0,
+      "hurt": 2,
+      "losses_when_present": 1,
       "no_effect": 0,
       "opposes_trade": 1,
-      "seen": 4,
-      "supports_trade": 3,
+      "seen": 5,
+      "supports_trade": 4,
       "wins_when_present": 4
     },
     "DOUBLE_BOTTOM": {
-      "helped": 16,
+      "helped": 17,
       "hurt": 12,
-      "losses_when_present": 14,
+      "losses_when_present": 15,
       "no_effect": 0,
-      "opposes_trade": 12,
-      "seen": 28,
+      "opposes_trade": 13,
+      "seen": 29,
       "supports_trade": 16,
       "wins_when_present": 14
     },
@@ -3710,22 +3874,22 @@
     },
     "FALLING_WEDGE": {
       "helped": 7,
-      "hurt": 7,
+      "hurt": 8,
       "losses_when_present": 5,
       "no_effect": 0,
-      "opposes_trade": 8,
-      "seen": 14,
+      "opposes_trade": 9,
+      "seen": 15,
       "supports_trade": 6,
-      "wins_when_present": 9
+      "wins_when_present": 10
     },
     "HEAD_AND_SHOULDERS": {
       "helped": 1,
-      "hurt": 1,
-      "losses_when_present": 2,
+      "hurt": 2,
+      "losses_when_present": 3,
       "no_effect": 0,
       "opposes_trade": 1,
-      "seen": 2,
-      "supports_trade": 1,
+      "seen": 3,
+      "supports_trade": 2,
       "wins_when_present": 0
     },
     "INVERSE_CUP_AND_HANDLE": {
