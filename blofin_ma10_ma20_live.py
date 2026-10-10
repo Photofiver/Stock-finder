@@ -101,9 +101,9 @@ def open_position(bot, state, signal, rank, instruments):
     if inst not in instruments:
         print(f"SMA CROSS {inst}: missing instrument metadata")
         return False
-    # MA crossover uses the latest valid quote regardless of adverse gap from signal close.
-    # Quote age and bid/ask spread limits remain mandatory.
-    quote = bot.checked_preorder_quote(inst, side, signal["close"], enforce_adverse_gap=False)
+    # Reject entries if the fresh execution quote has moved adversely by more
+    # than 0.25% from the signal candle close; also require fresh quote and safe spread.
+    quote = bot.checked_preorder_quote(inst, side, signal["close"], enforce_adverse_gap=True)
     cap = min(bot.MAX_NOTIONAL_USDT, bot.current_live_bankroll(state), bot.get_available_usdt())
     if cap <= 0:
         print("SMA CROSS entry blocked: no bankroll")
