@@ -1,7 +1,8 @@
 """One-off read-only 10 real BloFin coin test; NO orders/credentials, NO fees."""
 import concurrent.futures, json, math, time
+import requests
 from urllib.parse import urlencode
-from urllib.request import urlopen
+# Use the same HTTP client and User-Agent as the working LIVE BloFin scanner.
 from datetime import datetime, timezone
 
 COINS = "STRK CHIP TIA AERO AZTEC CAP NEAR MAGIC BAT PIXEL C98 OP WLD ZK BTC".split()
@@ -16,7 +17,13 @@ def prices(inst):
         url = "https://openapi.blofin.com/api/v1/market/candles?" + urlencode(args)
         for attempt in range(3):
             try:
-                with urlopen(url,timeout=25) as f: response=json.load(f)
+                response_http=requests.get(
+                    url, headers={"Accept":"application/json",
+                                  "User-Agent":"Mozilla/5.0 BloFinStockFinder/1.0"},
+                    timeout=25,
+                )
+                response_http.raise_for_status()
+                response=response_http.json()
                 if str(response.get("code"))!="0":raise ValueError(str(response)[:250])
                 rows=response.get("data",[])
                 break
