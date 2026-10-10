@@ -25,8 +25,8 @@ def gross_one_percent_tp(bot, side, entry, tick):
         return bot.price_step(price * (1 - target), tick, bot.ROUND_FLOOR)
     raise ValueError("TP: invalid side")
 
-def crossover(bot, inst, expected_close_ms):
-    bars = bot.fetch_signal_bars(inst)
+def crossover(bot, inst, expected_close_ms, bars=None):
+    bars = bot.fetch_signal_bars(inst) if bars is None else bars
     if len(bars) < 21 or bot.bar_close_ms(bars[-1]) != expected_close_ms:
         raise RuntimeError(f"{inst}: expected confirmed 10m close unavailable")
     closes = [float(bar["c"]) for bar in bars]
@@ -51,9 +51,9 @@ def crossover(bot, inst, expected_close_ms):
     }
 
 
-def rsi_average_crossover(bot, inst, expected_close_ms):
+def rsi_average_crossover(bot, inst, expected_close_ms, bars=None):
     """Cross of RSI(14) against SMA(14) of RSI, confirmed at the 10m close."""
-    bars = bot.fetch_signal_bars(inst)
+    bars = bot.fetch_signal_bars(inst) if bars is None else bars
     if bot.bar_close_ms(bars[-1]) != expected_close_ms:
         raise RuntimeError(f"{inst}: expected confirmed 10m RSI close unavailable")
     lookback = RSI_AVERAGE_PERIOD + 1
@@ -243,8 +243,15 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
     elif tracked:
         # Follow the instrument even after it has left TOP7.
         inst, pos = next(iter(tracked.items()))
-        sig = crossover(bot, inst, expected_close_ms)
-        rsi_sig = rsi_average_crossover(bot, inst, expected_close_ms)
+        bars = bot.fetch_signal_bars(inst)
+        sig = crossover(bot, inst, expected_close_ms, bars=bars)
+        try:
+            rsi_sig = rsi_average_crossover(
+                bot, inst, expected_close_ms, bars=bars,
+            )
+        except (RuntimeError, ValueError, TypeError) as exc:
+            # Missing RSI history must not disable the original SMA exit.
+            rsi_sig = {"inst": inst, "cross": None, "error": str(exc)}
         last["events"].append({**sig, "rsi_average": rsi_sig})
         after_entry = expected_close_ms > int(pos.get("signal_close_ms") or 0)
         opposite_ma = after_entry and sig["side"] is not None and sig["side"] != pos["side"]
