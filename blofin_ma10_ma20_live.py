@@ -1,6 +1,6 @@
 """LIVE SMA10/SMA20 price crossover strategy for 10m BloFin TOP7.
 
-New SMA positions use a broker take-profit at an estimated +1% NET return,
+New SMA positions use a broker take-profit at +1% PRICE (before fees),
 with no stop-loss or time exit. Exit earlier on an opposite SMA cross.
 Legacy positions retain their original broker protection until naturally closed.
 Only one account position is permitted while this strategy is active.
@@ -8,36 +8,20 @@ Only one account position is permitted while this strategy is active.
 import uuid
 
 
-NET_PROFIT_TARGET = 0.01
-EXPECTED_TAKER_EXIT_FEE_RATE = 0.0006
+PRICE_TAKE_PROFIT_PCT = 0.01
 
 
-def net_one_percent_tp(bot, side, entry, notional, entry_fee, tick):
-    """Compute broker TP for +1% expected net of both trading fees.
-
-    The fill and slippage of a market TP are not guaranteed, so final net
-    PnL can be lower than the target; actual fees come from BloFin history.
-    """
+def gross_one_percent_tp(bot, side, entry, tick):
+    """Set the broker TP at a 1% price move before fees (not 1% NET)."""
     price = bot.d(entry)
-    value = bot.d(notional)
-    if price <= 0 or value <= 0:
-        raise ValueError("TP: invalid entry or notional")
-    actual_entry_fee_rate = (
-        abs(bot.d(entry_fee)) / value
-        if entry_fee not in (None, "") else bot.d(EXPECTED_TAKER_EXIT_FEE_RATE)
-    )
-    target = bot.d(NET_PROFIT_TARGET)
-    exit_rate = bot.d(EXPECTED_TAKER_EXIT_FEE_RATE)
+    target = bot.d(PRICE_TAKE_PROFIT_PCT)
+    if price <= 0:
+        raise ValueError("TP: invalid entry price")
     if side == "LONG":
-        factor = (1 + target + actual_entry_fee_rate) / (1 - exit_rate)
-        return bot.price_step(price * factor, tick, bot.ROUND_CEILING)
+        return bot.price_step(price * (1 + target), tick, bot.ROUND_CEILING)
     if side == "SHORT":
-        factor = (1 - target - actual_entry_fee_rate) / (1 + exit_rate)
-        if factor <= 0:
-            raise ValueError("TP: short target underflow")
-        return bot.price_step(price * factor, tick, bot.ROUND_FLOOR)
+        return bot.price_step(price * (1 - target), tick, bot.ROUND_FLOOR)
     raise ValueError("TP: invalid side")
-
 
 def crossover(bot, inst, expected_close_ms):
     bars = bot.fetch_signal_bars(inst)
@@ -128,13 +112,13 @@ def open_position(bot, state, signal, rank, instruments):
         "notional_usdt": bot.clean_decimal(estimated_notional),
         "tp": "",
         "sl": "",
-        "tp_policy": "TP_NET1",
+        "tp_policy": "TP_GROSS1",
         "sl_policy": "NONE",
         "hold_policy": "SMA10_SMA20_OPPOSITE_CROSS",
-        "protection_status": "SMA_NET1_TP_PENDING_NO_SL",
+        "protection_status": "SMA_PRICE1_TP_PENDING_NO_SL",
         "strategy": f"SMA10_SMA20_{side}_10m",
         "code_commit": bot.CODE_COMMIT,
-        "risk_profile": "ONE_POSITION_1X_TP_NET1_NO_SL",
+        "risk_profile": "ONE_POSITION_1X_TP_GROSS1_NO_SL",
         "account_fraction": "",
         "allocation_label": f"SMA CROSS <= {bot.clean_decimal(cap)} USDT bankroll",
     }
@@ -162,15 +146,15 @@ def open_position(bot, state, signal, rank, instruments):
         "entry_fee": str(entry_fee if entry_fee is not None else ""),
     })
     try:
-        tp = net_one_percent_tp(
-            bot, side, actual_price, actual_notional, entry_fee,
+        tp = gross_one_percent_tp(
+            bot, side, actual_price,
             bot.d(instruments[inst].get("tickSize") or "0.00000001"),
         )
         tpsl_id, tp_client_id = bot.place_tp_for_position(inst, side, tp)
         position["tp"] = bot.clean_decimal(tp)
         position["tpsl_id"] = tpsl_id
         position["tpsl_client_order_id"] = tp_client_id
-        position["protection_status"] = "SMA_NET1_TP_ACTIVE_NO_SL"
+        position["protection_status"] = "SMA_PRICE1_TP_ACTIVE_NO_SL"
     except Exception as exc:
         position["protection_status"] = "SMA_TP_SETUP_FAILED"
         position["protection_error"] = str(exc)
@@ -191,7 +175,7 @@ def open_position(bot, state, signal, rank, instruments):
         return False
     bot.notify(
         f"OPEN {side} {inst} | SMA10/20 cross 10m | entry {actual_price} "
-        f"| {position['notional_usdt']} USDT | 1x | net TP target ~+1% "
+        f"| {position['notional_usdt']} USDT | 1x | price TP +1% before fees "
         f"(trigger {position['tp']}) | no SL | exit also on opposite MA cross",
         "BloFin LIVE SMA CROSS",
     )
