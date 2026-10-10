@@ -254,10 +254,31 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
                         last["selected"] = sig
                         break
                 except Exception as exc:
-                    last["status"] = "ORDER_ATTEMPT_ERROR_STOP"
-                    last["error"] = str(exc)
-                    bot.notify(f"SMA CROSS {sig['inst']} order attempt failed: {exc}", "BloFin LIVE ERROR")
-                    break
+                    # A stale quote, excessive spread, or other pre-order
+                    # validation failure must not discard later TOP7 crosses.
+                    # Once POST /trade/order starts, outcome may be uncertain:
+                    # never try a different coin in the same scan.
+                    post_started = bool(state.get("_sma_order_post_started"))
+                    last["events"].append({
+                        "inst": sig["inst"],
+                        "side": sig["side"],
+                        "reason": str(exc),
+                        "status": (
+                            "ORDER_ATTEMPT_ERROR_STOP" if post_started
+                            else "PRE_ORDER_REJECTED_TRY_NEXT"
+                        ),
+                    })
+                    if post_started:
+                        last["status"] = "ORDER_ATTEMPT_ERROR_STOP"
+                        last["error"] = str(exc)
+                        bot.notify(
+                            f"SMA CROSS {sig['inst']}: order attempt uncertain: {exc}",
+                            "BloFin LIVE ERROR",
+                        )
+                        break
+                    last["status"] = "PRE_ORDER_REJECTED_TRY_NEXT"
+                    print(f"SMA CROSS {sig['inst']} pre-order rejected; try next TOP7: {exc}")
+                    continue
     state.pop("_sma_order_post_started", None)
     state["ma_cross_last_scan"] = last
     state.setdefault("last_diagnostic", {})["ma_cross"] = last
