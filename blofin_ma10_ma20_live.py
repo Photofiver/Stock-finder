@@ -1,7 +1,8 @@
 """LIVE SMA10/SMA20 price crossover strategy for 10m BloFin TOP7.
 
-New SMA positions use a broker take-profit at +1% PRICE (before fees),
-with no stop-loss or time exit. Exit earlier on an opposite SMA cross.
+New SMA positions use a broker take-profit at +1% PRICE (before fees).
+Exit on opposite RSI(14)/SMA(14) cross or opposite price SMA10/SMA20 cross
+on a confirmed 10m candle. RSI exit is software-driven, not a broker SL order.
 Legacy positions retain their original broker protection until naturally closed.
 Only one account position is permitted while this strategy is active.
 """
@@ -9,6 +10,7 @@ import uuid
 
 
 PRICE_TAKE_PROFIT_PCT = 0.01
+RSI_AVERAGE_PERIOD = 14
 
 
 def gross_one_percent_tp(bot, side, entry, tick):
@@ -46,6 +48,39 @@ def crossover(bot, inst, expected_close_ms):
         "ma20": new_slow,
         "close": closes[-1],
         "signal_close_ms": expected_close_ms,
+    }
+
+
+def rsi_average_crossover(bot, inst, expected_close_ms):
+    """Cross of RSI(14) against SMA(14) of RSI, confirmed at the 10m close."""
+    bars = bot.fetch_signal_bars(inst)
+    if bot.bar_close_ms(bars[-1]) != expected_close_ms:
+        raise RuntimeError(f"{inst}: expected confirmed 10m RSI close unavailable")
+    lookback = RSI_AVERAGE_PERIOD + 1
+    if len(bars) < bot.RSI_PERIOD + lookback:
+        raise RuntimeError(f"{inst}: not enough RSI history for moving average")
+    values = [
+        float(bar["rsi"]) if bar.get("rsi") is not None else None
+        for bar in bars[-lookback:]
+    ]
+    if any(value is None for value in values):
+        raise RuntimeError(f"{inst}: incomplete RSI values at confirmed close")
+    prev_rsi, current_rsi = values[-2], values[-1]
+    prev_average = sum(values[:-1]) / RSI_AVERAGE_PERIOD
+    current_average = sum(values[1:]) / RSI_AVERAGE_PERIOD
+    direction = None
+    if prev_rsi <= prev_average and current_rsi > current_average:
+        direction = "LONG"
+    elif prev_rsi >= prev_average and current_rsi < current_average:
+        direction = "SHORT"
+    return {
+        "inst": inst,
+        "signal_close_ms": expected_close_ms,
+        "rsi14_previous": prev_rsi,
+        "rsi14": current_rsi,
+        "rsi_sma14_previous": prev_average,
+        "rsi_sma14": current_average,
+        "cross": direction,
     }
 
 
@@ -115,12 +150,12 @@ def open_position(bot, state, signal, rank, instruments):
         "tp": "",
         "sl": "",
         "tp_policy": "TP_GROSS1",
-        "sl_policy": "NONE",
+        "sl_policy": "RSI14_SMA14_CROSS_EXIT_10M_SOFTWARE",
         "hold_policy": "SMA10_SMA20_OPPOSITE_CROSS",
-        "protection_status": "SMA_PRICE1_TP_PENDING_NO_SL",
+        "protection_status": "SMA_PRICE1_TP_PENDING_RSI_SOFT_EXIT",
         "strategy": f"SMA10_SMA20_{side}_10m",
         "code_commit": bot.CODE_COMMIT,
-        "risk_profile": "ONE_POSITION_1X_TP_GROSS1_NO_SL",
+        "risk_profile": "ONE_POSITION_1X_TP_GROSS1_RSI_CROSS_EXIT_NO_HARD_SL",
         "account_fraction": "",
         "allocation_label": f"SMA CROSS <= {bot.clean_decimal(cap)} USDT bankroll",
     }
@@ -156,7 +191,7 @@ def open_position(bot, state, signal, rank, instruments):
         position["tp"] = bot.clean_decimal(tp)
         position["tpsl_id"] = tpsl_id
         position["tpsl_client_order_id"] = tp_client_id
-        position["protection_status"] = "SMA_PRICE1_TP_ACTIVE_NO_SL"
+        position["protection_status"] = "SMA_PRICE1_TP_ACTIVE_RSI_CROSS_EXIT_NO_HARD_SL"
     except Exception as exc:
         position["protection_status"] = "SMA_TP_SETUP_FAILED"
         position["protection_error"] = str(exc)
@@ -178,7 +213,8 @@ def open_position(bot, state, signal, rank, instruments):
     bot.notify(
         f"OPEN {side} {inst} | SMA10/20 cross 10m | entry {actual_price} "
         f"| {position['notional_usdt']} USDT | 1x | price TP +1% before fees "
-        f"(trigger {position['tp']}) | no SL | exit also on opposite MA cross",
+        f"(trigger {position['tp']}) | close on opposite RSI14/SMA14 cross " 
+        f"or opposite MA10/MA20 cross at confirmed 10m close | no broker SL",
         "BloFin LIVE SMA CROSS",
     )
     return True
@@ -208,25 +244,39 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
         # Follow the instrument even after it has left TOP7.
         inst, pos = next(iter(tracked.items()))
         sig = crossover(bot, inst, expected_close_ms)
-        last["events"].append(sig)
-        if sig["side"] and sig["side"] != pos["side"] and expected_close_ms > int(pos.get("signal_close_ms") or 0):
-            # Cancel the existing TP before a reversal so its broker-side
-            # reduce-only trigger cannot interfere with the reversed position.
+        rsi_sig = rsi_average_crossover(bot, inst, expected_close_ms)
+        last["events"].append({**sig, "rsi_average": rsi_sig})
+        after_entry = expected_close_ms > int(pos.get("signal_close_ms") or 0)
+        opposite_ma = after_entry and sig["side"] is not None and sig["side"] != pos["side"]
+        opposite_rsi = after_entry and rsi_sig["cross"] is not None and rsi_sig["cross"] != pos["side"]
+        if opposite_ma or opposite_rsi:
+            # Cancel the broker's reduce-only TP before an indicator-based
+            # market exit; a leftover TP could interfere with a future entry.
             if pos.get("tpsl_id"):
                 bot.cancel_specific_tpsl(pos)
                 pos["tpsl_id"] = ""
                 pos["tpsl_client_order_id"] = ""
                 pos["tp"] = ""
-            bot._run_for_tracked_position(
-                state, inst, bot.close_tracked_position,
-                f"SMA10/SMA20 opposite 10m cross: {sig['side']}",
+            reason = (
+                f"RSI14/SMA14 opposite 10m cross: {rsi_sig['cross']}"
+                if opposite_rsi else f"SMA10/SMA20 opposite 10m cross: {sig['side']}"
             )
-            last["status"] = "OPPOSITE_CROSS_CLOSE_ATTEMPTED"
-            if not bot.get_tracked_positions(state) and not bot.get_open_positions():
-                # Reverse only after exchange confirms the old position is flat.
-                last["reversed"] = open_position(bot, state, sig, top7.index(inst)+1 if inst in top7 else 0, instruments)
+            bot._run_for_tracked_position(
+                state, inst, bot.close_tracked_position, reason,
+            )
+            last["exit_reason"] = reason
+            last["status"] = (
+                "RSI_OPPOSITE_CROSS_CLOSE_ATTEMPTED" if opposite_rsi
+                else "OPPOSITE_CROSS_CLOSE_ATTEMPTED"
+            )
+            if opposite_ma and not bot.get_tracked_positions(state) and not bot.get_open_positions():
+                # Reverse only on an actual opposite price SMA cross; RSI
+                # cross is exit-only and never starts a new position by itself.
+                last["reversed"] = open_position(
+                    bot, state, sig, top7.index(inst) + 1 if inst in top7 else 0, instruments,
+                )
         else:
-            last["status"] = "HOLDING_UNTIL_TP_OR_OPPOSITE_CROSS"
+            last["status"] = "HOLDING_UNTIL_TP_OR_OPPOSITE_RSI_OR_MA_CROSS"
     else:
         account_open = bot.get_open_positions()
         if account_open:
