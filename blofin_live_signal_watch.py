@@ -152,54 +152,36 @@ def persist_learning_12h(
             "status": "collecting",
             "signal_label": bot.SIGNAL_LABEL,
             "strategy_rules": {
-                "SHORT": [
-                    "RED candle",
-                    "current RED volume > last GREEN candle volume",
-                    "RED body <= 1% of close",
-                    "lower wick <= 50% of candle range",
-                    "price return over last 4 bars >= -2%",
-                    "price return over last 4 bars <= 1%",
-                    "price return over last 20 bars <= 10%",
-                    "RSI14 >= 55",
-                    "-0.10 <= ((MACD histogram now - previous) / close * 100) <= 0",
-                    "no LONG-bias pattern with confidence >= 70%"
-                ],
-                "LONG": [
-                    "MACD cross up",
-                    "GREEN candle",
-                    "current GREEN volume > last RED candle volume",
-                    "GREEN body >= 60% of candle range",
-                    "close >= 2% vs 10 bars earlier",
-                    "no Stochastic 14,1,3 cross DOWN in last 3 candles",
-                    "RSI14 < 67",
-                    f"{bot.SIGNAL_LABEL} close increase vs prior close < 3%",
-                ],
-            },
+        "SHORT": [
+            "OBV close - OBV 5 closed candles earlier > 0",
+            "MACD histogram < 0",
+            "RSI14 >= 55",
+        ],
+        "LONG": [
+            "RSI14 < 67",
+            "OBV close - OBV 5 closed candles earlier > 0",
+            "MACD histogram < 0",
+            "MACD histogram > previous histogram",
+            "current volume < SMA(volume, 5)",
+            "current volume > volume of last earlier RED candle",
+        ],
+    },
             "scans": [],
         }
 
     payload["strategy_rules"] = {
         "SHORT": [
-            "RED candle",
-            "current RED volume > last GREEN candle volume",
-            "RED body <= 1% of close",
-            "lower wick <= 50% of candle range",
-            "price return over last 4 bars >= -2%",
-            "price return over last 4 bars <= 1%",
-            "price return over last 20 bars <= 10%",
+            "OBV close - OBV 5 closed candles earlier > 0",
+            "MACD histogram < 0",
             "RSI14 >= 55",
-            "-0.10 <= ((MACD histogram now - previous) / close * 100) <= 0",
-            "no LONG-bias pattern with confidence >= 70%"
         ],
         "LONG": [
-            "MACD cross up",
-            "GREEN candle",
-            "current GREEN volume > last RED candle volume",
-            "GREEN body >= 60% of candle range",
-            "close >= 2% vs 10 bars earlier",
-            "no Stochastic 14,1,3 cross DOWN in last 3 candles",
             "RSI14 < 67",
-            f"{bot.SIGNAL_LABEL} close increase vs prior close < 3%",
+            "OBV close - OBV 5 closed candles earlier > 0",
+            "MACD histogram < 0",
+            "MACD histogram > previous histogram",
+            "current volume < SMA(volume, 5)",
+            "current volume > volume of last earlier RED candle",
         ],
     }
 
@@ -239,8 +221,7 @@ def persist_learning_12h(
             selected_candidate = (inst, label) in candidate_keys
             metrics["decision"] = (
                 "CANDIDATE" if selected_candidate else
-                "NOT_SELECTED" if bot.NEAREST_VOLUME else
-                "CANDIDATE" if not missing else "REJECTED"
+                "REJECTED" if missing else "NOT_SELECTED"
             )
             metrics["rejected_because"] = [] if selected_candidate else missing
             metrics["selected_candidate"] = selected_candidate
@@ -372,9 +353,10 @@ def build_live_diagnostic(state, top7):
     if bot.NEAREST_VOLUME:
         lines = [
             f"{bot.SIGNAL_LABEL} TOP{bot.TOP_N} — NEAREST_VOLUME",
-            "LIVE picks the fewest missing conditions (10 SHORT / 7 LONG).",
-            "MANDATORY: directional candle + its volume > preceding opposite-color candle.",
-            "All other conditions are scoring, not entry vetoes.",
+            "LIVE enters ONLY after all >110-frequency filters pass (LONG 6/6, SHORT 3/3).",
+            "LONG: RSI<67, OBV5 rising, MACD hist<0 rising, volume<MA5 and >last RED.",
+            "SHORT: OBV5 rising, MACD hist<0, RSI>=55.",
+            "Ranked TOP7, one new order per scan; LONG wins a same-coin conflict.",
             "",
         ]
     else:
@@ -426,32 +408,15 @@ def build_live_diagnostic(state, top7):
                 and long_one_bar_gain_pct < bot.LONG_MAX_1BAR_RISE_PCT
             )
 
-            s_checks = [
-                ("RED", s["red_candle"]),
-                ("RED_VOL_GT_GREEN", s["volume_higher_than_last_green"]),
-                ("BODY_LE_1PCT", s["short_body_max_1pct"]),
-                ("LOWER_WICK_LE_50PCT", s["lower_wick_max_50pct"]),
-                ("RETURN4_GE_MINUS_2PCT", s["return_4_bars_min_minus_2pct"]),
-                ("RETURN4_LE_1PCT", s["return_4_bars_max_1pct"]),
-                ("RETURN20_LE_10PCT", s["return_20_bars_max_10pct"]),
-                ("RSI_GE_55", s["short_rsi_min_55"]),
-                ("MACD_HIST_DELTA_PCT_CLOSE_IN_RANGE", s["short_macd_hist_delta_ok"]),
-                ("NO_BULL_PATTERN_GE_70PCT", not blocking_short_patterns),
-            ]
-            l_checks = [
-                ("GREEN", l["green_candle"]),
-                ("GREEN_VOL_GT_RED", l["volume_higher_than_last_red"]),
-                ("BODY_GE_60PCT", l["green_body_min_60pct"]),
-                ("RISE10_GE_2PCT", l["rise_10_bars_min_2pct"]),
-                ("STOCH_NO_DOWN_LAST3", l["stoch_long_ok"]),
-                ("RSI_LT_67", l["rsi_below_67"]),
-                ("ONE_BAR_RISE_LT_3PCT", long_one_bar_rise_ok),
-            ]
-
-            s_ok = sum(1 for _, ok in s_checks if ok)
-            l_ok = sum(1 for _, ok in l_checks if ok)
-            s_missing = [name for name, ok in s_checks if not ok]
-            l_missing = [name for name, ok in l_checks if not ok]
+            choices = {opt["side"]: opt for opt in bot.nearest_volume.score_options(bot, bars, i)}
+            short_choice = choices.get("SHORT", {})
+            long_choice = choices.get("LONG", {})
+            s_missing = short_choice.get("missing", ["NO_INDICATOR_DATA"])
+            l_missing = long_choice.get("missing", ["NO_INDICATOR_DATA"])
+            s_total = 3
+            l_total = 6
+            s_ok = s_total - len(s_missing) if short_choice else 0
+            l_ok = l_total - len(l_missing) if long_choice else 0
 
             current_volume = float(cur["v"])
             vol_vs_green_pct = pct_vs(current_volume, s["last_green_volume"])
@@ -485,7 +450,7 @@ def build_live_diagnostic(state, top7):
                 },
                 "chart_patterns": chart_patterns,
                 "short": {
-                    "score": f"{s_ok}/{len(s_checks)}",
+                    "score": f"{s_ok}/{s_total}",
                     "missing": s_missing,
                     "red_candle": bool(s["red_candle"]),
                     "body_pct_close": float(s["red_body_pct_close"]),
@@ -507,13 +472,13 @@ def build_live_diagnostic(state, top7):
                     "macd_hist_delta_min_pct": -0.10,
                     "macd_hist_delta_max_pct": 0.0,
                     "macd_hist_delta_filter_ok": bool(s["short_macd_hist_delta_ok"]),
-                    "pattern_filter_active": True,
+                    "pattern_filter_active": False,
                     "opposing_patterns": short_opposing_patterns,
                     "blocking_opposing_patterns": blocking_short_patterns,
                     "minimum_opposing_pattern_confidence": bot.SHORT_OPPOSING_BULL_PATTERN_MIN_CONFIDENCE,
                 },
                 "long": {
-                    "score": f"{l_ok}/{len(l_checks)}",
+                    "score": f"{l_ok}/{l_total}",
                     "missing": l_missing,
                     "green_candle": bool(l["green_candle"]),
                     "body_pct_range": float(l["green_body_ratio"]) * 100.0,
@@ -551,26 +516,17 @@ def build_live_diagnostic(state, top7):
                 f"UP={'TAK' if l['macd_cross_up'] else 'NIE'}"
             )
             lines.append(
-                f"   SHORT {s_ok}/{len(s_checks)}: candle RED={'TAK' if s['red_candle'] else 'NIE'} | "
-                f"VOL={fmt(current_volume)} vs last GREEN={fmt(s['last_green_volume'])} "
-                f"({fmt(vol_vs_green_pct, 4)}%) | body={s['red_body_pct_close']:.3f}% <=1% "
-                f"| lower wick={s['lower_wick_pct_range']:.1f}% <=50% "
-                f"| RETURN4={s['return_4_bars_pct']:+.3f}% in [-2%, +1%] "
-                f"| RETURN20={s['return_20_bars_pct']:+.3f}% <=10% "
-                f"| RSI14={fmt(s['rsi14'], 4)} >=55 "
-                f"| MACD dH/close={s['macd_hist_delta_pct_close']:+.4f}% in [-0.10%, 0%] "
-                f"| bullish patterns >=70%={len(blocking_short_patterns)} "
+                f"   SHORT {s_ok}/3: RSI14={fmt(s['rsi14'], 4)} >=55 "
+                f"| OBV5={fmt(short_choice.get('obv_delta_5'))} >0 "
+                f"| MACD hist={fmt(cur['macd_hist'])} <0 "
                 f"| brak: {', '.join(s_missing) if s_missing else 'NIC'}"
             )
             lines.append(
-                f"   LONG  {l_ok}/{len(l_checks)}: candle GREEN={'TAK' if l['green_candle'] else 'NIE'} | "
-                f"VOL={fmt(current_volume)} vs last RED={fmt(l['last_red_volume'])} "
-                f"({fmt(vol_vs_red_pct, 4)}%) | body={l['green_body_ratio'] * 100:.1f}% >=60% "
-                f"| 10BAR={l['rise_10_bars_pct']:+.3f}% >=2% "
-                f"| 1BAR={fmt(long_one_bar_gain_pct, 4)}% <3% "
-                f"| STOCH K={fmt(l['stoch_k'], 4)} D={fmt(l['stoch_d'], 4)} "
-                f"| DOWN last3={'TAK' if l['stoch_cross_down_recent_3'] else 'NIE'} "
-                f"| RSI14={fmt(l['rsi14'], 4)} <67 "
+                f"   LONG  {l_ok}/6: RSI14={fmt(l['rsi14'], 4)} <67 "
+                f"| OBV5={fmt(long_choice.get('obv_delta_5'))} >0 "
+                f"| MACD hist={fmt(cur['macd_hist'])} <0 and rising "
+                f"| Volume={fmt(current_volume)} <MA5={fmt(long_choice.get('volume_ma5'))} "
+                f"and >last RED={fmt(l['last_red_volume'])} "
                 f"| brak: {', '.join(l_missing) if l_missing else 'NIC'}"
             )
         except Exception as exc:
@@ -674,7 +630,8 @@ def main():
                 "eligible_entry_order", []
             ),
             "executed": executed,
-            "trade_hard_volume_gate": True,
+            "entry_rule_set": "HISTORICAL_GT110_STRICT",
+            "trade_hard_volume_gate": False,
             "tp_pct": 1,
             "sl_pct": 1,
             "hold_max_minutes": 60,
