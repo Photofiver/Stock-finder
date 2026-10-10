@@ -999,9 +999,31 @@
     ],
     "ma_cross": {
       "events": [],
-      "signal_close_ms": 1791661200000,
-      "signals": [],
-      "status": "NO_CROSS",
+      "selected": {
+        "close": 0.929,
+        "inst": "AERO-USDT",
+        "ma10": 0.9061999999999999,
+        "ma10_previous": 0.9029400000000001,
+        "ma20": 0.9045500000000001,
+        "ma20_previous": 0.90338,
+        "side": "LONG",
+        "signal_close_ms": 1791661800000
+      },
+      "signal_close_ms": 1791661800000,
+      "signals": [
+        {
+          "close": 0.929,
+          "inst": "AERO-USDT",
+          "ma10": 0.9061999999999999,
+          "ma10_previous": 0.9029400000000001,
+          "ma20": 0.9045500000000001,
+          "ma20_previous": 0.90338,
+          "rank": 5,
+          "side": "LONG",
+          "signal_close_ms": 1791661800000
+        }
+      ],
+      "status": "OPENED",
       "strategy": "SMA10_SMA20_10m"
     },
     "nearest_volume_entry": {
@@ -1014,7 +1036,7 @@
       "tp_pct": 1,
       "trade_hard_volume_gate": false
     },
-    "result": "NO_CROSS",
+    "result": "OPENED",
     "signal_label": "10m",
     "strategy": "SMA10_SMA20_10m",
     "top7": [
@@ -1728,8 +1750,8 @@
     "ZRO-USDT": 1791299700000,
     "ZRX-USDT": 1791631800000
   },
-  "last_run_ms": 1791661278095,
-  "last_scan_close_ms": 1791661200000,
+  "last_run_ms": 1791661879558,
+  "last_scan_close_ms": 1791661800000,
   "last_top10": [
     "CELR-USDT",
     "LUNA2-USDT",
@@ -1990,13 +2012,86 @@
   "legacy_pnl_note": "Four earlier closes were recorded as FLAT because BloFin close history was not ready. They are marked unverified and excluded from verified PnL.",
   "ma_cross_last_scan": {
     "events": [],
-    "signal_close_ms": 1791661200000,
-    "signals": [],
-    "status": "NO_CROSS",
+    "selected": {
+      "close": 0.929,
+      "inst": "AERO-USDT",
+      "ma10": 0.9061999999999999,
+      "ma10_previous": 0.9029400000000001,
+      "ma20": 0.9045500000000001,
+      "ma20_previous": 0.90338,
+      "side": "LONG",
+      "signal_close_ms": 1791661800000
+    },
+    "signal_close_ms": 1791661800000,
+    "signals": [
+      {
+        "close": 0.929,
+        "inst": "AERO-USDT",
+        "ma10": 0.9061999999999999,
+        "ma10_previous": 0.9029400000000001,
+        "ma20": 0.9045500000000001,
+        "ma20_previous": 0.90338,
+        "rank": 5,
+        "side": "LONG",
+        "signal_close_ms": 1791661800000
+      }
+    ],
+    "status": "OPENED",
     "strategy": "SMA10_SMA20_10m"
   },
   "position": null,
-  "positions": {},
+  "positions": {
+    "AERO-USDT": {
+      "account_fraction": "",
+      "allocation_label": "SMA CROSS <= 9.74637598 USDT bankroll",
+      "client_order_id": "livema5046df6bcf61415d99391911c7",
+      "code_commit": "3ea04cb5532e13dc73bd32d0747022527d07924c",
+      "entry_fee": "0.005544000000000000",
+      "filled_size": "10",
+      "hold_policy": "SMA10_SMA20_OPPOSITE_CROSS",
+      "inst": "AERO-USDT",
+      "notional_usdt": "9.24",
+      "opened_ms": 1791661879009,
+      "order_id": "2000088629577",
+      "protection_status": "SMA_PRICE1_TP_SL_ACTIVE",
+      "reference_entry": "0.924",
+      "risk_profile": "ONE_POSITION_1X_TP_GROSS1_SL_GROSS1_RSI_CROSS_EXIT",
+      "side": "LONG",
+      "signal_age_ms": 78182,
+      "signal_close_ms": 1791661800000,
+      "signal_rank": 5,
+      "signal_snapshot": {
+        "close": 0.929,
+        "inst": "AERO-USDT",
+        "ma10": 0.9061999999999999,
+        "ma10_previous": 0.9029400000000001,
+        "ma20": 0.9045500000000001,
+        "ma20_previous": 0.90338,
+        "pre_order_price_guard": {
+          "adverse_gap_filter_enabled": false,
+          "adverse_gap_pct": -0.527448869752422,
+          "ask": "0.9241",
+          "bid": "0.922",
+          "expected_fill": "0.9241",
+          "max_adverse_gap_pct": null,
+          "max_spread_pct": 0.25,
+          "quote_age_ms": 4321,
+          "signal_close": "0.929",
+          "spread_pct": 0.2275066356102053
+        },
+        "side": "LONG",
+        "signal_close_ms": 1791661800000
+      },
+      "size": "10",
+      "sl": "0.9148",
+      "sl_policy": "SL_GROSS1_BROKER",
+      "strategy": "SMA10_SMA20_LONG_10m",
+      "tp": "0.9333",
+      "tp_policy": "TP_GROSS1",
+      "tpsl_client_order_id": "livetpslab8f797ec0294c439b71f84c",
+      "tpsl_id": "10028629648"
+    }
+  },
   "realized_pnl_usdt": -7.782861444429606,
   "risk_stop_triggered": false,
   "started_at_ms": 1789658980518,
