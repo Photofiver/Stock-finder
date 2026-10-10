@@ -169,8 +169,16 @@ def snapshot_indicators(bars):
     long_metrics = bot.long_entry_metrics(bars, len(bars) - 1) or {}
     ma5 = bot.volume_ma(bars, len(bars) - 1, 5)
     vol = float(cur["v"])
+    from blofin_ma10_ma20_live import rsi_average_crossover
+    try:
+        rsi_average = rsi_average_crossover(
+            bot, "", bot.bar_close_ms(cur), bars=bars,
+        )
+    except (RuntimeError, ValueError, TypeError, IndexError) as exc:
+        rsi_average = {"cross": None, "error": str(exc)}
     return {
         "rsi14": cur.get("rsi"),
+        "rsi14_sma14_cross": rsi_average,
         "macd_dif": cur.get("macd_dif"),
         "macd_dea": cur.get("macd_dea"),
         "macd_hist": hist,
@@ -734,6 +742,7 @@ def record_current_scan(history, cache):
         indicators_at_signal = None
         indicator_error = None
         sma_snapshot = None
+        rsi_average_snapshot = None
         if inst and candle.get("close"):
             bars = fetch_cached(inst, cache)
             if isinstance(bars, Exception):
@@ -745,6 +754,7 @@ def record_current_scan(history, cache):
                     adx14 = indicators_at_signal["adx14"]
                     obv_delta_5 = indicators_at_signal["obv_delta_5"]
                     sma_snapshot = indicators_at_signal["sma10_20"]
+                    rsi_average_snapshot = indicators_at_signal["rsi14_sma14_cross"]
                 else:
                     indicator_error = "Signal candle not in available closed-bar history"
                     print(f"AUDIT_CANDLE_MISSING {inst} {signal_close_ms}")
@@ -764,6 +774,7 @@ def record_current_scan(history, cache):
             ),
             "macd": item.get("macd"),
             "sma10_20": sma_snapshot,
+            "rsi14_sma14_cross": rsi_average_snapshot,
             "chart_patterns": item.get("chart_patterns"),
             "short": item.get("short"),
             "long": item.get("long"),
@@ -785,7 +796,11 @@ def record_current_scan(history, cache):
             "slow": "SMA20 of close",
             "entry": "confirmed MA cross on closed candle only",
             "take_profit": "1% favorable PRICE move before fees",
-            "stop_loss": None,
+            "stop_loss": "software market exit on opposite RSI14 / SMA14-of-RSI cross confirmed by 10m close",
+            "broker_stop_loss": None,
+            "rsi_period": 14,
+            "rsi_average_type": "SMA",
+            "rsi_average_period": 14,
             "other_exit": "opposite SMA crossover",
             "net_pnl_source": "actual BloFin realizedPnl including fees",
         } if is_sma_scan else None,
