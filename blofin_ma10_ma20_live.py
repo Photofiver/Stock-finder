@@ -4,7 +4,6 @@ New SMA positions have no TP/SL or time exit: close on opposite SMA cross.
 Legacy positions retain their original broker protection until naturally closed.
 Only one account position is permitted while this strategy is active.
 """
-import os
 import uuid
 
 
@@ -145,6 +144,9 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
     current_insts = list(bot.get_tracked_positions(state))
     wait_for_confirmed_close(list(dict.fromkeys(top7 + current_insts)), expected_close_ms)
     bot.sync_all_tracked_positions(state)
+    for pos in bot.get_tracked_positions(state).values():
+        if pos.get("hold_policy") == "SMA10_SMA20_OPPOSITE_CROSS":
+            pos["protection_status"] = "SMA_CROSS_ONLY_NO_BROKER_TPSL"
     # Legacy positions keep their existing broker TP/SL and 60m exit.
     bot.evaluate_all_tracked_exit_signals(state, expected_close_ms)
     tracked = bot.get_tracked_positions(state)
@@ -203,6 +205,9 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
                     bot.notify(f"SMA CROSS {sig['inst']} order attempt failed: {exc}", "BloFin LIVE ERROR")
                     break
     state["ma_cross_last_scan"] = last
+    state.setdefault("last_diagnostic", {})["ma_cross"] = last
+    state["last_diagnostic"]["result"] = last["status"]
+    state["last_diagnostic"]["strategy"] = "SMA10_SMA20_10m"
     state["last_scan_close_ms"] = expected_close_ms
     state["last_run_ms"] = bot.now_ms()
     state["last_top7"] = top7
