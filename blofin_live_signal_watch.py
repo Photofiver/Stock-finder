@@ -560,6 +560,13 @@ def main():
         raise RuntimeError("BloFin TOP7 is empty")
 
     expected_close_ms = expected_signal_close_ms()
+    if os.getenv("LIVE_MA_CROSS", "").strip().lower() == "true":
+        import blofin_ma10_ma20_live as ma_cross
+        ma_cross.run(
+            bot, state, top7, tickers, instruments, expected_close_ms,
+            wait_for_confirmed_signal_close,
+        )
+        return
     last_scan_close_ms = int(state.get("last_scan_close_ms") or 0)
     if last_scan_close_ms == expected_close_ms:
         print(
