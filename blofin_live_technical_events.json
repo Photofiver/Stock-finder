@@ -2358,6 +2358,40 @@
       "signal_label": "10m",
       "timestamp_ms": 1791600677449,
       "timestamp_utc": "2026-10-10T02:51:17.449020+00:00"
+    },
+    {
+      "event_type": "ENTRY_CHASE_BLOCKED",
+      "extra": {
+        "adverse_gap_pct": 0.5068937550689375,
+        "ask": "0.09914",
+        "bid": "0.09909",
+        "expected_fill": "0.09914",
+        "max_adverse_gap_pct": 0.25,
+        "max_spread_pct": 0.25,
+        "quote_age_ms": 8251,
+        "signal_close": "0.09864",
+        "spread_pct": 0.05044645109216567
+      },
+      "inst": "CAP-USDT",
+      "message": "Entry quote too far from LONG signal candle close",
+      "side": "LONG",
+      "signal_label": "10m",
+      "timestamp_ms": 1791602477059,
+      "timestamp_utc": "2026-10-10T03:21:17.059059+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 1
+      },
+      "inst": "CAP-USDT",
+      "message": "CAP-USDT LONG skipped; trying next volume-eligible coin: RuntimeError: CAP-USDT LONG: adverse price move 0.507% > 0.25% from signal close",
+      "rank": 5,
+      "side": "LONG",
+      "signal_close_ms": 1791602400000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791602477062,
+      "timestamp_utc": "2026-10-10T03:21:17.062312+00:00"
     }
   ],
   "version": 1
