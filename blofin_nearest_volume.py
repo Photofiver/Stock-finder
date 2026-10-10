@@ -1,7 +1,6 @@
-"""LIVE 15m TOP7 nearest-score selection, requiring directional volume.
+"""10m LIVE TOP7 selection using strictly all >110-frequency winner filters.
 
-Scores match the 10 SHORT and 7 LONG conditions saved in live_watch_history.
-This module only selects candidates; actual broker safety/order code is unchanged.
+At most one new order per scan; preserve order safety, exposure and fallback.
 """
 
 
@@ -34,64 +33,54 @@ def initialize_bankroll(state):
 
 
 def score_options(bot, bars, i):
-    """The same 10 SHORT and 7 LONG checks as in saved scan diagnostics."""
-    if i < 20:
-        return []
-    s = bot.short_entry_metrics(bars, i)
-    l = bot.long_entry_metrics(bars, i)
-    if not s or not l:
+    """Strict >110 occurrences strategy; AND all rules for each direction."""
+    if i < 40 or i >= len(bars):
         return []
     current, previous = bars[i], bars[i - 1]
-    close_previous = float(previous["c"])
-    rise_1bar = (
-        (float(current["c"]) / close_previous - 1.0) * 100
-        if close_previous > 0 else None
+    current_hist = current.get("macd_hist")
+    previous_hist = previous.get("macd_hist")
+    rsi = current.get("rsi")
+    if current_hist is None or previous_hist is None or rsi is None:
+        return []
+
+    # OBV close minus OBV five closed bars earlier.
+    obv_change = sum(
+        float(bars[j]["v"]) * (
+            1 if bars[j]["c"] > bars[j - 1]["c"]
+            else -1 if bars[j]["c"] < bars[j - 1]["c"] else 0
+        )
+        for j in range(i - 4, i + 1)
     )
-    bullish_pattern = any(
-        str(p.get("bias") or "").upper() == "LONG"
-        and float(p.get("confidence") or 0) >=
-        bot.SHORT_OPPOSING_BULL_PATTERN_MIN_CONFIDENCE
-        for p in bot.detect_chart_patterns(bars, i)
-    )
+    volume = float(current["v"])
+    volume_ma5 = bot.volume_ma(bars, i, 5)
+    long_metrics = bot.long_entry_metrics(bars, i)
+    if long_metrics is None or volume_ma5 is None:
+        return []
+
     checks = {
-        "SHORT": [
-            ("RED", s["red_candle"]),
-            ("RED_VOL_GT_GREEN", s["volume_higher_than_last_green"]),
-            ("BODY_LE_1PCT", s["short_body_max_1pct"]),
-            ("LOWER_WICK_LE_50PCT", s["lower_wick_max_50pct"]),
-            ("RETURN4_GE_MINUS_2PCT", s["return_4_bars_min_minus_2pct"]),
-            ("RETURN4_LE_1PCT", s["return_4_bars_max_1pct"]),
-            ("RETURN20_LE_10PCT", s["return_20_bars_max_10pct"]),
-            ("RSI_GE_55", s["short_rsi_min_55"]),
-            ("MACD_HIST_DELTA_PCT_CLOSE_IN_RANGE", s["short_macd_hist_delta_ok"]),
-            ("NO_BULL_PATTERN_GE_70PCT", not bullish_pattern),
-        ],
         "LONG": [
-            ("GREEN", l["green_candle"]),
-            ("GREEN_VOL_GT_RED", l["volume_higher_than_last_red"]),
-            ("BODY_GE_60PCT", l["green_body_min_60pct"]),
-            ("RISE10_GE_2PCT", l["rise_10_bars_min_2pct"]),
-            ("STOCH_NO_DOWN_LAST3", l["stoch_long_ok"]),
-            ("RSI_LT_67", l["rsi_below_67"]),
-            ("ONE_BAR_RISE_LT_3PCT", rise_1bar is not None
-             and rise_1bar < bot.LONG_MAX_1BAR_RISE_PCT),
+            ("RSI_LT_67", float(rsi) < 67.0),
+            ("OBV_RISING_5", obv_change > 0),
+            ("MACD_HIST_NEGATIVE", float(current_hist) < 0),
+            ("MACD_HIST_RISING", float(current_hist) > float(previous_hist)),
+            ("VOLUME_BELOW_MA5", volume < float(volume_ma5)),
+            ("VOLUME_GT_LAST_RED", bool(long_metrics["volume_higher_than_last_red"])),
+        ],
+        "SHORT": [
+            ("OBV_RISING_5", obv_change > 0),
+            ("MACD_HIST_NEGATIVE", float(current_hist) < 0),
+            ("RSI_GE_55", float(rsi) >= 55.0),
         ],
     }
+    last_red = long_metrics.get("last_red_volume")
+    advantage = (
+        ((volume / float(last_red)) - 1.0) * 100.0
+        if last_red not in (None, 0) else None
+    )
     options = []
-    color = bot.candle_color(current)
-    for side in ("SHORT", "LONG"):
+    for side in ("LONG", "SHORT"):
         tests = checks[side]
         missing = [name for name, passed in tests if not passed]
-        ref = s["last_green_volume"] if side == "SHORT" else l["last_red_volume"]
-        advantage = (
-            (float(current["v"]) / float(ref) - 1.0) * 100
-            if ref not in (None, 0) else None
-        )
-        correct_color = color == ("GREEN" if side == "LONG" else "RED")
-        volume_pass = (
-            s["volume_higher_than_last_green"] if side == "SHORT"
-            else l["volume_higher_than_last_red"]
-        )
         passed_count = len(tests) - len(missing)
         options.append({
             "side": side,
@@ -99,30 +88,44 @@ def score_options(bot, bars, i):
             "score_ratio": passed_count / len(tests),
             "missing": missing,
             "missing_count": len(missing),
-            "volume_rule_passed": bool(
-                correct_color and volume_pass
-                and advantage is not None and advantage > 0
-            ),
-            "volume_advantage_pct": advantage,
+            "entry_eligible": not missing,
+            "volume_rule_passed": bool(long_metrics["volume_higher_than_last_red"]) if side == "LONG" else None,
+            "volume_advantage_pct": advantage if side == "LONG" else None,
+            "obv_delta_5": obv_change,
+            "volume_ma5": volume_ma5,
+            "rsi14": float(rsi),
+            "macd_hist": float(current_hist),
+            "macd_hist_previous": float(previous_hist),
         })
     return options
 
 
 def volume_snapshot_passes(snapshot, side):
+    """Revalidate ALL >110 entry rules using the exact closed candle.
+
+    The name is retained for compatibility with the existing broker safety gate.
+    Fail closed on absent or changed signal data.
+    """
     if side not in ("LONG", "SHORT") or snapshot.get("snapshot_error"):
         return False
-    metrics = snapshot.get("filter_metrics") or {}
-    correct_color = snapshot.get("color") == (
-        "GREEN" if side == "LONG" else "RED"
+    signal_close_ms = int(snapshot.get("signal_close_ms") or 0)
+    inst = str(snapshot.get("inst") or "")
+    if not inst or not signal_close_ms:
+        return False
+    import blofin_live_hourly as bot
+    bars = bot.fetch_signal_bars(inst)
+    signal_idx = next(
+        (i for i, bar in enumerate(bars)
+         if bot.bar_close_ms(bar) == signal_close_ms),
+        None,
     )
-    key = (
-        "volume_higher_than_last_red" if side == "LONG"
-        else "volume_higher_than_last_green"
-    )
-    return (
-        correct_color
-        and bool(metrics.get(key))
-        and float(snapshot.get("volume_vs_opposite_ratio") or 0) > 1
+    if signal_idx is None:
+        return False
+    if float(bars[signal_idx]["c"]) != float(snapshot.get("close") or 0):
+        return False
+    return any(
+        option["side"] == side and option["entry_eligible"]
+        for option in score_options(bot, bars, signal_idx)
     )
 
 
@@ -136,7 +139,7 @@ def select_signals(state, top7):
         try:
             bars = bot.fetch_signal_bars(inst)
             if len(bars) < 40:
-                raise ValueError("Insufficient confirmed 15m bars")
+                raise ValueError("Insufficient confirmed signal bars")
             i = len(bars) - 1
             signal_close_ms = bot.bar_close_ms(bars[i])
             if signal_close_ms <= int(processed.get(inst) or 0):
@@ -151,29 +154,29 @@ def select_signals(state, top7):
             processed[inst] = max(int(processed.get(inst) or 0), signal_close_ms)
         except Exception as exc:
             errors.append({"inst": inst, "error": f"{type(exc).__name__}: {exc}"})
-            print(f"NEAREST_VOLUME data unavailable {inst}: {exc}")
+            print(f"GT110 data unavailable {inst}: {exc}")
+
+    # Rank TOP7 first. If both directions qualify on one coin, prefer LONG.
     ordered = sorted(
         [row for row in options
-         if row["volume_rule_passed"]
+         if row["entry_eligible"]
          and 0 <= row["signal_age_ms"] <= bot.SIGNAL_MAX_AGE_MS],
-        key=lambda row: (
-            row["missing_count"], -row["score_ratio"],
-            -row["volume_advantage_pct"], row["rank_in_top7"],
-            row["inst"], row["side"],
-        ),
+        key=lambda row: (row["rank_in_top7"], row["inst"],
+                         0 if row["side"] == "LONG" else 1),
     )
     state["last_pretrade_ranking"] = {
         "generated_at_ms": bot.now_ms(),
-        "strategy": "NEAREST_VOLUME",
-        "volume_is_mandatory": True,
+        "strategy": "HISTORICAL_GT110_STRICT",
+        "conditions_long": 6,
+        "conditions_short": 3,
         "max_new_positions_per_scan": 1,
         "fallback_after_preorder_rejection": True,
         "not_a_profit_prediction": True,
         "scores": sorted(
             options,
-            key=lambda row: (
-                row["missing_count"], -row["score_ratio"], row["rank_in_top7"],
-            ),
+            key=lambda row: (row["missing_count"],
+                             row["rank_in_top7"],
+                             0 if row["side"] == "LONG" else 1),
         ),
         "errors": errors,
         "eligible_entry_order": [{
@@ -181,21 +184,16 @@ def select_signals(state, top7):
             "top7_rank": row["rank_in_top7"],
             "score": row["score"],
             "missing": row["missing"],
-            "volume_advantage_pct": row["volume_advantage_pct"],
             "priority": idx,
         } for idx, row in enumerate(ordered, start=1)],
         "entry_attempts": [],
     }
     if not ordered:
-        print("NEAREST_VOLUME no entry: no fresh volume-confirmed TOP7 candidate")
+        print("GT110 no entry: no fresh fully qualified TOP7 candidate")
         return []
-    print(
-        "NEAREST_VOLUME fallback order: " +
-        ", ".join(
-            f"{row['inst']} {row['side']} {row['score']}"
-            for row in ordered
-        )
-    )
+    print("GT110 strict entry order: " + ", ".join(
+        f"{row['inst']} {row['side']} {row['score']}" for row in ordered
+    ))
     return [
         (row["rank_in_top7"], row["inst"], row["side"], row["signal_close_ms"])
         for row in ordered
@@ -309,7 +307,7 @@ def execute_with_fallback(state, candidates, tickers, instruments):
             )
             if not volume_snapshot_passes(snapshot, side):
                 raise ValueError(
-                    "Mandatory 15m candle color/volume condition failed"
+                    "Mandatory >110 strategy entry condition failed"
                 )
             bot.checked_preorder_quote(inst, side, snapshot["close"])
         except Exception as exc:
