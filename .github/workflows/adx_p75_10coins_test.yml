@@ -1,0 +1,31 @@
+name: ADX P75 ten real coins test (read-only)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - adx_p75_10coins_readonly_test.py
+      - .github/workflows/adx_p75_10coins_test.yml
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile independent test (no trading API)
+        run: python -m py_compile adx_p75_10coins_readonly_test.py
+      - name: Download public BloFin historical candles and compare 10 real coins
+        run: python -u adx_p75_10coins_readonly_test.py
+      - name: Upload transparent test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: adx-p75-10-real-coins
+          path: adx_p75_10coins_results.json
+          if-no-files-found: ignore
