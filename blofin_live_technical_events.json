@@ -2183,6 +2183,82 @@
       "signal_label": "10m",
       "timestamp_ms": 1791597078831,
       "timestamp_utc": "2026-10-10T01:51:18.831881+00:00"
+    },
+    {
+      "event_type": "ENTRY_CHASE_BLOCKED",
+      "extra": {
+        "adverse_gap_pct": 0.37375415282392027,
+        "ask": "0.02417",
+        "bid": "0.02414",
+        "expected_fill": "0.02417",
+        "max_adverse_gap_pct": 0.25,
+        "max_spread_pct": 0.25,
+        "quote_age_ms": 14898,
+        "signal_close": "0.02408",
+        "spread_pct": 0.12419788863589319
+      },
+      "inst": "XDP-USDT",
+      "message": "Entry quote too far from LONG signal candle close",
+      "side": "LONG",
+      "signal_label": "10m",
+      "timestamp_ms": 1791598280596,
+      "timestamp_utc": "2026-10-10T02:11:20.596529+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 1
+      },
+      "inst": "XDP-USDT",
+      "message": "XDP-USDT LONG skipped; trying next volume-eligible coin: RuntimeError: XDP-USDT LONG: adverse price move 0.374% > 0.25% from signal close",
+      "rank": 5,
+      "side": "LONG",
+      "signal_close_ms": 1791598200000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791598280599,
+      "timestamp_utc": "2026-10-10T02:11:20.599603+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 2
+      },
+      "inst": "PIXEL-USDT",
+      "message": "PIXEL-USDT LONG skipped; trying next volume-eligible coin: RuntimeError: PIXEL-USDT: stale market quote age=17562ms (max 15000ms)",
+      "rank": 6,
+      "side": "LONG",
+      "signal_close_ms": 1791598200000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791598280993,
+      "timestamp_utc": "2026-10-10T02:11:20.993337+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 3
+      },
+      "inst": "KAIA-USDT",
+      "message": "KAIA-USDT LONG skipped; trying next volume-eligible coin: RuntimeError: KAIA-USDT: stale market quote age=16313ms (max 15000ms)",
+      "rank": 3,
+      "side": "LONG",
+      "signal_close_ms": 1791598200000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791598281368,
+      "timestamp_utc": "2026-10-10T02:11:21.368554+00:00"
+    },
+    {
+      "event_type": "NEAREST_VOLUME_FALLBACK_PREORDER",
+      "extra": {
+        "priority": 4
+      },
+      "inst": "US-USDT",
+      "message": "US-USDT SHORT skipped; trying next volume-eligible coin: RuntimeError: US-USDT: stale market quote age=17346ms (max 15000ms)",
+      "rank": 1,
+      "side": "SHORT",
+      "signal_close_ms": 1791598200000,
+      "signal_label": "10m",
+      "timestamp_ms": 1791598281873,
+      "timestamp_utc": "2026-10-10T02:11:21.873406+00:00"
     }
   ],
   "version": 1
