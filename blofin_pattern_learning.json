@@ -2977,6 +2977,40 @@
       ],
       "side": "LONG",
       "signal_close_ms": 1791589800000
+    },
+    {
+      "closed_ms": 1791590803033,
+      "inst": "MAGIC-USDT",
+      "net_pnl_usdt": -0.15534006,
+      "patterns": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.66,
+          "evidence": {
+            "high_slope_pct_per_bar": 0.282,
+            "low_slope_pct_per_bar": 0.3332,
+            "width_ratio": 0.539
+          },
+          "name": "RISING_WEDGE"
+        }
+      ],
+      "result": "LOSS",
+      "reviews": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.66,
+          "effect_if_used_as_filter": "HURT",
+          "evidence": {
+            "high_slope_pct_per_bar": 0.282,
+            "low_slope_pct_per_bar": 0.3332,
+            "width_ratio": 0.539
+          },
+          "name": "RISING_WEDGE",
+          "relation_to_trade": "SUPPORTS"
+        }
+      ],
+      "side": "SHORT",
+      "signal_close_ms": 1791590400000
     }
   ],
   "interpretation": "HELPED = pattern supported a winner or opposed a loser; HURT = pattern supported a loser or opposed a winner.",
@@ -3114,12 +3148,12 @@
     },
     "RISING_WEDGE": {
       "helped": 5,
-      "hurt": 5,
-      "losses_when_present": 2,
+      "hurt": 6,
+      "losses_when_present": 3,
       "no_effect": 0,
       "opposes_trade": 5,
-      "seen": 10,
-      "supports_trade": 5,
+      "seen": 11,
+      "supports_trade": 6,
       "wins_when_present": 8
     },
     "TRIPLE_BOTTOM": {
