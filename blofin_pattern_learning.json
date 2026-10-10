@@ -4013,6 +4013,82 @@
       "reviews": [],
       "side": "LONG",
       "signal_close_ms": 1791630000000
+    },
+    {
+      "closed_ms": 1791631329132,
+      "inst": "Q-USDT",
+      "net_pnl_usdt": 0.06665764,
+      "patterns": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.747,
+          "evidence": {
+            "neck_depth_pct": 2.534,
+            "peak_gap_pct": 0.054
+          },
+          "name": "DOUBLE_TOP"
+        },
+        {
+          "bias": "SHORT",
+          "confidence": 0.66,
+          "evidence": {
+            "high_slope_pct_per_bar": 0.2127,
+            "low_slope_pct_per_bar": 0.2606,
+            "width_ratio": 0.77
+          },
+          "name": "RISING_WEDGE"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.795,
+          "evidence": {
+            "cup_depth_pct": 4.054,
+            "handle_drop_pct": 1.007,
+            "rim_gap_pct": 1.871
+          },
+          "name": "CUP_AND_HANDLE"
+        }
+      ],
+      "result": "WIN",
+      "reviews": [
+        {
+          "bias": "SHORT",
+          "confidence": 0.747,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "neck_depth_pct": 2.534,
+            "peak_gap_pct": 0.054
+          },
+          "name": "DOUBLE_TOP",
+          "relation_to_trade": "SUPPORTS"
+        },
+        {
+          "bias": "SHORT",
+          "confidence": 0.66,
+          "effect_if_used_as_filter": "HELPED",
+          "evidence": {
+            "high_slope_pct_per_bar": 0.2127,
+            "low_slope_pct_per_bar": 0.2606,
+            "width_ratio": 0.77
+          },
+          "name": "RISING_WEDGE",
+          "relation_to_trade": "SUPPORTS"
+        },
+        {
+          "bias": "LONG",
+          "confidence": 0.795,
+          "effect_if_used_as_filter": "HURT",
+          "evidence": {
+            "cup_depth_pct": 4.054,
+            "handle_drop_pct": 1.007,
+            "rim_gap_pct": 1.871
+          },
+          "name": "CUP_AND_HANDLE",
+          "relation_to_trade": "OPPOSES"
+        }
+      ],
+      "side": "SHORT",
+      "signal_close_ms": 1791630600000
     }
   ],
   "interpretation": "HELPED = pattern supported a winner or opposed a loser; HURT = pattern supported a loser or opposed a winner.",
@@ -4070,13 +4146,13 @@
     },
     "CUP_AND_HANDLE": {
       "helped": 8,
-      "hurt": 4,
+      "hurt": 5,
       "losses_when_present": 5,
       "no_effect": 0,
-      "opposes_trade": 7,
-      "seen": 12,
+      "opposes_trade": 8,
+      "seen": 13,
       "supports_trade": 5,
-      "wins_when_present": 7
+      "wins_when_present": 8
     },
     "DESCENDING_TRIANGLE": {
       "helped": 3,
@@ -4099,14 +4175,14 @@
       "wins_when_present": 15
     },
     "DOUBLE_TOP": {
-      "helped": 6,
+      "helped": 7,
       "hurt": 11,
       "losses_when_present": 9,
       "no_effect": 0,
       "opposes_trade": 8,
-      "seen": 17,
-      "supports_trade": 9,
-      "wins_when_present": 8
+      "seen": 18,
+      "supports_trade": 10,
+      "wins_when_present": 9
     },
     "FALLING_WEDGE": {
       "helped": 7,
@@ -4149,14 +4225,14 @@
       "wins_when_present": 3
     },
     "RISING_WEDGE": {
-      "helped": 7,
+      "helped": 8,
       "hurt": 7,
       "losses_when_present": 5,
       "no_effect": 0,
       "opposes_trade": 6,
-      "seen": 14,
-      "supports_trade": 8,
-      "wins_when_present": 9
+      "seen": 15,
+      "supports_trade": 9,
+      "wins_when_present": 10
     },
     "TRIPLE_BOTTOM": {
       "helped": 4,
