@@ -1335,6 +1335,7 @@ def build_signal_snapshot(inst, side, signal_close_ms, rank):
             hist_delta_pct_close = ((cur_hist - prev_hist) / close) * 100.0
 
         snapshot = {
+            "inst": inst,
             "captured_ms": now_ms(),
             "rank": int(rank),
             "side": side,
