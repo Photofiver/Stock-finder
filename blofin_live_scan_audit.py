@@ -797,7 +797,7 @@ def record_current_scan(history, cache):
             "entry": "confirmed MA cross on closed candle only",
             "take_profit": "1% favorable PRICE move before fees",
             "stop_loss": "software market exit on opposite RSI14 / SMA14-of-RSI cross confirmed by 10m close",
-            "broker_stop_loss": None,
+            "broker_stop_loss": "1% unfavorable price move from fill (broker last-price trigger)",
             "rsi_period": 14,
             "rsi_average_type": "SMA",
             "rsi_average_period": 14,
