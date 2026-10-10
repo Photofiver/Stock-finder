@@ -101,23 +101,9 @@ def open_position(bot, state, signal, rank, instruments):
     if inst not in instruments:
         print(f"SMA CROSS {inst}: missing instrument metadata")
         return False
-    # Replace the 0.25% entry-gap rule with a pullback across the closed signal
-    # candle price. LONG needs a cheaper ask; SHORT needs a higher bid.
-    # Still reject stale quotes and wide spreads in checked_preorder_quote.
+    # No entry gate based on signal candle close: accept directional movement.
+    # Fresh quotes and bid/ask spread checks still apply.
     quote = bot.checked_preorder_quote(inst, side, signal["close"], enforce_adverse_gap=False)
-    signal_close = bot.d(signal["close"])
-    proposed_fill = bot.d(quote["expected_fill"])
-    pullback_ok = (
-        proposed_fill < signal_close if side == "LONG"
-        else proposed_fill > signal_close
-    )
-    if not pullback_ok:
-        raise RuntimeError(
-            f"{inst} {side}: pullback not confirmed across signal close "
-            f"(quote {proposed_fill}; signal close {signal_close})"
-        )
-    quote["entry_filter"] = "PULLBACK_ACROSS_SIGNAL_CLOSE"
-    quote["pullback_confirmed"] = True
     cap = min(bot.MAX_NOTIONAL_USDT, bot.current_live_bankroll(state), bot.get_available_usdt())
     if cap <= 0:
         print("SMA CROSS entry blocked: no bankroll")
