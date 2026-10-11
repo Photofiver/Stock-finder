@@ -2125,24 +2125,37 @@ def checked_preorder_quote(inst, side, signal_close_price, enforce_adverse_gap=T
     signal_price = d(signal_close_price)
     if signal_price <= 0:
         raise RuntimeError(f"{inst}: missing signal candle close")
-    rows = market_get("/api/v1/market/tickers", {"instId": inst})
-    row = next(
-        (item for item in rows if isinstance(item, dict) and item.get("instId") == inst),
-        None,
-    )
-    if row is None:
-        raise RuntimeError(f"{inst}: fresh ticker unavailable")
+    # Retry stale broker timestamps without relaxing the original 15s safety gate.
+    # Never reuse the old quote if refreshing fails. All price/spread checks below
+    # run on the latest validated response before any real order is submitted.
+    for attempt in range(3):
+        rows = market_get("/api/v1/market/tickers", {"instId": inst})
+        row = next(
+            (item for item in rows if isinstance(item, dict) and item.get("instId") == inst),
+            None,
+        )
+        if row is None:
+            raise RuntimeError(f"{inst}: fresh ticker unavailable")
+        quote_ts = int(row.get("ts") or 0)
+        quote_age_ms = now_ms() - quote_ts
+        if quote_ts > 0 and -5000 <= quote_age_ms <= MAX_ENTRY_QUOTE_AGE_MS:
+            break
+        if attempt < 2:
+            print(
+                f"{inst}: stale market quote age={quote_age_ms}ms; "
+                f"retrying ticker refresh {attempt + 1}/2"
+            )
+            time.sleep(0.5)
+    else:
+        raise RuntimeError(
+            f"{inst}: stale market quote age={quote_age_ms}ms "
+            f"(max {MAX_ENTRY_QUOTE_AGE_MS}ms) after 3 checks"
+        )
+
     bid = d(row.get("bidPrice") or "0")
     ask = d(row.get("askPrice") or "0")
     if bid <= 0 or ask <= 0 or ask < bid:
         raise RuntimeError(f"{inst}: invalid bid/ask quote")
-    quote_ts = int(row.get("ts") or 0)
-    quote_age_ms = now_ms() - quote_ts
-    if quote_ts <= 0 or quote_age_ms > MAX_ENTRY_QUOTE_AGE_MS or quote_age_ms < -5000:
-        raise RuntimeError(
-            f"{inst}: stale market quote age={quote_age_ms}ms "
-            f"(max {MAX_ENTRY_QUOTE_AGE_MS}ms)"
-        )
     expected_fill = ask if side == "LONG" else bid
     adverse_gap_pct = (
         (expected_fill / signal_price - 1) * 100
