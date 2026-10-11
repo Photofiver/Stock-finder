@@ -9,6 +9,8 @@ class BrokerStub:
     ROUND_CEILING = ROUND_CEILING
     ROUND_FLOOR = ROUND_FLOOR
     MAX_ENTRY_QUOTE_AGE_MS = 30000
+    SIGNAL_MINUTES = 10
+    SIGNAL_LABEL = "10m"
 
     def __init__(self, last="100"):
         self.last = last
@@ -123,6 +125,18 @@ class Ma10TrailingStopTests(unittest.TestCase):
         self.assertEqual(b.amendments[0][2]["newSlTriggerPrice"], "98.90")
         self.assertEqual(b.cancels, [])
         self.assertEqual(b.closes, [])
+
+    def test_five_minute_stop_policy_and_intrabroker_amendment(self):
+        b = BrokerStub()
+        b.SIGNAL_MINUTES = 5
+        b.SIGNAL_LABEL = "5m"
+        p = pos("LONG", "97")
+        result = ma.refresh_dynamic_ma10_stop(
+            b, {}, p, bars(), 12600000, {"A-USDT": {"tickSize": "0.01"}}
+        )
+        self.assertEqual(result, "MA10_BROKER_STOP_AMENDED")
+        self.assertEqual(p["sl_policy"], "SL_MA10_PCT1_TRAIL_FAVOURABLE_ONLY_5M")
+        self.assertEqual(len(b.amendments), 1)
 
     def test_short_tightens_on_exchange_without_cancelling(self):
         b = BrokerStub()
