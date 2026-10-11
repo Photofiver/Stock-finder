@@ -3,7 +3,7 @@ name: BloFin LIVE signal watch
 on:
   workflow_dispatch:
   schedule:
-    - cron: '9,19,29,39,49,59 * * * *'
+    - cron: '4,9,14,19,24,29,34,39,44,49,54,59 * * * *'
 
 permissions:
   contents: write
@@ -34,7 +34,7 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Align prepared scheduler to 10m candle close
+      - name: Align prepared scheduler to 5m candle close
         if: github.event_name == 'schedule'
         shell: bash
         run: |
@@ -43,31 +43,31 @@ jobs:
           SEC=$(date -u +%S)
           MIN=$((10#$MIN))
           SEC=$((10#$SEC))
-          REM=$((MIN % 10))
+          REM=$((MIN % 5))
           WAIT=0
 
           # Prepare checkout/Python/packages before the candle closes.
-          # Scheduled at :09/:19/...; do not start the strategy until :10/:20/... + 2 seconds.
-          if [ "$REM" -eq 9 ]; then
+          # Scheduled at :04/:09/...; start the strategy at the next 5m boundary + 2 seconds.
+          if [ "$REM" -eq 4 ]; then
             WAIT=$((60 - SEC + 2))
           elif [ "$REM" -eq 0 ] && [ "$SEC" -lt 2 ]; then
             WAIT=$((2 - SEC))
           fi
 
           if [ "$WAIT" -gt 0 ]; then
-            echo "Waiting ${WAIT}s for 10m candle close"
+            echo "Waiting ${WAIT}s for 5m candle close"
             sleep "$WAIT"
           else
             echo "Scheduled run started after boundary; checking immediately"
           fi
 
-      - name: Scan 10m LIVE signal and execute AUTO after revalidation
+      - name: Scan 5m LIVE signal and execute AUTO after revalidation
         env:
           BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
           BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
           BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
           BLOFIN_LIVE_ENABLED: 'true'
-          LIVE_SIGNAL_MINUTES: '10'
+          LIVE_SIGNAL_MINUTES: '5'
           LIVE_MA_CROSS: 'true'
           LIVE_SIGNAL_MAX_AGE_MS: '180000'
           LIVE_MAX_BANKROLL_USDT: '10.00'
@@ -83,9 +83,9 @@ jobs:
           # Read-only diagnostics run AFTER LIVE execution, never before placing orders.
           # A diagnostics/API failure must never block saving LIVE state.
           if [ -f blofin_live_state.json ]; then
-            LIVE_SIGNAL_MINUTES=10 python blofin_live_scan_audit.py || echo 'AUDIT_ERROR: scan diagnostics failed; preserving LIVE state'
-            if [ -f blofin_live_scans/live_watch_history_10m.json ]; then
-              git add -- blofin_live_scans/live_watch_history_10m.json
+            LIVE_SIGNAL_MINUTES=5 python blofin_live_scan_audit.py || echo 'AUDIT_ERROR: scan diagnostics failed; preserving LIVE state'
+            if [ -f blofin_live_scans/live_watch_history_5m.json ]; then
+              git add -- blofin_live_scans/live_watch_history_5m.json
             fi
           fi
           git add blofin_signal_state.json
