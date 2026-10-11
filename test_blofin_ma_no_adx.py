@@ -7,6 +7,7 @@ import blofin_ma10_ma20_live as ma
 
 class FakeBot:
     SIGNAL_MINUTES = 10
+    SIGNAL_LABEL = "10m"
 
     def __init__(self, candles):
         self.candles = candles
@@ -47,10 +48,15 @@ class FakeBot:
         self.saved = state.copy()
 
 
-def candles_with_cross(last_close):
+class FakeBot5(FakeBot):
+    SIGNAL_MINUTES = 5
+    SIGNAL_LABEL = "5m"
+
+
+def candles_with_cross(last_close, interval_ms=600000):
     values = [10.0] * 20 + [last_close]
     return [
-        {"ts": i * 600000, "close_ms": (i + 1) * 600000, "c": value}
+        {"ts": i * interval_ms, "close_ms": (i + 1) * interval_ms, "c": value}
         for i, value in enumerate(values)
     ]
 
@@ -87,6 +93,23 @@ class RemoveAdxLiveTests(unittest.TestCase):
         self.assertEqual(len(selected), 1)
         self.assertEqual(selected[0]["side"], "LONG")
         self.assertNotIn("adx_filter", selected[0])
+
+    def test_five_minute_sma_cross_opens_without_adx(self):
+        bars = candles_with_cross(12.0, interval_ms=300000)
+        bot = FakeBot5({"A-USDT": bars})
+        state = {"positions": {}}
+        selected = []
+
+        with patch.object(ma, "open_position", side_effect=lambda *args: selected.append(args[2]) or True):
+            ma.run(
+                bot, state, ["A-USDT"], {}, {"A-USDT": {}},
+                bars[-1]["close_ms"], lambda insts, close: None,
+            )
+
+        self.assertEqual(state["ma_cross_last_scan"]["status"], "OPENED")
+        self.assertEqual(state["ma_cross_last_scan"]["strategy"], "SMA10_SMA20_5m")
+        self.assertEqual(selected[0]["side"], "LONG")
+        self.assertEqual(bars[-1]["close_ms"], 21 * 300000)
 
     def test_entry_risk_controls_still_run(self):
         """The first remaining entry gate is the existing drawdown control."""
