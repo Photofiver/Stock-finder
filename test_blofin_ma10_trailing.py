@@ -1,4 +1,4 @@
-"""Tests for one-way broker trailing stop 1% beyond LIVE SMA10."""
+"""Tests for one-way SMA10 broker stops capped at 1% from actual entry."""
 import unittest
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 
@@ -70,6 +70,7 @@ def pos(side, stop):
         "inst": "A-USDT",
         "side": side,
         "sl": str(stop),
+        "reference_entry": "100",
         "tp": "102" if side == "LONG" else "98",
         "signal_close_ms": 1,
         "tpsl_id": "test-order",
@@ -118,11 +119,11 @@ class Ma10TrailingStopTests(unittest.TestCase):
             b, {}, p, bars(), 12600000, {"A-USDT": {"tickSize": "0.01"}}
         )
         self.assertEqual(result, "MA10_BROKER_STOP_AMENDED")
-        self.assertEqual(p["sl"], "98.90")
-        self.assertEqual(p["sl_policy"], "SL_MA10_PCT1_TRAIL_FAVOURABLE_ONLY_10M")
+        self.assertEqual(p["sl"], "99.00")
+        self.assertEqual(p["sl_policy"], "SL_MA10_PCT1_TRAIL_ENTRY_PCT1_CAP_10M")
         self.assertEqual(len(b.amendments), 1)
         self.assertEqual(b.amendments[0][1], "/api/v1/trade/amend-tpsl")
-        self.assertEqual(b.amendments[0][2]["newSlTriggerPrice"], "98.90")
+        self.assertEqual(b.amendments[0][2]["newSlTriggerPrice"], "99.00")
         self.assertEqual(b.cancels, [])
         self.assertEqual(b.closes, [])
 
@@ -135,7 +136,7 @@ class Ma10TrailingStopTests(unittest.TestCase):
             b, {}, p, bars(), 12600000, {"A-USDT": {"tickSize": "0.01"}}
         )
         self.assertEqual(result, "MA10_BROKER_STOP_AMENDED")
-        self.assertEqual(p["sl_policy"], "SL_MA10_PCT1_TRAIL_FAVOURABLE_ONLY_5M")
+        self.assertEqual(p["sl_policy"], "SL_MA10_PCT1_TRAIL_ENTRY_PCT1_CAP_5M")
         self.assertEqual(len(b.amendments), 1)
 
     def test_short_tightens_on_exchange_without_cancelling(self):
@@ -145,11 +146,50 @@ class Ma10TrailingStopTests(unittest.TestCase):
             b, {}, p, bars(), 12600000, {"A-USDT": {"tickSize": "0.01"}}
         )
         self.assertEqual(result, "MA10_BROKER_STOP_AMENDED")
-        self.assertEqual(p["sl"], "101.11")
+        self.assertEqual(p["sl"], "101.00")
         self.assertEqual(len(b.amendments), 1)
-        self.assertEqual(b.amendments[0][2]["newSlTriggerPrice"], "101.11")
+        self.assertEqual(b.amendments[0][2]["newSlTriggerPrice"], "101.00")
         self.assertEqual(b.cancels, [])
         self.assertEqual(b.closes, [])
+
+    def test_long_stop_capped_one_percent_below_actual_fill(self):
+        b = BrokerStub()
+        target = ma.bounded_ma10_stop_price(
+            b, "LONG", Decimal("900"), Decimal("100"), Decimal("0.01")
+        )
+        self.assertEqual(target, Decimal("99.00"))
+
+    def test_short_stop_capped_one_percent_above_actual_fill(self):
+        b = BrokerStub()
+        target = ma.bounded_ma10_stop_price(
+            b, "SHORT", Decimal("900"), Decimal("100"), Decimal("0.01")
+        )
+        self.assertEqual(target, Decimal("101.00"))
+
+    def test_long_ma10_stop_remains_tighter_than_entry_cap(self):
+        b = BrokerStub()
+        target = ma.bounded_ma10_stop_price(
+            b, "LONG", Decimal("900"), Decimal("99"), Decimal("0.01")
+        )
+        self.assertEqual(target, Decimal("98.90"))
+
+    def test_short_ma10_stop_remains_tighter_than_entry_cap(self):
+        b = BrokerStub()
+        target = ma.bounded_ma10_stop_price(
+            b, "SHORT", Decimal("900"), Decimal("101"), Decimal("0.01")
+        )
+        self.assertEqual(target, Decimal("101.11"))
+
+    def test_missing_entry_price_fails_safe_instead_of_amending(self):
+        b = BrokerStub()
+        p = pos("LONG", "97")
+        del p["reference_entry"]
+        result = ma.refresh_dynamic_ma10_stop(
+            b, {}, p, bars(), 12600000, {"A-USDT": {"tickSize": "0.01"}}
+        )
+        self.assertEqual(result, "MA10_MISSING_ENTRY_PRICE_CLOSE_ATTEMPTED")
+        self.assertEqual(len(b.closes), 1)
+        self.assertEqual(b.amendments, [])
 
 
 if __name__ == "__main__":
