@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: watchdog-live-trigger-v2
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   watchdog:
@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 355
 
     steps:
-      - name: Run aligned 10m heartbeat loop and trigger LIVE bot
+      - name: Run aligned 5m heartbeat loop and trigger LIVE bot
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -30,11 +30,11 @@ jobs:
           set -euo pipefail
           for i in $(seq 1 23); do
             NOW=$(date +%s)
-            PERIOD=600
-            OFFSET=60
+            PERIOD=300
+            OFFSET=2
             TARGET=$(( ((NOW - OFFSET) / PERIOD + 1) * PERIOD + OFFSET ))
             WAIT=$(( TARGET - NOW ))
-            echo "Heartbeat $i/23: waiting ${WAIT}s for next :01/:11/:21/:31/:41/:51 UTC slot"
+            echo "Heartbeat $i/23: waiting ${WAIT}s for next 5m close +2s UTC slot"
             sleep "$WAIT"
             echo "WATCHDOG_OK $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             echo "Triggering blofin_live_signal_watch.yml"
@@ -49,7 +49,7 @@ jobs:
           done
 
       - name: Start next watchdog run
-        if: always()
+        if: success() || failure()
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
