@@ -1012,9 +1012,51 @@
     ],
     "ma_cross": {
       "events": [],
-      "signal_close_ms": 1791720900000,
-      "signals": [],
-      "status": "NO_CROSS",
+      "selected": {
+        "close": 0.06667,
+        "inst": "CHIP-USDT",
+        "ma10": 0.067471,
+        "ma10_live_cross_level": 0.06736777777777778,
+        "ma10_previous": 0.067568,
+        "ma10_stop_nine_closed_sum": 0.60631,
+        "ma10_stop_offset_pct": 1.0,
+        "ma20": 0.06751199999999999,
+        "ma20_previous": 0.067564,
+        "side": "SHORT",
+        "signal_close_ms": 1791721200000
+      },
+      "signal_close_ms": 1791721200000,
+      "signals": [
+        {
+          "close": 0.06667,
+          "inst": "CHIP-USDT",
+          "ma10": 0.067471,
+          "ma10_live_cross_level": 0.06736777777777778,
+          "ma10_previous": 0.067568,
+          "ma10_stop_nine_closed_sum": 0.60631,
+          "ma10_stop_offset_pct": 1.0,
+          "ma20": 0.06751199999999999,
+          "ma20_previous": 0.067564,
+          "rank": 2,
+          "side": "SHORT",
+          "signal_close_ms": 1791721200000
+        },
+        {
+          "close": 0.5717,
+          "inst": "TIA-USDT",
+          "ma10": 0.5814600000000001,
+          "ma10_live_cross_level": 0.5810555555555555,
+          "ma10_previous": 0.58311,
+          "ma10_stop_nine_closed_sum": 5.2295,
+          "ma10_stop_offset_pct": 1.0,
+          "ma20": 0.5820649999999999,
+          "ma20_previous": 0.582595,
+          "rank": 4,
+          "side": "SHORT",
+          "signal_close_ms": 1791721200000
+        }
+      ],
+      "status": "OPENED",
       "strategy": "SMA10_SMA20_5m"
     },
     "nearest_volume_entry": {
@@ -1027,7 +1069,7 @@
       "tp_pct": 1,
       "trade_hard_volume_gate": false
     },
-    "result": "NO_CROSS",
+    "result": "OPENED",
     "signal_label": "10m",
     "strategy": "SMA10_SMA20_5m",
     "top7": [
@@ -1741,8 +1783,8 @@
     "ZRO-USDT": 1791299700000,
     "ZRX-USDT": 1791631800000
   },
-  "last_run_ms": 1791720923304,
-  "last_scan_close_ms": 1791720900000,
+  "last_run_ms": 1791721229017,
+  "last_scan_close_ms": 1791721200000,
   "last_top10": [
     "CELR-USDT",
     "LUNA2-USDT",
@@ -1760,8 +1802,8 @@
     "CHIP-USDT",
     "SENT-USDT",
     "TIA-USDT",
-    "MAGIC-USDT",
     "S-USDT",
+    "MAGIC-USDT",
     "ZK-USDT"
   ],
   "last_volume_concentration": {
@@ -2003,13 +2045,110 @@
   "legacy_pnl_note": "Four earlier closes were recorded as FLAT because BloFin close history was not ready. They are marked unverified and excluded from verified PnL.",
   "ma_cross_last_scan": {
     "events": [],
-    "signal_close_ms": 1791720900000,
-    "signals": [],
-    "status": "NO_CROSS",
+    "selected": {
+      "close": 0.06667,
+      "inst": "CHIP-USDT",
+      "ma10": 0.067471,
+      "ma10_live_cross_level": 0.06736777777777778,
+      "ma10_previous": 0.067568,
+      "ma10_stop_nine_closed_sum": 0.60631,
+      "ma10_stop_offset_pct": 1.0,
+      "ma20": 0.06751199999999999,
+      "ma20_previous": 0.067564,
+      "side": "SHORT",
+      "signal_close_ms": 1791721200000
+    },
+    "signal_close_ms": 1791721200000,
+    "signals": [
+      {
+        "close": 0.06667,
+        "inst": "CHIP-USDT",
+        "ma10": 0.067471,
+        "ma10_live_cross_level": 0.06736777777777778,
+        "ma10_previous": 0.067568,
+        "ma10_stop_nine_closed_sum": 0.60631,
+        "ma10_stop_offset_pct": 1.0,
+        "ma20": 0.06751199999999999,
+        "ma20_previous": 0.067564,
+        "rank": 2,
+        "side": "SHORT",
+        "signal_close_ms": 1791721200000
+      },
+      {
+        "close": 0.5717,
+        "inst": "TIA-USDT",
+        "ma10": 0.5814600000000001,
+        "ma10_live_cross_level": 0.5810555555555555,
+        "ma10_previous": 0.58311,
+        "ma10_stop_nine_closed_sum": 5.2295,
+        "ma10_stop_offset_pct": 1.0,
+        "ma20": 0.5820649999999999,
+        "ma20_previous": 0.582595,
+        "rank": 4,
+        "side": "SHORT",
+        "signal_close_ms": 1791721200000
+      }
+    ],
+    "status": "OPENED",
     "strategy": "SMA10_SMA20_5m"
   },
   "position": null,
-  "positions": {},
+  "positions": {
+    "CHIP-USDT": {
+      "account_fraction": "",
+      "allocation_label": "SMA CROSS <= 9.827713109920224 USDT bankroll",
+      "client_order_id": "livemaef809d89bd1945138ba7205692",
+      "code_commit": "ebb01fe7b41117ac1273f837e08798b520c3afdd",
+      "entry_fee": "0.005614560000000000",
+      "filled_size": "14",
+      "hold_policy": "SMA10_DYNAMIC_BROKER_STOP",
+      "inst": "CHIP-USDT",
+      "ma10_stop_signal_close_ms": 1791721200000,
+      "notional_usdt": "9.3576",
+      "opened_ms": 1791721228407,
+      "order_id": "2000088644703",
+      "protection_status": "SMA_MA10_PCT1_TRAIL_TP_SL_ACTIVE",
+      "reference_entry": "0.06684",
+      "risk_profile": "ONE_POSITION_1X_TP_GROSS1_SL_MA10_PCT1_TRAIL",
+      "side": "SHORT",
+      "signal_age_ms": 27740,
+      "signal_close_ms": 1791721200000,
+      "signal_rank": 2,
+      "signal_snapshot": {
+        "close": 0.06667,
+        "inst": "CHIP-USDT",
+        "ma10": 0.067471,
+        "ma10_live_cross_level": 0.06736777777777778,
+        "ma10_previous": 0.067568,
+        "ma10_stop_nine_closed_sum": 0.60631,
+        "ma10_stop_offset_pct": 1.0,
+        "ma20": 0.06751199999999999,
+        "ma20_previous": 0.067564,
+        "pre_order_price_guard": {
+          "adverse_gap_filter_enabled": true,
+          "adverse_gap_pct": -0.23998800059997,
+          "ask": "0.0669",
+          "bid": "0.06683",
+          "expected_fill": "0.06683",
+          "max_adverse_gap_pct": 0.25,
+          "max_spread_pct": 0.25,
+          "quote_age_ms": 4897,
+          "signal_close": "0.06667",
+          "spread_pct": 0.10468855155911164
+        },
+        "side": "SHORT",
+        "signal_close_ms": 1791721200000
+      },
+      "size": "14",
+      "sl": "0.06811",
+      "sl_policy": "SL_MA10_PCT1_TRAIL_FAVOURABLE_ONLY_5M",
+      "strategy": "SMA10_SMA20_SHORT_5m",
+      "tp": "0.06617",
+      "tp_policy": "TP_GROSS1",
+      "tpsl_client_order_id": "livetpslc7f90184c928490a8e7d2fd1",
+      "tpsl_id": "10028658748"
+    }
+  },
   "realized_pnl_usdt": -7.880306464509382,
   "risk_stop_triggered": false,
   "started_at_ms": 1789658980518,
