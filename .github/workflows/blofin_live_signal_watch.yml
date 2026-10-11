@@ -3,7 +3,7 @@ name: BloFin LIVE signal watch
 on:
   workflow_dispatch:
   schedule:
-    - cron: '1,11,21,31,41,51 * * * *'
+    - cron: '9,19,29,39,49,59 * * * *'
 
 permissions:
   contents: write
@@ -22,37 +22,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Align pre-trigger to the 10m candle close
-        if: github.event_name == 'push'
-        shell: bash
-        run: |
-          set -euo pipefail
-          MIN=$(date -u +%M)
-          SEC=$(date -u +%S)
-          MIN=$((10#$MIN))
-          SEC=$((10#$SEC))
-          REM=$((MIN % 10))
-          WAIT=0
-
-          # Align early external triggers to the next 10m close.
-          # If a trigger arrives up to 1m59s after a close, run immediately
-          # and process that just-closed candle instead of skipping to the next one.
-          if [ "$REM" -eq 0 ]; then
-            if [ "$SEC" -lt 2 ]; then
-              WAIT=$((2 - SEC))
-            fi
-          elif [ "$REM" -eq 1 ]; then
-            WAIT=0
-          else
-            WAIT=$((((10 - REM) * 60) - SEC + 2))
-          fi
-
-          if [ "$WAIT" -gt 0 ] && [ "$WAIT" -le 605 ]; then
-            echo "Pre-trigger received at ${MIN}:${SEC}; waiting ${WAIT}s for confirmed 10m close"
-            sleep "$WAIT"
-          else
-            echo "Running immediately at minute ${MIN}, second ${SEC}"
-          fi
       - name: Refresh repository state
         shell: bash
         run: |
@@ -64,6 +33,33 @@ jobs:
           python-version: '3.12'
 
       - run: pip install -r requirements.txt
+
+      - name: Align prepared scheduler to 10m candle close
+        if: github.event_name == 'schedule'
+        shell: bash
+        run: |
+          set -euo pipefail
+          MIN=$(date -u +%M)
+          SEC=$(date -u +%S)
+          MIN=$((10#$MIN))
+          SEC=$((10#$SEC))
+          REM=$((MIN % 10))
+          WAIT=0
+
+          # Prepare checkout/Python/packages before the candle closes.
+          # Scheduled at :09/:19/...; do not start the strategy until :10/:20/... + 2 seconds.
+          if [ "$REM" -eq 9 ]; then
+            WAIT=$((60 - SEC + 2))
+          elif [ "$REM" -eq 0 ] && [ "$SEC" -lt 2 ]; then
+            WAIT=$((2 - SEC))
+          fi
+
+          if [ "$WAIT" -gt 0 ]; then
+            echo "Waiting ${WAIT}s for 10m candle close"
+            sleep "$WAIT"
+          else
+            echo "Scheduled run started after boundary; checking immediately"
+          fi
 
       - name: Scan 10m LIVE signal and execute AUTO after revalidation
         env:
