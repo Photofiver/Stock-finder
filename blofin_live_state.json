@@ -149,8 +149,8 @@
     "description": "BloFin history realizedPnl already includes fees; gross=net-fee; net=realizedPnl",
     "version": 1
   },
-  "fees_usdt": -3.82830373812,
-  "gross_realized_pnl_usdt": -3.851182550248611,
+  "fees_usdt": -3.84026281812,
+  "gross_realized_pnl_usdt": -3.754582550248611,
   "last_diagnostic": {
     "generated_at_ms": 1791634279008,
     "instruments": [
@@ -1011,23 +1011,10 @@
       }
     ],
     "ma_cross": {
-      "events": [
-        {
-          "close": 0.02156,
-          "inst": "PLUME-USDT",
-          "ma10": 0.021298,
-          "ma10_live_cross_level": 0.021312222222222222,
-          "ma10_previous": 0.021252,
-          "ma10_stop_nine_closed_sum": 0.19181,
-          "ma10_stop_offset_pct": 1.0,
-          "ma20": 0.021257,
-          "ma20_previous": 0.021243,
-          "side": null,
-          "signal_close_ms": 1791748500000
-        }
-      ],
-      "signal_close_ms": 1791748500000,
-      "status": "HOLDING_MA10_TRAIL_NO_LOOSENING",
+      "events": [],
+      "signal_close_ms": 1791748800000,
+      "signals": [],
+      "status": "NO_CROSS",
       "strategy": "SMA10_SMA20_5m"
     },
     "nearest_volume_entry": {
@@ -1040,7 +1027,7 @@
       "tp_pct": 1,
       "trade_hard_volume_gate": false
     },
-    "result": "HOLDING_MA10_TRAIL_NO_LOOSENING",
+    "result": "NO_CROSS",
     "signal_label": "10m",
     "strategy": "SMA10_SMA20_5m",
     "top7": [
@@ -1754,8 +1741,8 @@
     "ZRO-USDT": 1791299700000,
     "ZRX-USDT": 1791631800000
   },
-  "last_run_ms": 1791748518857,
-  "last_scan_close_ms": 1791748500000,
+  "last_run_ms": 1791748825001,
+  "last_scan_close_ms": 1791748800000,
   "last_top10": [
     "CELR-USDT",
     "LUNA2-USDT",
@@ -2015,83 +2002,15 @@
   },
   "legacy_pnl_note": "Four earlier closes were recorded as FLAT because BloFin close history was not ready. They are marked unverified and excluded from verified PnL.",
   "ma_cross_last_scan": {
-    "events": [
-      {
-        "close": 0.02156,
-        "inst": "PLUME-USDT",
-        "ma10": 0.021298,
-        "ma10_live_cross_level": 0.021312222222222222,
-        "ma10_previous": 0.021252,
-        "ma10_stop_nine_closed_sum": 0.19181,
-        "ma10_stop_offset_pct": 1.0,
-        "ma20": 0.021257,
-        "ma20_previous": 0.021243,
-        "side": null,
-        "signal_close_ms": 1791748500000
-      }
-    ],
-    "signal_close_ms": 1791748500000,
-    "status": "HOLDING_MA10_TRAIL_NO_LOOSENING",
+    "events": [],
+    "signal_close_ms": 1791748800000,
+    "signals": [],
+    "status": "NO_CROSS",
     "strategy": "SMA10_SMA20_5m"
   },
   "position": null,
-  "positions": {
-    "PLUME-USDT": {
-      "account_fraction": "",
-      "allocation_label": "SMA CROSS <= 10 USDT bankroll",
-      "client_order_id": "livema76c081bf7cf94388b4a1bf2a7c",
-      "code_commit": "3cefd7358c11b79c25075f9a73a69a1aa46312ad",
-      "entry_fee": "0.005950560000000000",
-      "filled_size": "46",
-      "hold_policy": "SMA10_DYNAMIC_BROKER_STOP",
-      "inst": "PLUME-USDT",
-      "ma10_stop_signal_close_ms": 1791748200000,
-      "notional_usdt": "9.9176",
-      "opened_ms": 1791748222866,
-      "order_id": "2000088658499",
-      "protection_status": "SMA_MA10_ENTRY1_CAP_TP_SL_ACTIVE",
-      "reference_entry": "0.02156",
-      "risk_profile": "ONE_POSITION_1X_TP_GROSS1_SL_MA10_TRAIL_ENTRY1_CAP",
-      "side": "LONG",
-      "signal_age_ms": 22007,
-      "signal_close_ms": 1791748200000,
-      "signal_rank": 6,
-      "signal_snapshot": {
-        "close": 0.02156,
-        "inst": "PLUME-USDT",
-        "ma10": 0.021252,
-        "ma10_live_cross_level": 0.02126888888888889,
-        "ma10_previous": 0.021195,
-        "ma10_stop_nine_closed_sum": 0.19142,
-        "ma10_stop_offset_pct": 1.0,
-        "ma20": 0.021243,
-        "ma20_previous": 0.0212395,
-        "pre_order_price_guard": {
-          "adverse_gap_filter_enabled": true,
-          "adverse_gap_pct": 0.0,
-          "ask": "0.02156",
-          "bid": "0.02154",
-          "expected_fill": "0.02156",
-          "max_adverse_gap_pct": 0.25,
-          "max_spread_pct": 0.25,
-          "quote_age_ms": 14582,
-          "signal_close": "0.02156",
-          "spread_pct": 0.09280742459396751
-        },
-        "side": "LONG",
-        "signal_close_ms": 1791748200000
-      },
-      "size": "46",
-      "sl": "0.02135",
-      "sl_policy": "SL_MA10_PCT1_TRAIL_ENTRY_PCT1_CAP_5M",
-      "strategy": "SMA10_SMA20_LONG_5m",
-      "tp": "0.02178",
-      "tp_policy": "TP_GROSS1",
-      "tpsl_client_order_id": "livetpslefe06d9963424d548c56380b",
-      "tpsl_id": "10028677632"
-    }
-  },
-  "realized_pnl_usdt": -7.679486288368613,
+  "positions": {},
+  "realized_pnl_usdt": -7.594845368368613,
   "risk_stop_triggered": false,
   "started_at_ms": 1789658980518,
   "test1": {
@@ -22427,14 +22346,64 @@
       "sl": "0.11552",
       "strategy": "SMA10_SMA20_LONG_5m",
       "tp": "0.11769"
+    },
+    {
+      "close_price": "0.02177",
+      "closed_ms": 1791748620207,
+      "code_commit": "3cefd7358c11b79c25075f9a73a69a1aa46312ad",
+      "fee_usdt": -0.01195908,
+      "filled_size": "46",
+      "gross_pnl_usdt": 0.0966,
+      "history_id": "118018030",
+      "hold_minutes": 6.62,
+      "inst": "PLUME-USDT",
+      "net_pnl_usdt": 0.08464092,
+      "notional_usdt": "9.9176",
+      "open_price": "0.02156",
+      "opened_ms": 1791748222866,
+      "pattern_review": [],
+      "reason": "external close",
+      "result": "WIN",
+      "side": "LONG",
+      "signal_age_ms": 22007,
+      "signal_close_ms": 1791748200000,
+      "signal_rank": 6,
+      "signal_snapshot": {
+        "close": 0.02156,
+        "inst": "PLUME-USDT",
+        "ma10": 0.021252,
+        "ma10_live_cross_level": 0.02126888888888889,
+        "ma10_previous": 0.021195,
+        "ma10_stop_nine_closed_sum": 0.19142,
+        "ma10_stop_offset_pct": 1.0,
+        "ma20": 0.021243,
+        "ma20_previous": 0.0212395,
+        "pre_order_price_guard": {
+          "adverse_gap_filter_enabled": true,
+          "adverse_gap_pct": 0.0,
+          "ask": "0.02156",
+          "bid": "0.02154",
+          "expected_fill": "0.02156",
+          "max_adverse_gap_pct": 0.25,
+          "max_spread_pct": 0.25,
+          "quote_age_ms": 14582,
+          "signal_close": "0.02156",
+          "spread_pct": 0.09280742459396751
+        },
+        "side": "LONG",
+        "signal_close_ms": 1791748200000
+      },
+      "sl": "0.02135",
+      "strategy": "SMA10_SMA20_LONG_5m",
+      "tp": "0.02178"
     }
   ],
   "trades": {
     "flat": 0,
     "losses": 153,
-    "total": 284,
+    "total": 285,
     "unverified": 4,
-    "wins": 127
+    "wins": 128
   },
   "version": 2
 }
