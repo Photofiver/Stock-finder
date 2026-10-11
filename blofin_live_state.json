@@ -1011,10 +1011,32 @@
       }
     ],
     "ma_cross": {
-      "events": [],
-      "signal_close_ms": 1791727200000,
-      "signals": [],
-      "status": "NO_CROSS",
+      "events": [
+        {
+          "inst": "MAGIC-USDT",
+          "reason": "MAGIC-USDT: stale market quote age=18470ms (max 15000ms) after 3 checks",
+          "side": "SHORT",
+          "status": "PRE_ORDER_REJECTED_TRY_NEXT"
+        }
+      ],
+      "signal_close_ms": 1791727500000,
+      "signals": [
+        {
+          "close": 0.12468,
+          "inst": "MAGIC-USDT",
+          "ma10": 0.12502,
+          "ma10_live_cross_level": 0.12465555555555557,
+          "ma10_previous": 0.12559499999999998,
+          "ma10_stop_nine_closed_sum": 1.1219000000000001,
+          "ma10_stop_offset_pct": 1.0,
+          "ma20": 0.1255535,
+          "ma20_previous": 0.125363,
+          "rank": 4,
+          "side": "SHORT",
+          "signal_close_ms": 1791727500000
+        }
+      ],
+      "status": "PRE_ORDER_REJECTED_TRY_NEXT",
       "strategy": "SMA10_SMA20_5m"
     },
     "nearest_volume_entry": {
@@ -1027,7 +1049,7 @@
       "tp_pct": 1,
       "trade_hard_volume_gate": false
     },
-    "result": "NO_CROSS",
+    "result": "PRE_ORDER_REJECTED_TRY_NEXT",
     "signal_label": "10m",
     "strategy": "SMA10_SMA20_5m",
     "top7": [
@@ -1741,8 +1763,8 @@
     "ZRO-USDT": 1791299700000,
     "ZRX-USDT": 1791631800000
   },
-  "last_run_ms": 1791727223593,
-  "last_scan_close_ms": 1791727200000,
+  "last_run_ms": 1791727524748,
+  "last_scan_close_ms": 1791727500000,
   "last_top10": [
     "CELR-USDT",
     "LUNA2-USDT",
@@ -2002,10 +2024,32 @@
   },
   "legacy_pnl_note": "Four earlier closes were recorded as FLAT because BloFin close history was not ready. They are marked unverified and excluded from verified PnL.",
   "ma_cross_last_scan": {
-    "events": [],
-    "signal_close_ms": 1791727200000,
-    "signals": [],
-    "status": "NO_CROSS",
+    "events": [
+      {
+        "inst": "MAGIC-USDT",
+        "reason": "MAGIC-USDT: stale market quote age=18470ms (max 15000ms) after 3 checks",
+        "side": "SHORT",
+        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
+      }
+    ],
+    "signal_close_ms": 1791727500000,
+    "signals": [
+      {
+        "close": 0.12468,
+        "inst": "MAGIC-USDT",
+        "ma10": 0.12502,
+        "ma10_live_cross_level": 0.12465555555555557,
+        "ma10_previous": 0.12559499999999998,
+        "ma10_stop_nine_closed_sum": 1.1219000000000001,
+        "ma10_stop_offset_pct": 1.0,
+        "ma20": 0.1255535,
+        "ma20_previous": 0.125363,
+        "rank": 4,
+        "side": "SHORT",
+        "signal_close_ms": 1791727500000
+      }
+    ],
+    "status": "PRE_ORDER_REJECTED_TRY_NEXT",
     "strategy": "SMA10_SMA20_5m"
   },
   "position": null,
