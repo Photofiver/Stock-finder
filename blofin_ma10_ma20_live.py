@@ -1,10 +1,10 @@
-"""LIVE SMA10/SMA20 entry strategy for 10m BloFin TOP7.
+"""LIVE SMA10/SMA20 entry strategy for 5m / 10m BloFin TOP7.
 
 New entries depend on the confirmed MA10/MA20 cross, not ADX.
 New positions use broker TP +1% and a trailing broker stop 1% beyond LIVE MA10:
 LONG below MA10, SHORT above MA10. The LIVE MA10-cross threshold is
-solved using nine preceding CLOSED 10m candles and the changing live price.
-The exchange triggers intrabar. Every 10m the stop is tightened ONLY:
+solved using nine preceding CLOSED signal candles and the changing live price.
+The exchange triggers intrabar. Every signal candle the stop is tightened ONLY:
 LONG stop may rise, SHORT stop may fall; never loosen.
 Pre-existing SMA positions retain their original 1% SL / RSI / MA-cross exits.
 Legacy non-SMA positions retain their original protection until closed.
@@ -49,10 +49,10 @@ def gross_one_percent_sl(bot, side, entry, tick):
 def ma10_trailing_one_percent_stop_price(bot, side, previous_nine_closed_sum, tick):
     """Exchange trigger exactly when live price crosses MA10 +/- 1%.
 
-    While the newest 10m candle is open, MA10 = (sum(previous 9 closes) + P)/10.
+    While the newest signal candle is open, MA10 = (sum(previous 9 closes) + P)/10.
     LONG: P = 0.99 * MA10 -> P = 0.99 * sum9 / 9.01.
     SHORT: P = 1.01 * MA10 -> P = 1.01 * sum9 / 8.99.
-    The trigger is fixed within the candle and ratchets on completed 10m bars.
+    The trigger is fixed within the candle and ratchets on completed signal bars.
     """
     prev_sum = bot.d(previous_nine_closed_sum)
     offset = bot.d(MA10_TRAIL_OFFSET_PCT)
@@ -74,7 +74,7 @@ def ma10_trailing_one_percent_stop_price(bot, side, previous_nine_closed_sum, ti
 def crossover(bot, inst, expected_close_ms, bars=None):
     bars = bot.fetch_signal_bars(inst) if bars is None else bars
     if len(bars) < 21 or bot.bar_close_ms(bars[-1]) != expected_close_ms:
-        raise RuntimeError(f"{inst}: expected confirmed 10m close unavailable")
+        raise RuntimeError(f"{inst}: expected confirmed {bot.SIGNAL_LABEL} close unavailable")
     closes = [float(bar["c"]) for bar in bars]
     old_fast = sum(closes[-11:-1]) / 10
     old_slow = sum(closes[-21:-1]) / 20
@@ -105,10 +105,10 @@ def crossover(bot, inst, expected_close_ms, bars=None):
 
 
 def rsi_average_crossover(bot, inst, expected_close_ms, bars=None):
-    """Cross of RSI(14) against SMA(14) of RSI, confirmed at the 10m close."""
+    """Cross of RSI(14) against SMA(14) of RSI, confirmed at signal close."""
     bars = bot.fetch_signal_bars(inst) if bars is None else bars
     if bot.bar_close_ms(bars[-1]) != expected_close_ms:
-        raise RuntimeError(f"{inst}: expected confirmed 10m RSI close unavailable")
+        raise RuntimeError(f"{inst}: expected confirmed {bot.SIGNAL_LABEL} RSI close unavailable")
     lookback = RSI_AVERAGE_PERIOD + 1
     if len(bars) < bot.RSI_PERIOD + lookback:
         raise RuntimeError(f"{inst}: not enough RSI history for moving average")
@@ -213,10 +213,10 @@ def open_position(bot, state, signal, rank, instruments):
         "tp": "",
         "sl": "",
         "tp_policy": "TP_GROSS1",
-        "sl_policy": "SL_MA10_PCT1_TRAIL_FAVOURABLE_ONLY_10M",
+        "sl_policy": f"SL_MA10_PCT1_TRAIL_FAVOURABLE_ONLY_{bot.SIGNAL_MINUTES}M",
         "hold_policy": DYNAMIC_MA10_HOLD_POLICY,
         "protection_status": "SMA_MA10_TP_SL_PENDING",
-        "strategy": f"SMA10_SMA20_{side}_10m",
+        "strategy": f"SMA10_SMA20_{side}_{bot.SIGNAL_LABEL}",
         "code_commit": bot.CODE_COMMIT,
         "risk_profile": "ONE_POSITION_1X_TP_GROSS1_SL_MA10_PCT1_TRAIL",
         "account_fraction": "",
@@ -285,10 +285,10 @@ def open_position(bot, state, signal, rank, instruments):
             )
         return False
     bot.notify(
-        f"OPEN {side} {inst} | SMA10/20 cross 10m | entry {actual_price} "
+        f"OPEN {side} {inst} | SMA10/20 cross {bot.SIGNAL_LABEL} | entry {actual_price} "
         f"| {position['notional_usdt']} USDT | 1x | broker TP +1% {position['tp']} "
         f"| broker MA10 +/-1% trailing stop {position['sl']} "
-        "(ratchets every 10m; triggers intrabar)",
+        f"(ratchets every {bot.SIGNAL_LABEL}; triggers intrabar)",
         "BloFin LIVE SMA CROSS",
     )
     return True
@@ -456,17 +456,17 @@ def refresh_dynamic_ma10_stop(bot, state, pos, bars, expected_close_ms, instrume
     pos["sl"] = bot.clean_decimal(target)
     pos["ma10_stop_signal_close_ms"] = expected_close_ms
     pos["protection_status"] = "SMA_MA10_PCT1_TRAIL_TP_SL_ACTIVE"
-    pos["sl_policy"] = "SL_MA10_PCT1_TRAIL_FAVOURABLE_ONLY_10M"
+    pos["sl_policy"] = f"SL_MA10_PCT1_TRAIL_FAVOURABLE_ONLY_{bot.SIGNAL_MINUTES}M"
     pos.pop("protection_error", None)
     print(f"MA10 +/-1% TRAIL {side} {inst}: tightened SL {old_sl} -> {target} (TP {tp})")
     return "MA10_BROKER_STOP_AMENDED"
 
 
 def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_confirmed_close):
-    if bot.SIGNAL_MINUTES != 10:
-        raise RuntimeError("SMA crossover LIVE requires 10m signals")
+    if bot.SIGNAL_MINUTES not in (5, 10):
+        raise RuntimeError("SMA crossover LIVE requires 5m or 10m signals")
     if int(state.get("last_scan_close_ms") or 0) == expected_close_ms:
-        print("SMA CROSS duplicate 10m scan skipped")
+        print(f"SMA CROSS duplicate {bot.SIGNAL_LABEL} scan skipped")
         return
     current_insts = list(bot.get_tracked_positions(state))
     wait_for_confirmed_close(list(dict.fromkeys(top7 + current_insts)), expected_close_ms)
@@ -481,7 +481,7 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
             "SMA10_SMA20_OPPOSITE_CROSS", DYNAMIC_MA10_HOLD_POLICY,
         )
     ]
-    last = {"signal_close_ms": expected_close_ms, "strategy": "SMA10_SMA20_10m", "events": []}
+    last = {"signal_close_ms": expected_close_ms, "strategy": f"SMA10_SMA20_{bot.SIGNAL_LABEL}", "events": []}
     if previous_strategy_positions:
         print("SMA CROSS: waiting for pre-existing LIVE position to close under original rules")
         last["status"] = "WAITING_FOR_OLD_POSITION"
@@ -518,8 +518,8 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
                     pos["tpsl_client_order_id"] = ""
                     pos["tp"] = ""
                 reason = (
-                    f"RSI14/SMA14 opposite 10m cross: {rsi_sig['cross']}"
-                    if opposite_rsi else f"SMA10/SMA20 opposite 10m cross: {sig['side']}"
+                    f"RSI14/SMA14 opposite {bot.SIGNAL_LABEL} cross: {rsi_sig['cross']}"
+                    if opposite_rsi else f"SMA10/SMA20 opposite {bot.SIGNAL_LABEL} cross: {sig['side']}"
                 )
                 bot._run_for_tracked_position(
                     state, inst, bot.close_tracked_position, reason,
@@ -595,7 +595,7 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
     state["ma_cross_last_scan"] = last
     state.setdefault("last_diagnostic", {})["ma_cross"] = last
     state["last_diagnostic"]["result"] = last["status"]
-    state["last_diagnostic"]["strategy"] = "SMA10_SMA20_10m"
+    state["last_diagnostic"]["strategy"] = f"SMA10_SMA20_{bot.SIGNAL_LABEL}"
     state["last_scan_close_ms"] = expected_close_ms
     state["last_run_ms"] = bot.now_ms()
     state["last_top7"] = top7
