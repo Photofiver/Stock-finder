@@ -154,9 +154,9 @@ def open_position(bot, state, signal, rank, instruments):
     if inst not in instruments:
         print(f"SMA CROSS {inst}: missing instrument metadata")
         return False
-    # No entry gate based on signal candle close: accept directional movement.
-    # Fresh quotes and bid/ask spread checks still apply.
-    quote = bot.checked_preorder_quote(inst, side, signal["close"], enforce_adverse_gap=False)
+    # Do not chase an SMA cross after price has already moved too far
+    # in the trade direction. The shared guard blocks >0.25% by default.
+    quote = bot.checked_preorder_quote(inst, side, signal["close"], enforce_adverse_gap=True)
     tick = bot.d(instruments[inst].get("tickSize") or "0.00000001")
     ma_sl = ma10_trailing_one_percent_stop_price(
         bot, side, signal["ma10_stop_nine_closed_sum"], tick,
