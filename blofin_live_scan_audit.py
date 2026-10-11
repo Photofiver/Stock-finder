@@ -717,7 +717,7 @@ def record_current_scan(history, cache):
     sma_event = state.get("ma_cross_last_scan") or {}
     is_sma_scan = (
         isinstance(sma_event, dict)
-        and sma_event.get("strategy") == "SMA10_SMA20_10m"
+        and sma_event.get("strategy") == f"SMA10_SMA20_{bot.SIGNAL_LABEL}"
         and int(sma_event.get("signal_close_ms") or 0) == signal_close_ms
     )
     if is_sma_scan:
@@ -728,7 +728,7 @@ def record_current_scan(history, cache):
         legacy_scanner.build_live_diagnostic(state, state.get("last_top7") or [])
         diagnostic = state.get("last_diagnostic") or {}
         diagnostic["result"] = sma_event.get("status") or "SMA_CROSS"
-        diagnostic["strategy"] = "SMA10_SMA20_10m"
+        diagnostic["strategy"] = f"SMA10_SMA20_{bot.SIGNAL_LABEL}"
     items = diagnostic.get("instruments") or []
     if not items:
         print("AUDIT_NO_NEW_DIAGNOSTIC")
@@ -791,13 +791,13 @@ def record_current_scan(history, cache):
         "strategy_name": diagnostic.get("strategy") if is_sma_scan else "LEGACY",
         "sma10_20_live": sma_event if is_sma_scan else None,
         "sma10_20_rules": {
-            "timeframe": "10m",
+            "timeframe": bot.SIGNAL_LABEL,
             "fast": "SMA10 of close",
             "slow": "SMA20 of close",
-            "entry": "SMA10/SMA20 cross on CLOSED 10m candle; no ADX entry filter",
+            "entry": f"SMA10/SMA20 cross on CLOSED {bot.SIGNAL_LABEL} candle; no ADX entry filter",
             "take_profit": "1% favorable PRICE move before fees, broker trigger intrabar",
             "stop_loss": "LONG: 1% below live SMA10; SHORT: 1% above live SMA10, solved for live price using previous 9 closed candles",
-            "broker_stop_loss": "Native BloFin SL triggers intrabar; tighten only every 10m: LONG moves up, SHORT moves down, never backwards",
+            "broker_stop_loss": f"Native BloFin SL triggers intrabar; tighten only every {bot.SIGNAL_LABEL}: LONG moves up, SHORT moves down, never backwards",
             "legacy_position_policy": "Older opposite-cross SMA positions keep broker SL -1%, opposite RSI14/SMA14 exit, opposite SMA10/SMA20 exit",
             "other_exit": "NEW: one-way SMA10 +/-1% trailing broker SL or TP +1% only",
             "net_pnl_source": "actual BloFin realizedPnl including fees",
