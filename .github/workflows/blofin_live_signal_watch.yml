@@ -3,7 +3,8 @@ name: BloFin LIVE signal watch
 on:
   workflow_dispatch:
   schedule:
-    - cron: '4,9,14,19,24,29,34,39,44,49,54,59 * * * *'
+    # Pre-warm the GitHub runner before each 5m candle closes.
+    - cron: '3,8,13,18,23,28,33,38,43,48,53,58 * * * *'
 
 permissions:
   contents: write
@@ -46,10 +47,11 @@ jobs:
           REM=$((MIN % 5))
           WAIT=0
 
-          # Prepare checkout/Python/packages before the candle closes.
-          # Scheduled at :04/:09/...; start the strategy at the next 5m boundary + 2 seconds.
-          if [ "$REM" -eq 4 ]; then
-            WAIT=$((60 - SEC + 2))
+          # Scheduled at :03/:08/... to prepare checkout and Python before close.
+          # Run at the next 5m boundary +2s when ready early. If GitHub
+          # starts late, run immediately and keep candle/quote freshness gates.
+          if [ "$REM" -eq 3 ] || [ "$REM" -eq 4 ]; then
+            WAIT=$(((5 - REM) * 60 - SEC + 2))
           elif [ "$REM" -eq 0 ] && [ "$SEC" -lt 2 ]; then
             WAIT=$((2 - SEC))
           fi
