@@ -160,8 +160,8 @@
     "description": "BloFin history realizedPnl already includes fees; gross=net-fee; net=realizedPnl",
     "version": 1
   },
-  "fees_usdt": -4.38440408412,
-  "gross_realized_pnl_usdt": -5.044833030248609,
+  "fees_usdt": -4.40621456412,
+  "gross_realized_pnl_usdt": -4.854833030248609,
   "last_diagnostic": {
     "generated_at_ms": 1791634279008,
     "instruments": [
@@ -1024,21 +1024,30 @@
     "ma_cross": {
       "events": [
         {
-          "close": 0.002405,
-          "inst": "RSR-USDT",
-          "ma10": 0.0024275,
-          "ma10_live_cross_level": 0.002428777777777778,
-          "ma10_previous": 0.0024294,
-          "ma10_stop_nine_closed_sum": 0.021859,
-          "ma10_stop_offset_pct": 1.0,
-          "ma20": 0.00243355,
-          "ma20_previous": 0.00243145,
-          "side": null,
-          "signal_close_ms": 1791817800000
+          "inst": "DOS-USDT",
+          "reason": "DOS-USDT: stale market quote age=27908ms (max 15000ms) after 3 checks",
+          "side": "LONG",
+          "status": "PRE_ORDER_REJECTED_TRY_NEXT"
         }
       ],
-      "signal_close_ms": 1791817800000,
-      "status": "HOLDING_MA10_TRAIL_NO_LOOSENING",
+      "signal_close_ms": 1791818100000,
+      "signals": [
+        {
+          "close": 0.2963,
+          "inst": "DOS-USDT",
+          "ma10": 0.29277000000000003,
+          "ma10_live_cross_level": 0.2930888888888889,
+          "ma10_previous": 0.29207,
+          "ma10_stop_nine_closed_sum": 2.6378,
+          "ma10_stop_offset_pct": 1.0,
+          "ma20": 0.292015,
+          "ma20_previous": 0.2923,
+          "rank": 5,
+          "side": "LONG",
+          "signal_close_ms": 1791818100000
+        }
+      ],
+      "status": "PRE_ORDER_REJECTED_TRY_NEXT",
       "strategy": "SMA10_SMA20_5m"
     },
     "nearest_volume_entry": {
@@ -1051,7 +1060,7 @@
       "tp_pct": 1,
       "trade_hard_volume_gate": false
     },
-    "result": "HOLDING_MA10_TRAIL_NO_LOOSENING",
+    "result": "PRE_ORDER_REJECTED_TRY_NEXT",
     "signal_label": "10m",
     "strategy": "SMA10_SMA20_5m",
     "top7": [
@@ -1765,8 +1774,8 @@
     "ZRO-USDT": 1791299700000,
     "ZRX-USDT": 1791631800000
   },
-  "last_run_ms": 1791817831467,
-  "last_scan_close_ms": 1791817800000,
+  "last_run_ms": 1791818129098,
+  "last_scan_close_ms": 1791818100000,
   "last_top10": [
     "CELR-USDT",
     "LUNA2-USDT",
@@ -1783,10 +1792,10 @@
     "RSR-USDT",
     "ZRO-USDT",
     "PYTH-USDT",
-    "RED-USDT",
     "Q-USDT",
+    "DOS-USDT",
     "AZTEC-USDT",
-    "DOS-USDT"
+    "RED-USDT"
   ],
   "last_volume_concentration": {
     "AKT-USDT": {
@@ -2028,81 +2037,35 @@
   "ma_cross_last_scan": {
     "events": [
       {
-        "close": 0.002405,
-        "inst": "RSR-USDT",
-        "ma10": 0.0024275,
-        "ma10_live_cross_level": 0.002428777777777778,
-        "ma10_previous": 0.0024294,
-        "ma10_stop_nine_closed_sum": 0.021859,
-        "ma10_stop_offset_pct": 1.0,
-        "ma20": 0.00243355,
-        "ma20_previous": 0.00243145,
-        "side": null,
-        "signal_close_ms": 1791817800000
+        "inst": "DOS-USDT",
+        "reason": "DOS-USDT: stale market quote age=27908ms (max 15000ms) after 3 checks",
+        "side": "LONG",
+        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
       }
     ],
-    "signal_close_ms": 1791817800000,
-    "status": "HOLDING_MA10_TRAIL_NO_LOOSENING",
+    "signal_close_ms": 1791818100000,
+    "signals": [
+      {
+        "close": 0.2963,
+        "inst": "DOS-USDT",
+        "ma10": 0.29277000000000003,
+        "ma10_live_cross_level": 0.2930888888888889,
+        "ma10_previous": 0.29207,
+        "ma10_stop_nine_closed_sum": 2.6378,
+        "ma10_stop_offset_pct": 1.0,
+        "ma20": 0.292015,
+        "ma20_previous": 0.2923,
+        "rank": 5,
+        "side": "LONG",
+        "signal_close_ms": 1791818100000
+      }
+    ],
+    "status": "PRE_ORDER_REJECTED_TRY_NEXT",
     "strategy": "SMA10_SMA20_5m"
   },
   "position": null,
-  "positions": {
-    "RSR-USDT": {
-      "account_fraction": "",
-      "allocation_label": "SMA CROSS <= 18.278782460061 USDT bankroll",
-      "client_order_id": "livema68e1658e63fa4819b6b2ec4ba6",
-      "code_commit": "e84a78f86ed8a0401d0c85734ff12c4aa9d55f8a",
-      "entry_fee": "0.010962240000000000",
-      "filled_size": "76",
-      "hold_policy": "SMA10_DYNAMIC_BROKER_STOP",
-      "inst": "RSR-USDT",
-      "ma10_stop_signal_close_ms": 1791817500000,
-      "notional_usdt": "18.2704",
-      "opened_ms": 1791817534446,
-      "order_id": "2000088689686",
-      "protection_status": "SMA_MA10_ENTRY1_CAP_TP_SL_ACTIVE",
-      "reference_entry": "0.002404",
-      "risk_profile": "ONE_POSITION_1X_TP_GROSS1_SHORT_MA10_TOUCH_OR_CURRENT_SL",
-      "side": "SHORT",
-      "signal_age_ms": 33608,
-      "signal_close_ms": 1791817500000,
-      "signal_rank": 1,
-      "signal_snapshot": {
-        "close": 0.002398,
-        "inst": "RSR-USDT",
-        "ma10": 0.0024294,
-        "ma10_live_cross_level": 0.00243,
-        "ma10_previous": 0.0024351999999999998,
-        "ma10_stop_nine_closed_sum": 0.02187,
-        "ma10_stop_offset_pct": 1.0,
-        "ma20": 0.00243145,
-        "ma20_previous": 0.00243,
-        "pre_order_price_guard": {
-          "adverse_gap_filter_enabled": true,
-          "adverse_gap_pct": -0.25020850708924103,
-          "ask": "0.002405",
-          "bid": "0.002404",
-          "expected_fill": "0.002404",
-          "max_adverse_gap_pct": 0.25,
-          "max_spread_pct": 0.25,
-          "quote_age_ms": 564,
-          "signal_close": "0.002398",
-          "spread_pct": 0.041588687876897484
-        },
-        "side": "SHORT",
-        "signal_close_ms": 1791817500000
-      },
-      "size": "76",
-      "sl": "0.002428",
-      "sl_policy": "SL_MA10_TOUCH_OR_CURRENT_SHORT_5M",
-      "strategy": "SMA10_SMA20_SHORT_5m",
-      "tp": "0.002379",
-      "tp_policy": "TP_GROSS1",
-      "tpsl_client_order_id": "livetpsl62f146675cf74e12aa5eb2dc",
-      "tpsl_id": "10028736189"
-    }
-  },
-  "realized_pnl_usdt": -9.429237114368606,
+  "positions": {},
+  "realized_pnl_usdt": -9.261047594368605,
   "risk_stop_triggered": false,
   "started_at_ms": 1789658980518,
   "test1": {
@@ -23688,14 +23651,64 @@
       "sl": "2.3772",
       "strategy": "SMA10_SMA20_SHORT_5m",
       "tp": "2.3301"
+    },
+    {
+      "close_price": "0.002379",
+      "closed_ms": 1791818121226,
+      "code_commit": "e84a78f86ed8a0401d0c85734ff12c4aa9d55f8a",
+      "fee_usdt": -0.02181048,
+      "filled_size": "76",
+      "gross_pnl_usdt": 0.19,
+      "history_id": "118064126",
+      "hold_minutes": 9.78,
+      "inst": "RSR-USDT",
+      "net_pnl_usdt": 0.16818952,
+      "notional_usdt": "18.2704",
+      "open_price": "0.002404",
+      "opened_ms": 1791817534446,
+      "pattern_review": [],
+      "reason": "external close",
+      "result": "WIN",
+      "side": "SHORT",
+      "signal_age_ms": 33608,
+      "signal_close_ms": 1791817500000,
+      "signal_rank": 1,
+      "signal_snapshot": {
+        "close": 0.002398,
+        "inst": "RSR-USDT",
+        "ma10": 0.0024294,
+        "ma10_live_cross_level": 0.00243,
+        "ma10_previous": 0.0024351999999999998,
+        "ma10_stop_nine_closed_sum": 0.02187,
+        "ma10_stop_offset_pct": 1.0,
+        "ma20": 0.00243145,
+        "ma20_previous": 0.00243,
+        "pre_order_price_guard": {
+          "adverse_gap_filter_enabled": true,
+          "adverse_gap_pct": -0.25020850708924103,
+          "ask": "0.002405",
+          "bid": "0.002404",
+          "expected_fill": "0.002404",
+          "max_adverse_gap_pct": 0.25,
+          "max_spread_pct": 0.25,
+          "quote_age_ms": 564,
+          "signal_close": "0.002398",
+          "spread_pct": 0.041588687876897484
+        },
+        "side": "SHORT",
+        "signal_close_ms": 1791817500000
+      },
+      "sl": "0.002428",
+      "strategy": "SMA10_SMA20_SHORT_5m",
+      "tp": "0.002379"
     }
   ],
   "trades": {
     "flat": 0,
     "losses": 168,
-    "total": 309,
+    "total": 310,
     "unverified": 4,
-    "wins": 137
+    "wins": 138
   },
   "version": 2
 }
