@@ -2150,6 +2150,7 @@ def checked_preorder_quote(inst, side, signal_close_price, enforce_adverse_gap=T
     # Retry stale broker timestamps without relaxing the original 15s safety gate.
     # Never reuse the old quote if refreshing fails. All price/spread checks below
     # run on the latest validated response before any real order is submitted.
+    quote_source = "ticker"
     for attempt in range(3):
         rows = market_get("/api/v1/market/tickers", {"instId": inst})
         row = next(
@@ -2169,14 +2170,45 @@ def checked_preorder_quote(inst, side, signal_close_price, enforce_adverse_gap=T
             )
             time.sleep(0.5)
     else:
-        raise RuntimeError(
-            f"{inst}: stale market quote age={quote_age_ms}ms "
-            f"(max {MAX_ENTRY_QUOTE_AGE_MS}ms) after 3 checks"
-        )
+        # A ticker timestamp tracks last market-data generation, and may remain
+        # old for an illiquid instrument. Verify an independently timestamped
+        # depth-1 order book before rejecting a valid closed-candle signal.
+        ticker_age_ms = quote_age_ms
+        try:
+            books = market_get(
+                "/api/v1/market/books", {"instId": inst, "size": "1"},
+            )
+            book = books[0] if isinstance(books, list) and books else {}
+            book_ts = int(book.get("ts") or 0)
+            book_age_ms = now_ms() - book_ts
+            if not (book_ts > 0 and -5000 <= book_age_ms <= MAX_ENTRY_QUOTE_AGE_MS):
+                raise RuntimeError(f"order book age={book_age_ms}ms")
+            bid_levels = book.get("bids") or []
+            ask_levels = book.get("asks") or []
+            if not bid_levels or not ask_levels:
+                raise RuntimeError("order book has no bid/ask")
+            bid = d(bid_levels[0][0])
+            ask = d(ask_levels[0][0])
+            if not (bid.is_finite() and ask.is_finite() and bid > 0
+                    and ask > 0 and ask >= bid):
+                raise RuntimeError("invalid order book bid/ask")
+            quote_source = "order_book"
+            quote_age_ms = book_age_ms
+            print(
+                f"{inst}: ticker age={ticker_age_ms}ms; using fresh "
+                f"order book age={book_age_ms}ms"
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"{inst}: stale market quote age={ticker_age_ms}ms "
+                f"(max {MAX_ENTRY_QUOTE_AGE_MS}ms) after 3 checks; "
+                f"order book fallback unavailable: {type(exc).__name__}: {exc}"
+            ) from exc
 
-    bid = d(row.get("bidPrice") or "0")
-    ask = d(row.get("askPrice") or "0")
-    if bid <= 0 or ask <= 0 or ask < bid:
+    if quote_source == "ticker":
+        bid = d(row.get("bidPrice") or "0")
+        ask = d(row.get("askPrice") or "0")
+    if not (bid.is_finite() and ask.is_finite() and bid > 0 and ask > 0 and ask >= bid):
         raise RuntimeError(f"{inst}: invalid bid/ask quote")
     expected_fill = ask if side == "LONG" else bid
     adverse_gap_pct = (
@@ -2187,6 +2219,7 @@ def checked_preorder_quote(inst, side, signal_close_price, enforce_adverse_gap=T
     data = {
         "bid": str(bid), "ask": str(ask),
         "quote_age_ms": quote_age_ms,
+        "quote_source": quote_source,
         "signal_close": str(signal_price),
         "expected_fill": str(expected_fill),
         "adverse_gap_pct": float(adverse_gap_pct),
