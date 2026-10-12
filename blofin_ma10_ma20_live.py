@@ -20,6 +20,61 @@ MA10_TRAIL_OFFSET_PCT = "0.01"
 RSI_AVERAGE_PERIOD = 14
 DYNAMIC_MA10_HOLD_POLICY = "SMA10_DYNAMIC_BROKER_STOP"
 
+MAX_HOLD_MS = 10 * 60 * 1000
+
+
+def enforce_max_ten_minutes(bot, state, inst, instruments):
+    """Close a LIVE SMA trade at age 10m unless an exchange TP/SL closed it."""
+    pos = bot.get_tracked_positions(state).get(inst)
+    if not pos or pos.get("hold_policy") != DYNAMIC_MA10_HOLD_POLICY:
+        return "NO_TIMED_TRADE"
+    opened_ms = int(pos.get("opened_ms") or 0)
+    if opened_ms <= 0:
+        raise RuntimeError(f"{inst}: no opening timestamp to enforce 10m exit")
+    deadline = opened_ms + MAX_HOLD_MS
+    last_checked_close = 0
+    while True:
+        # Keep the original exchange TP/SL working throughout the 10m period.
+        try:
+            bot.sync_all_tracked_positions(state)
+        except Exception as exc:
+            print(f"10m monitor broker sync retry {inst}: {exc}")
+        pos = bot.get_tracked_positions(state).get(inst)
+        if not pos:
+            return "CLOSED_BY_BROKER"
+        now = bot.now_ms()
+        if now >= deadline:
+            broker_open = any(
+                row.get("instId") == inst for row in bot.get_open_positions()
+            )
+            if broker_open:
+                bot._run_for_tracked_position(
+                    state, inst, bot.close_tracked_position,
+                    "TIME EXIT: 10 minutes since position opened",
+                )
+                bot.save_state(state)
+                return "TIME_EXIT_10M"
+            return "ALREADY_CLOSED_ON_EXCHANGE"
+        # Maintain the existing MA10 broker stop update at every closed 5m bar.
+        close_ms = (now // bot.SIGNAL_MS) * bot.SIGNAL_MS
+        previous_update = int(
+            pos.get("ma10_stop_signal_close_ms")
+            or pos.get("signal_close_ms") or 0
+        )
+        if (close_ms > previous_update and close_ms > last_checked_close
+                and now >= close_ms + 2000):
+            last_checked_close = close_ms
+            try:
+                bars = bot.fetch_signal_bars(inst)
+                if bars and bot.bar_close_ms(bars[-1]) == close_ms:
+                    refresh_dynamic_ma10_stop(
+                        bot, state, pos, bars, close_ms, instruments
+                    )
+            except Exception as exc:
+                print(f"10m monitor MA10 stop refresh failed {inst}: {exc}")
+        bot.time.sleep(min(5, max(0.05, (deadline - bot.now_ms()) / 1000)))
+
+
 
 def gross_one_percent_tp(bot, side, entry, tick):
     """Set the broker TP at a 1% price move before fees (not 1% NET)."""
@@ -672,5 +727,14 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
     state["last_scan_close_ms"] = expected_close_ms
     state["last_run_ms"] = bot.now_ms()
     state["last_top7"] = top7
+    bot.save_state(state)
+    # The scan job stays alive to enforce an exact trade-age limit, rather
+    # than waiting for the next five-minute GitHub schedule.
+    for timed_inst, timed_pos in list(bot.get_tracked_positions(state).items()):
+        if timed_pos.get("hold_policy") == DYNAMIC_MA10_HOLD_POLICY:
+            last["ten_minute_exit"] = enforce_max_ten_minutes(
+                bot, state, timed_inst, instruments
+            )
+            break
     bot.save_state(state)
     print(f"SMA CROSS result: {last['status']}")
