@@ -408,6 +408,20 @@ def open_position(bot, state, signal, rank, instruments):
         f"(ratchets every {bot.SIGNAL_LABEL}; triggers intrabar)",
         "BloFin LIVE SMA CROSS",
     )
+    # Visual diagnostics run only after the exchange TP/SL is installed.
+    # They must never block a live trade or alter the position's protection.
+    try:
+        from blofin_trade_charts import capture_chart
+        position["entry_chart"] = capture_chart(
+            bot, position, "ENTRY", opened_ms, actual_price
+        )
+        position["entry_chart_source"] = "BloFin 5m (generated chart, not TradingView)"
+        position.pop("entry_chart_error", None)
+        print(f"SMA ENTRY CHART saved: {position['entry_chart']}")
+    except Exception as exc:
+        position["entry_chart"] = ""
+        position["entry_chart_error"] = f"{type(exc).__name__}: {exc}"
+        print(f"SMA ENTRY CHART ERROR {inst}: {exc}")
     return True
 
 
