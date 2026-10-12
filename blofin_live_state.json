@@ -160,8 +160,8 @@
     "description": "BloFin history realizedPnl already includes fees; gross=net-fee; net=realizedPnl",
     "version": 1
   },
-  "fees_usdt": -4.16394338412,
-  "gross_realized_pnl_usdt": -3.893733030248611,
+  "fees_usdt": -4.18557578412,
+  "gross_realized_pnl_usdt": -4.073733030248611,
   "last_diagnostic": {
     "generated_at_ms": 1791634279008,
     "instruments": [
@@ -1024,21 +1024,30 @@
     "ma_cross": {
       "events": [
         {
-          "close": 0.02005,
-          "inst": "AZTEC-USDT",
-          "ma10": 0.019985,
-          "ma10_live_cross_level": 0.01998888888888889,
-          "ma10_previous": 0.020009,
-          "ma10_stop_nine_closed_sum": 0.1799,
-          "ma10_stop_offset_pct": 1.0,
-          "ma20": 0.020066499999999998,
-          "ma20_previous": 0.020068,
-          "side": null,
-          "signal_close_ms": 1791779700000
+          "inst": "S-USDT",
+          "reason": "S-USDT: stale market quote age=17265ms (max 15000ms) after 3 checks",
+          "side": "LONG",
+          "status": "PRE_ORDER_REJECTED_TRY_NEXT"
         }
       ],
-      "signal_close_ms": 1791779700000,
-      "status": "HOLDING_MA10_TRAIL_NO_LOOSENING",
+      "signal_close_ms": 1791780000000,
+      "signals": [
+        {
+          "close": 0.06104,
+          "inst": "S-USDT",
+          "ma10": 0.060141999999999994,
+          "ma10_live_cross_level": 0.06012222222222222,
+          "ma10_previous": 0.060053999999999996,
+          "ma10_stop_nine_closed_sum": 0.5411,
+          "ma10_stop_offset_pct": 1.0,
+          "ma20": 0.0600765,
+          "ma20_previous": 0.060099,
+          "rank": 1,
+          "side": "LONG",
+          "signal_close_ms": 1791780000000
+        }
+      ],
+      "status": "PRE_ORDER_REJECTED_TRY_NEXT",
       "strategy": "SMA10_SMA20_5m"
     },
     "nearest_volume_entry": {
@@ -1051,7 +1060,7 @@
       "tp_pct": 1,
       "trade_hard_volume_gate": false
     },
-    "result": "HOLDING_MA10_TRAIL_NO_LOOSENING",
+    "result": "PRE_ORDER_REJECTED_TRY_NEXT",
     "signal_label": "10m",
     "strategy": "SMA10_SMA20_5m",
     "top7": [
@@ -1765,8 +1774,8 @@
     "ZRO-USDT": 1791299700000,
     "ZRX-USDT": 1791631800000
   },
-  "last_run_ms": 1791779721095,
-  "last_scan_close_ms": 1791779700000,
+  "last_run_ms": 1791780024557,
+  "last_scan_close_ms": 1791780000000,
   "last_top10": [
     "CELR-USDT",
     "LUNA2-USDT",
@@ -1781,12 +1790,12 @@
   ],
   "last_top7": [
     "S-USDT",
-    "IO-USDT",
     "GRASS-USDT",
+    "IO-USDT",
     "PLUME-USDT",
-    "MAGIC-USDT",
     "AZTEC-USDT",
-    "EIGEN-USDT"
+    "EIGEN-USDT",
+    "MAGIC-USDT"
   ],
   "last_volume_concentration": {
     "AKT-USDT": {
@@ -2028,81 +2037,35 @@
   "ma_cross_last_scan": {
     "events": [
       {
-        "close": 0.02005,
-        "inst": "AZTEC-USDT",
-        "ma10": 0.019985,
-        "ma10_live_cross_level": 0.01998888888888889,
-        "ma10_previous": 0.020009,
-        "ma10_stop_nine_closed_sum": 0.1799,
-        "ma10_stop_offset_pct": 1.0,
-        "ma20": 0.020066499999999998,
-        "ma20_previous": 0.020068,
-        "side": null,
-        "signal_close_ms": 1791779700000
+        "inst": "S-USDT",
+        "reason": "S-USDT: stale market quote age=17265ms (max 15000ms) after 3 checks",
+        "side": "LONG",
+        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
       }
     ],
-    "signal_close_ms": 1791779700000,
-    "status": "HOLDING_MA10_TRAIL_NO_LOOSENING",
+    "signal_close_ms": 1791780000000,
+    "signals": [
+      {
+        "close": 0.06104,
+        "inst": "S-USDT",
+        "ma10": 0.060141999999999994,
+        "ma10_live_cross_level": 0.06012222222222222,
+        "ma10_previous": 0.060053999999999996,
+        "ma10_stop_nine_closed_sum": 0.5411,
+        "ma10_stop_offset_pct": 1.0,
+        "ma20": 0.0600765,
+        "ma20_previous": 0.060099,
+        "rank": 1,
+        "side": "LONG",
+        "signal_close_ms": 1791780000000
+      }
+    ],
+    "status": "PRE_ORDER_REJECTED_TRY_NEXT",
     "strategy": "SMA10_SMA20_5m"
   },
   "position": null,
-  "positions": {
-    "AZTEC-USDT": {
-      "account_fraction": "",
-      "allocation_label": "SMA CROSS <= 19.650343160060995 USDT bankroll",
-      "client_order_id": "livemadb33c8f957214910acd93c38ad",
-      "code_commit": "4511ca6ba51f94cbb6253bd0109886e63260778e",
-      "entry_fee": "0.010762200000000000",
-      "filled_size": "9",
-      "hold_policy": "SMA10_DYNAMIC_BROKER_STOP",
-      "inst": "AZTEC-USDT",
-      "ma10_stop_signal_close_ms": 1791779100000,
-      "notional_usdt": "17.937",
-      "opened_ms": 1791779136570,
-      "order_id": "2000088669365",
-      "protection_status": "SMA_MA10_ENTRY1_CAP_TP_SL_ACTIVE",
-      "reference_entry": "0.01993",
-      "risk_profile": "ONE_POSITION_1X_TP_GROSS1_SL_MA10_TRAIL_ENTRY1_CAP",
-      "side": "SHORT",
-      "signal_age_ms": 35983,
-      "signal_close_ms": 1791779100000,
-      "signal_rank": 6,
-      "signal_snapshot": {
-        "close": 0.01996,
-        "inst": "AZTEC-USDT",
-        "ma10": 0.020054,
-        "ma10_live_cross_level": 0.020017777777777777,
-        "ma10_previous": 0.020101,
-        "ma10_stop_nine_closed_sum": 0.18016,
-        "ma10_stop_offset_pct": 1.0,
-        "ma20": 0.0200735,
-        "ma20_previous": 0.020082,
-        "pre_order_price_guard": {
-          "adverse_gap_filter_enabled": true,
-          "adverse_gap_pct": 0.15030060120240482,
-          "ask": "0.01996",
-          "bid": "0.01993",
-          "expected_fill": "0.01993",
-          "max_adverse_gap_pct": 0.25,
-          "max_spread_pct": 0.25,
-          "quote_age_ms": 90,
-          "signal_close": "0.01996",
-          "spread_pct": 0.1504136375031336
-        },
-        "side": "SHORT",
-        "signal_close_ms": 1791779100000
-      },
-      "size": "9",
-      "sl": "0.02012",
-      "sl_policy": "SL_MA10_PCT1_TRAIL_ENTRY_PCT1_CAP_5M",
-      "strategy": "SMA10_SMA20_SHORT_5m",
-      "tp": "0.01973",
-      "tp_policy": "TP_GROSS1",
-      "tpsl_client_order_id": "livetpslbc4fa1a8fd214413a60dc2e8",
-      "tpsl_id": "10028700746"
-    }
-  },
-  "realized_pnl_usdt": -8.057676414368611,
+  "positions": {},
+  "realized_pnl_usdt": -8.25930881436861,
   "risk_stop_triggered": false,
   "started_at_ms": 1789658980518,
   "test1": {
@@ -23188,12 +23151,62 @@
       "sl": "0.8549",
       "strategy": "SMA10_SMA20_SHORT_5m",
       "tp": "0.838"
+    },
+    {
+      "close_price": "0.02013",
+      "closed_ms": 1791779855600,
+      "code_commit": "4511ca6ba51f94cbb6253bd0109886e63260778e",
+      "fee_usdt": -0.0216324,
+      "filled_size": "9",
+      "gross_pnl_usdt": -0.18,
+      "history_id": "118035241",
+      "hold_minutes": 11.98,
+      "inst": "AZTEC-USDT",
+      "net_pnl_usdt": -0.2016324,
+      "notional_usdt": "17.937",
+      "open_price": "0.01993",
+      "opened_ms": 1791779136570,
+      "pattern_review": [],
+      "reason": "external close",
+      "result": "LOSS",
+      "side": "SHORT",
+      "signal_age_ms": 35983,
+      "signal_close_ms": 1791779100000,
+      "signal_rank": 6,
+      "signal_snapshot": {
+        "close": 0.01996,
+        "inst": "AZTEC-USDT",
+        "ma10": 0.020054,
+        "ma10_live_cross_level": 0.020017777777777777,
+        "ma10_previous": 0.020101,
+        "ma10_stop_nine_closed_sum": 0.18016,
+        "ma10_stop_offset_pct": 1.0,
+        "ma20": 0.0200735,
+        "ma20_previous": 0.020082,
+        "pre_order_price_guard": {
+          "adverse_gap_filter_enabled": true,
+          "adverse_gap_pct": 0.15030060120240482,
+          "ask": "0.01996",
+          "bid": "0.01993",
+          "expected_fill": "0.01993",
+          "max_adverse_gap_pct": 0.25,
+          "max_spread_pct": 0.25,
+          "quote_age_ms": 90,
+          "signal_close": "0.01996",
+          "spread_pct": 0.1504136375031336
+        },
+        "side": "SHORT",
+        "signal_close_ms": 1791779100000
+      },
+      "sl": "0.02012",
+      "strategy": "SMA10_SMA20_SHORT_5m",
+      "tp": "0.01973"
     }
   ],
   "trades": {
     "flat": 0,
-    "losses": 160,
-    "total": 299,
+    "losses": 161,
+    "total": 300,
     "unverified": 4,
     "wins": 135
   },
