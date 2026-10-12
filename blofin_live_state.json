@@ -1023,9 +1023,37 @@
     ],
     "ma_cross": {
       "events": [],
-      "signal_close_ms": 1791778800000,
-      "signals": [],
-      "status": "NO_CROSS",
+      "selected": {
+        "close": 0.01996,
+        "inst": "AZTEC-USDT",
+        "ma10": 0.020054,
+        "ma10_live_cross_level": 0.020017777777777777,
+        "ma10_previous": 0.020101,
+        "ma10_stop_nine_closed_sum": 0.18016,
+        "ma10_stop_offset_pct": 1.0,
+        "ma20": 0.0200735,
+        "ma20_previous": 0.020082,
+        "side": "SHORT",
+        "signal_close_ms": 1791779100000
+      },
+      "signal_close_ms": 1791779100000,
+      "signals": [
+        {
+          "close": 0.01996,
+          "inst": "AZTEC-USDT",
+          "ma10": 0.020054,
+          "ma10_live_cross_level": 0.020017777777777777,
+          "ma10_previous": 0.020101,
+          "ma10_stop_nine_closed_sum": 0.18016,
+          "ma10_stop_offset_pct": 1.0,
+          "ma20": 0.0200735,
+          "ma20_previous": 0.020082,
+          "rank": 6,
+          "side": "SHORT",
+          "signal_close_ms": 1791779100000
+        }
+      ],
+      "status": "OPENED",
       "strategy": "SMA10_SMA20_5m"
     },
     "nearest_volume_entry": {
@@ -1038,7 +1066,7 @@
       "tp_pct": 1,
       "trade_hard_volume_gate": false
     },
-    "result": "NO_CROSS",
+    "result": "OPENED",
     "signal_label": "10m",
     "strategy": "SMA10_SMA20_5m",
     "top7": [
@@ -1752,8 +1780,8 @@
     "ZRO-USDT": 1791299700000,
     "ZRX-USDT": 1791631800000
   },
-  "last_run_ms": 1791778824897,
-  "last_scan_close_ms": 1791778800000,
+  "last_run_ms": 1791779137209,
+  "last_scan_close_ms": 1791779100000,
   "last_top10": [
     "CELR-USDT",
     "LUNA2-USDT",
@@ -2014,13 +2042,96 @@
   "legacy_pnl_note": "Four earlier closes were recorded as FLAT because BloFin close history was not ready. They are marked unverified and excluded from verified PnL.",
   "ma_cross_last_scan": {
     "events": [],
-    "signal_close_ms": 1791778800000,
-    "signals": [],
-    "status": "NO_CROSS",
+    "selected": {
+      "close": 0.01996,
+      "inst": "AZTEC-USDT",
+      "ma10": 0.020054,
+      "ma10_live_cross_level": 0.020017777777777777,
+      "ma10_previous": 0.020101,
+      "ma10_stop_nine_closed_sum": 0.18016,
+      "ma10_stop_offset_pct": 1.0,
+      "ma20": 0.0200735,
+      "ma20_previous": 0.020082,
+      "side": "SHORT",
+      "signal_close_ms": 1791779100000
+    },
+    "signal_close_ms": 1791779100000,
+    "signals": [
+      {
+        "close": 0.01996,
+        "inst": "AZTEC-USDT",
+        "ma10": 0.020054,
+        "ma10_live_cross_level": 0.020017777777777777,
+        "ma10_previous": 0.020101,
+        "ma10_stop_nine_closed_sum": 0.18016,
+        "ma10_stop_offset_pct": 1.0,
+        "ma20": 0.0200735,
+        "ma20_previous": 0.020082,
+        "rank": 6,
+        "side": "SHORT",
+        "signal_close_ms": 1791779100000
+      }
+    ],
+    "status": "OPENED",
     "strategy": "SMA10_SMA20_5m"
   },
   "position": null,
-  "positions": {},
+  "positions": {
+    "AZTEC-USDT": {
+      "account_fraction": "",
+      "allocation_label": "SMA CROSS <= 19.650343160060995 USDT bankroll",
+      "client_order_id": "livemadb33c8f957214910acd93c38ad",
+      "code_commit": "4511ca6ba51f94cbb6253bd0109886e63260778e",
+      "entry_fee": "0.010762200000000000",
+      "filled_size": "9",
+      "hold_policy": "SMA10_DYNAMIC_BROKER_STOP",
+      "inst": "AZTEC-USDT",
+      "ma10_stop_signal_close_ms": 1791779100000,
+      "notional_usdt": "17.937",
+      "opened_ms": 1791779136570,
+      "order_id": "2000088669365",
+      "protection_status": "SMA_MA10_ENTRY1_CAP_TP_SL_ACTIVE",
+      "reference_entry": "0.01993",
+      "risk_profile": "ONE_POSITION_1X_TP_GROSS1_SL_MA10_TRAIL_ENTRY1_CAP",
+      "side": "SHORT",
+      "signal_age_ms": 35983,
+      "signal_close_ms": 1791779100000,
+      "signal_rank": 6,
+      "signal_snapshot": {
+        "close": 0.01996,
+        "inst": "AZTEC-USDT",
+        "ma10": 0.020054,
+        "ma10_live_cross_level": 0.020017777777777777,
+        "ma10_previous": 0.020101,
+        "ma10_stop_nine_closed_sum": 0.18016,
+        "ma10_stop_offset_pct": 1.0,
+        "ma20": 0.0200735,
+        "ma20_previous": 0.020082,
+        "pre_order_price_guard": {
+          "adverse_gap_filter_enabled": true,
+          "adverse_gap_pct": 0.15030060120240482,
+          "ask": "0.01996",
+          "bid": "0.01993",
+          "expected_fill": "0.01993",
+          "max_adverse_gap_pct": 0.25,
+          "max_spread_pct": 0.25,
+          "quote_age_ms": 90,
+          "signal_close": "0.01996",
+          "spread_pct": 0.1504136375031336
+        },
+        "side": "SHORT",
+        "signal_close_ms": 1791779100000
+      },
+      "size": "9",
+      "sl": "0.02012",
+      "sl_policy": "SL_MA10_PCT1_TRAIL_ENTRY_PCT1_CAP_5M",
+      "strategy": "SMA10_SMA20_SHORT_5m",
+      "tp": "0.01973",
+      "tp_policy": "TP_GROSS1",
+      "tpsl_client_order_id": "livetpslbc4fa1a8fd214413a60dc2e8",
+      "tpsl_id": "10028700746"
+    }
+  },
   "realized_pnl_usdt": -8.057676414368611,
   "risk_stop_triggered": false,
   "started_at_ms": 1789658980518,
