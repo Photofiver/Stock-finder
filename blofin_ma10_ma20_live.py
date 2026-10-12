@@ -88,6 +88,41 @@ def bounded_ma10_stop_price(bot, side, previous_nine_closed_sum, entry, tick):
     raise ValueError("Unknown side for bounded MA10 stop")
 
 
+def ma10_touch_stop_price(bot, side, previous_nine_closed_sum, tick):
+    """Exact broker trigger for a touch of the LIVE SMA10.
+
+    During the open candle MA10 = (sum(previous 9 closes) + P) / 10.
+    Solving P = MA10 gives P = sum9 / 9.
+    """
+    prev_sum = bot.d(previous_nine_closed_sum)
+    if prev_sum <= 0:
+        raise ValueError("Missing previous nine closes for MA10 touch stop")
+    raw = prev_sum / bot.d(9)
+    if side == "LONG":
+        return bot.price_step(raw, tick, bot.ROUND_CEILING)
+    if side == "SHORT":
+        return bot.price_step(raw, tick, bot.ROUND_FLOOR)
+    raise ValueError("Unknown side for MA10 touch stop")
+
+
+def active_dynamic_stop_price(bot, side, previous_nine_closed_sum, entry, tick):
+    """Current stop policy plus the user's SHORT MA10-touch exit.
+
+    LONG keeps the existing bounded MA10 +/-1% stop.
+    SHORT exits at whichever would trigger first: the existing stop or a
+    touch of LIVE MA10.
+    """
+    current_stop = bounded_ma10_stop_price(
+        bot, side, previous_nine_closed_sum, entry, tick,
+    )
+    if side == "SHORT":
+        ma10_touch = ma10_touch_stop_price(
+            bot, side, previous_nine_closed_sum, tick,
+        )
+        return min(current_stop, ma10_touch)
+    return current_stop
+
+
 def crossover(bot, inst, expected_close_ms, bars=None):
     bars = bot.fetch_signal_bars(inst) if bars is None else bars
     if len(bars) < 21 or bot.bar_close_ms(bars[-1]) != expected_close_ms:
@@ -175,14 +210,15 @@ def open_position(bot, state, signal, rank, instruments):
     # in the trade direction. The shared guard blocks >0.25% by default.
     quote = bot.checked_preorder_quote(inst, side, signal["close"], enforce_adverse_gap=True)
     tick = bot.d(instruments[inst].get("tickSize") or "0.00000001")
-    ma_sl = ma10_trailing_one_percent_stop_price(
-        bot, side, signal["ma10_stop_nine_closed_sum"], tick,
+    ma_sl = active_dynamic_stop_price(
+        bot, side, signal["ma10_stop_nine_closed_sum"], quote["expected_fill"], tick,
     )
-    # Never open once the live quote has already crossed the proposed MA10 +/-1% stop.
+    # Never open once the live quote has already crossed the proposed stop.
+    # For SHORT this includes a direct LIVE MA10-touch exit.
     if (side == "LONG" and bot.d(quote["bid"]) <= ma_sl) or (
         side == "SHORT" and bot.d(quote["ask"]) >= ma_sl
     ):
-        print(f"SMA CROSS {inst} {side}: entry blocked; price already beyond MA10 +/-1% stop {ma_sl}")
+        print(f"SMA CROSS {inst} {side}: entry blocked; price already beyond active stop {ma_sl}")
         return False
     cap = min(bot.MAX_NOTIONAL_USDT, bot.current_live_bankroll(state), bot.get_available_usdt())
     if cap <= 0:
@@ -230,12 +266,20 @@ def open_position(bot, state, signal, rank, instruments):
         "tp": "",
         "sl": "",
         "tp_policy": "TP_GROSS1",
-        "sl_policy": f"SL_MA10_PCT1_TRAIL_ENTRY_PCT1_CAP_{bot.SIGNAL_MINUTES}M",
+        "sl_policy": (
+            f"SL_MA10_TOUCH_OR_CURRENT_SHORT_{bot.SIGNAL_MINUTES}M"
+            if side == "SHORT"
+            else f"SL_MA10_PCT1_TRAIL_ENTRY_PCT1_CAP_{bot.SIGNAL_MINUTES}M"
+        ),
         "hold_policy": DYNAMIC_MA10_HOLD_POLICY,
         "protection_status": "SMA_MA10_TP_SL_PENDING",
         "strategy": f"SMA10_SMA20_{side}_{bot.SIGNAL_LABEL}",
         "code_commit": bot.CODE_COMMIT,
-        "risk_profile": "ONE_POSITION_1X_TP_GROSS1_SL_MA10_TRAIL_ENTRY1_CAP",
+        "risk_profile": (
+            "ONE_POSITION_1X_TP_GROSS1_SHORT_MA10_TOUCH_OR_CURRENT_SL"
+            if side == "SHORT"
+            else "ONE_POSITION_1X_TP_GROSS1_SL_MA10_TRAIL_ENTRY1_CAP"
+        ),
         "account_fraction": "",
         "allocation_label": f"SMA CROSS <= {bot.clean_decimal(cap)} USDT bankroll",
     }
@@ -267,13 +311,13 @@ def open_position(bot, state, signal, rank, instruments):
             bot, side, actual_price,
             bot.d(instruments[inst].get("tickSize") or "0.00000001"),
         )
-        sl = bounded_ma10_stop_price(
+        sl = active_dynamic_stop_price(
             bot, side, signal["ma10_stop_nine_closed_sum"], actual_price, tick,
         )
         if (side == "LONG" and sl >= actual_price) or (
             side == "SHORT" and sl <= actual_price
         ):
-            raise RuntimeError(f"MA10 stop capped at entry +/-1% {sl} already crossed at fill {actual_price}")
+            raise RuntimeError(f"Active MA10 stop {sl} already crossed at fill {actual_price}")
         tpsl_id, tp_client_id = bot.place_tpsl_for_position(inst, side, tp, sl)
         if not tpsl_id:
             raise RuntimeError("Broker did not return TP/SL identifier")
@@ -304,7 +348,8 @@ def open_position(bot, state, signal, rank, instruments):
     bot.notify(
         f"OPEN {side} {inst} | SMA10/20 cross {bot.SIGNAL_LABEL} | entry {actual_price} "
         f"| {position['notional_usdt']} USDT | 1x | broker TP +1% {position['tp']} "
-        f"| broker MA10 +/-1% trailing stop capped at 1% from entry: {position['sl']} "
+        f"| broker stop {position['sl']} "
+        f"({'SHORT: first of current SL or LIVE MA10 touch' if side == 'SHORT' else 'LONG: MA10 +/-1% trail capped at 1% from entry'}) "
         f"(ratchets every {bot.SIGNAL_LABEL}; triggers intrabar)",
         "BloFin LIVE SMA CROSS",
     )
@@ -379,7 +424,7 @@ def ensure_broker_sl_for_existing_sma(bot, state, instruments):
 
 
 def refresh_dynamic_ma10_stop(bot, state, pos, bars, expected_close_ms, instruments):
-    """Ratchet exchange stop: LONG never down, SHORT never up (MA10 +/-1%)."""
+    """Ratchet exchange stop; SHORT also exits on LIVE MA10 touch."""
     inst, side = pos["inst"], pos["side"]
     if expected_close_ms <= int(pos.get("signal_close_ms") or 0):
         return "HOLDING_INITIAL_MA10_STOP"
@@ -396,7 +441,7 @@ def refresh_dynamic_ma10_stop(bot, state, pos, bars, expected_close_ms, instrume
             "SAFETY: cannot enforce 1% entry stop without verified fill price",
         )
         return "MA10_MISSING_ENTRY_PRICE_CLOSE_ATTEMPTED"
-    target = bounded_ma10_stop_price(
+    target = active_dynamic_stop_price(
         bot, side, sig["ma10_stop_nine_closed_sum"], entry, tick,
     )
     old_sl = bot.d(pos.get("sl") or "0")
@@ -443,7 +488,7 @@ def refresh_dynamic_ma10_stop(bot, state, pos, bars, expected_close_ms, instrume
             pos["tpsl_client_order_id"] = ""
         bot._run_for_tracked_position(
             state, inst, bot.close_tracked_position,
-            f"MA10 1% trailing stop crossed at price {last}; broker threshold {target}",
+            f"Active MA10 stop crossed at price {last}; broker threshold {target}",
         )
         return "MA10_STOP_MARKET_EXIT"
     if not pos.get("tpsl_id"):
@@ -480,9 +525,13 @@ def refresh_dynamic_ma10_stop(bot, state, pos, bars, expected_close_ms, instrume
     pos["sl"] = bot.clean_decimal(target)
     pos["ma10_stop_signal_close_ms"] = expected_close_ms
     pos["protection_status"] = "SMA_MA10_ENTRY1_CAP_TP_SL_ACTIVE"
-    pos["sl_policy"] = f"SL_MA10_PCT1_TRAIL_ENTRY_PCT1_CAP_{bot.SIGNAL_MINUTES}M"
+    pos["sl_policy"] = (
+        f"SL_MA10_TOUCH_OR_CURRENT_SHORT_{bot.SIGNAL_MINUTES}M"
+        if side == "SHORT"
+        else f"SL_MA10_PCT1_TRAIL_ENTRY_PCT1_CAP_{bot.SIGNAL_MINUTES}M"
+    )
     pos.pop("protection_error", None)
-    print(f"MA10 +/-1% TRAIL {side} {inst}: tightened SL {old_sl} -> {target} (TP {tp})")
+    print(f"MA10 ACTIVE STOP {side} {inst}: tightened SL {old_sl} -> {target} (TP {tp})")
     return "MA10_BROKER_STOP_AMENDED"
 
 
