@@ -1972,8 +1972,30 @@ def record_closed(state, reason_hint=None):
     patterns = (pos.get("signal_snapshot") or {}).get("chart_patterns") or []
     pattern_review = review_chart_patterns(patterns, str(pos.get("side") or ""), result)
 
+    # Store the actual close-time chart alongside the verified broker history.
+    # Chart errors are diagnostics only: they never suppress realized PnL.
+    exit_chart = ""
+    exit_chart_error = ""
+    try:
+        from blofin_trade_charts import capture_chart
+        exit_chart = capture_chart(
+            __import__(__name__), pos, "EXIT", closed_ms,
+            hist.get("closeAveragePrice"), entry_price=(
+                hist.get("openAveragePrice") or pos.get("reference_entry")
+            ), pnl=net_pnl, reason=reason,
+        )
+        print(f"LIVE EXIT CHART saved: {exit_chart}")
+    except Exception as exc:
+        exit_chart_error = f"{type(exc).__name__}: {exc}"
+        print(f"LIVE EXIT CHART ERROR {pos['inst']}: {exit_chart_error}")
+
     history = state.setdefault("trade_history", [])
     history.append({
+        "entry_chart": str(pos.get("entry_chart") or ""),
+        "exit_chart": str(exit_chart),
+        "entry_chart_error": str(pos.get("entry_chart_error") or ""),
+        "exit_chart_error": exit_chart_error,
+        "chart_source": "BloFin 5m generated PNG (not TradingView screenshot)",
         "inst": pos["inst"],
         "side": pos["side"],
         "result": result,
