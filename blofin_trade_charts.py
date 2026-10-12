@@ -180,12 +180,19 @@ def capture_chart(bot, pos, event, event_ms, price, **kwargs):
     inst = str(pos["inst"])
     # BloFin 'after' fetches older candles; anchor to the event candle
     # instead of accidentally capturing candles from a later trade.
-    raw = bot.market_get(
-        "/api/v1/market/candles",
-        {"instId": inst, "bar": "5m",
-         "after": str(int(event_ms) + BAR_MS),
-         "limit": "160"},
-    )
+    # Charting is non-essential: use one bounded 6s HTTP call rather than
+    # the trading bot's retry loop, which could hold up a 10m time exit.
+    import requests
+    url = str(getattr(bot, "BASE", "https://openapi.blofin.com")) + "/api/v1/market/candles"
+    response = requests.get(url, params={
+        "instId": inst, "bar": "5m",
+        "after": str(int(event_ms) + BAR_MS), "limit": "160",
+    }, timeout=6)
+    response.raise_for_status()
+    payload = response.json()
+    if str(payload.get("code")) != "0":
+        raise RuntimeError(f"BloFin chart candle request rejected: {payload.get('msg')}")
+    raw = payload.get("data") or []
     return render_trade_chart(
         raw, inst, str(pos["side"]), str(event).upper(), int(event_ms),
         float(price), int(pos["opened_ms"]),
