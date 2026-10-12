@@ -71,7 +71,7 @@ def render_trade_chart(candles, inst, side, event, event_ms, event_price,
     from matplotlib.patches import Rectangle
 
     candles = _normalize(candles, event_ms)
-    if len(candles) < 35:
+    if len(candles) < 21:
         raise ValueError(f"{inst}: too few candles for chart ({len(candles)})")
     closes = [x[4] for x in candles]
     opens = [x[1] for x in candles]
