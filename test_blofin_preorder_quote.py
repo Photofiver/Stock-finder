@@ -41,8 +41,63 @@ class EntryQuoteRefreshTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "stale market quote.*after 3 checks"):
                 bot.checked_preorder_quote("AERO-USDT", "LONG", "100")
 
-        self.assertEqual(request.call_count, 3)
+        self.assertEqual(request.call_count, 4)  # three tickers + book fallback
         self.assertEqual(sleep.call_count, 2)
+
+    def test_fresh_book_unblocks_stale_ticker(self):
+        book = [{
+            "ts": "99000",
+            "bids": [["99.99", "20"]],
+            "asks": [["100.01", "10"]],
+        }]
+        with (
+            patch.object(bot, "market_get", side_effect=[
+                self.ticker(65000), self.ticker(65000),
+                self.ticker(65000), book,
+            ]) as request,
+            patch.object(bot, "now_ms", return_value=100000),
+            patch.object(bot.time, "sleep"),
+        ):
+            result = bot.checked_preorder_quote("AERO-USDT", "LONG", "100")
+        self.assertEqual(request.call_count, 4)
+        self.assertEqual(result["quote_source"], "order_book")
+        self.assertEqual(result["quote_age_ms"], 1000)
+        self.assertEqual(result["expected_fill"], "100.01")
+        self.assertLessEqual(result["spread_pct"], 0.25)
+
+    def test_stale_order_book_never_bypasses_age_guard(self):
+        old_book = [{
+            "ts": "70000", "bids": [["100", "10"]],
+            "asks": [["100.01", "10"]],
+        }]
+        with (
+            patch.object(bot, "market_get", side_effect=[
+                self.ticker(65000), self.ticker(65000),
+                self.ticker(65000), old_book,
+            ]),
+            patch.object(bot, "now_ms", return_value=100000),
+            patch.object(bot.time, "sleep"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "order book fallback unavailable"):
+                bot.checked_preorder_quote("AERO-USDT", "LONG", "100")
+
+    def test_fresh_book_does_not_bypass_price_gap_limit(self):
+        book = [{
+            "ts": "99000", "bids": [["100.4", "10"]],
+            "asks": [["100.5", "10"]],
+        }]
+        with (
+            patch.object(bot, "market_get", side_effect=[
+                self.ticker(65000), self.ticker(65000),
+                self.ticker(65000), book,
+            ]),
+            patch.object(bot, "now_ms", return_value=100000),
+            patch.object(bot.time, "sleep"),
+            patch.object(bot, "append_technical_event") as event,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "adverse price move"):
+                bot.checked_preorder_quote("AERO-USDT", "LONG", "100")
+            event.assert_called_once()
 
     def test_fresh_quote_still_blocked_by_spread_guard(self):
         with (
