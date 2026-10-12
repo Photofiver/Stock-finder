@@ -160,8 +160,8 @@
     "description": "BloFin history realizedPnl already includes fees; gross=net-fee; net=realizedPnl",
     "version": 1
   },
-  "fees_usdt": -4.46914694412,
-  "gross_realized_pnl_usdt": -4.811133030248609,
+  "fees_usdt": -4.49120553372,
+  "gross_realized_pnl_usdt": -4.905297030248609,
   "last_diagnostic": {
     "generated_at_ms": 1791634279008,
     "instruments": [
@@ -1023,10 +1023,39 @@
     ],
     "ma_cross": {
       "events": [],
-      "signal_close_ms": 1791828600000,
-      "signals": [],
-      "status": "NO_CROSS",
-      "strategy": "SMA10_SMA20_5m"
+      "selected": {
+        "close": 0.005483,
+        "inst": "SKL-USDT",
+        "ma10": 0.0053491,
+        "ma10_live_cross_level": 0.0053635555555555554,
+        "ma10_previous": 0.0053233,
+        "ma10_stop_nine_closed_sum": 0.048272,
+        "ma10_stop_offset_pct": 1.0,
+        "ma20": 0.005325450000000001,
+        "ma20_previous": 0.0053292,
+        "side": "LONG",
+        "signal_close_ms": 1791828900000
+      },
+      "signal_close_ms": 1791828900000,
+      "signals": [
+        {
+          "close": 0.005483,
+          "inst": "SKL-USDT",
+          "ma10": 0.0053491,
+          "ma10_live_cross_level": 0.0053635555555555554,
+          "ma10_previous": 0.0053233,
+          "ma10_stop_nine_closed_sum": 0.048272,
+          "ma10_stop_offset_pct": 1.0,
+          "ma20": 0.005325450000000001,
+          "ma20_previous": 0.0053292,
+          "rank": 5,
+          "side": "LONG",
+          "signal_close_ms": 1791828900000
+        }
+      ],
+      "status": "OPENED",
+      "strategy": "SMA10_SMA20_5m",
+      "ten_minute_exit": "TIME_EXIT_10M"
     },
     "nearest_volume_entry": {
       "bankroll_usdt": "8.535730864278248",
@@ -1038,7 +1067,7 @@
       "tp_pct": 1,
       "trade_hard_volume_gate": false
     },
-    "result": "NO_CROSS",
+    "result": "OPENED",
     "signal_label": "10m",
     "strategy": "SMA10_SMA20_5m",
     "top7": [
@@ -1752,8 +1781,8 @@
     "ZRO-USDT": 1791299700000,
     "ZRX-USDT": 1791631800000
   },
-  "last_run_ms": 1791828635288,
-  "last_scan_close_ms": 1791828600000,
+  "last_run_ms": 1791828924570,
+  "last_scan_close_ms": 1791828900000,
   "last_top10": [
     "CELR-USDT",
     "LUNA2-USDT",
@@ -1773,7 +1802,7 @@
     "PYTH-USDT",
     "SKL-USDT",
     "CYBER-USDT",
-    "TRUTH-USDT"
+    "DOS-USDT"
   ],
   "last_volume_concentration": {
     "AKT-USDT": {
@@ -2014,14 +2043,43 @@
   "legacy_pnl_note": "Four earlier closes were recorded as FLAT because BloFin close history was not ready. They are marked unverified and excluded from verified PnL.",
   "ma_cross_last_scan": {
     "events": [],
-    "signal_close_ms": 1791828600000,
-    "signals": [],
-    "status": "NO_CROSS",
-    "strategy": "SMA10_SMA20_5m"
+    "selected": {
+      "close": 0.005483,
+      "inst": "SKL-USDT",
+      "ma10": 0.0053491,
+      "ma10_live_cross_level": 0.0053635555555555554,
+      "ma10_previous": 0.0053233,
+      "ma10_stop_nine_closed_sum": 0.048272,
+      "ma10_stop_offset_pct": 1.0,
+      "ma20": 0.005325450000000001,
+      "ma20_previous": 0.0053292,
+      "side": "LONG",
+      "signal_close_ms": 1791828900000
+    },
+    "signal_close_ms": 1791828900000,
+    "signals": [
+      {
+        "close": 0.005483,
+        "inst": "SKL-USDT",
+        "ma10": 0.0053491,
+        "ma10_live_cross_level": 0.0053635555555555554,
+        "ma10_previous": 0.0053233,
+        "ma10_stop_nine_closed_sum": 0.048272,
+        "ma10_stop_offset_pct": 1.0,
+        "ma20": 0.005325450000000001,
+        "ma20_previous": 0.0053292,
+        "rank": 5,
+        "side": "LONG",
+        "signal_close_ms": 1791828900000
+      }
+    ],
+    "status": "OPENED",
+    "strategy": "SMA10_SMA20_5m",
+    "ten_minute_exit": "TIME_EXIT_10M"
   },
   "position": null,
   "positions": {},
-  "realized_pnl_usdt": -9.280279974368606,
+  "realized_pnl_usdt": -9.396502563968607,
   "risk_stop_triggered": false,
   "started_at_ms": 1789658980518,
   "test1": {
@@ -23807,12 +23865,62 @@
       "sl": "0.030867",
       "strategy": "SMA10_SMA20_SHORT_5m",
       "tp": "0.030446"
+    },
+    {
+      "close_price": "0.005452",
+      "closed_ms": 1791829524675,
+      "code_commit": "c4f0df7e313609505ac39b557e44a3f836c0e286",
+      "fee_usdt": -0.0220585896,
+      "filled_size": "3363",
+      "gross_pnl_usdt": -0.094164,
+      "history_id": "118072818",
+      "hold_minutes": 10.01,
+      "inst": "SKL-USDT",
+      "net_pnl_usdt": -0.1162225896,
+      "notional_usdt": "18.42924",
+      "open_price": "0.00548",
+      "opened_ms": 1791828923947,
+      "pattern_review": [],
+      "reason": "TIME EXIT: 10 minutes since position opened",
+      "result": "LOSS",
+      "side": "LONG",
+      "signal_age_ms": 23240,
+      "signal_close_ms": 1791828900000,
+      "signal_rank": 5,
+      "signal_snapshot": {
+        "close": 0.005483,
+        "inst": "SKL-USDT",
+        "ma10": 0.0053491,
+        "ma10_live_cross_level": 0.0053635555555555554,
+        "ma10_previous": 0.0053233,
+        "ma10_stop_nine_closed_sum": 0.048272,
+        "ma10_stop_offset_pct": 1.0,
+        "ma20": 0.005325450000000001,
+        "ma20_previous": 0.0053292,
+        "pre_order_price_guard": {
+          "adverse_gap_filter_enabled": true,
+          "adverse_gap_pct": -0.09119095385737735,
+          "ask": "0.005478",
+          "bid": "0.005469",
+          "expected_fill": "0.005478",
+          "max_adverse_gap_pct": 0.25,
+          "max_spread_pct": 0.25,
+          "quote_age_ms": 14190,
+          "signal_close": "0.005483",
+          "spread_pct": 0.16442861057824062
+        },
+        "side": "LONG",
+        "signal_close_ms": 1791828900000
+      },
+      "sl": "0.005426",
+      "strategy": "SMA10_SMA20_LONG_5m",
+      "tp": "0.005535"
     }
   ],
   "trades": {
     "flat": 0,
-    "losses": 170,
-    "total": 313,
+    "losses": 171,
+    "total": 314,
     "unverified": 4,
     "wins": 139
   },
