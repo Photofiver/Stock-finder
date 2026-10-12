@@ -1,0 +1,24 @@
+name: Test BloFin chart snapshots
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - blofin_trade_charts.py
+      - test_blofin_trade_charts.py
+      - .github/workflows/blofin_trade_charts_test.yml
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python -m unittest -v test_blofin_trade_charts.py
