@@ -104,6 +104,10 @@ jobs:
           if [ -f blofin_pattern_learning.json ]; then
             git add blofin_pattern_learning.json
           fi
+          # Preserve indicator-rich entry and exit PNGs so they can be viewed by hour.
+          if [ -d blofin_trade_charts ]; then
+            git add -- blofin_trade_charts/
+          fi
           if ! git diff --cached --quiet; then
             git commit -m 'Update BloFin signal state'
             git pull --rebase origin main
