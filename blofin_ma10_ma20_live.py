@@ -423,14 +423,6 @@ def open_position(bot, state, signal, rank, instruments):
                 "BloFin LIVE SAFETY",
             )
         return False
-    bot.notify(
-        f"OPEN {side} {inst} | SMA10/20 cross {bot.SIGNAL_LABEL} | entry {actual_price} "
-        f"| {position['notional_usdt']} USDT | 1x | broker TP +1% {position['tp']} "
-        f"| broker stop {position['sl']} "
-        f"({'SHORT: first of current SL or LIVE MA10 touch' if side == 'SHORT' else 'LONG: MA10 +/-1% trail capped at 1% from entry'}) "
-        f"(ratchets every {bot.SIGNAL_LABEL}; triggers intrabar)",
-        "BloFin LIVE SMA CROSS",
-    )
     # Visual diagnostics run only after the exchange TP/SL is installed.
     # They must never block a live trade or alter the position's protection.
     try:
@@ -445,6 +437,17 @@ def open_position(bot, state, signal, rank, instruments):
         position["entry_chart"] = ""
         position["entry_chart_error"] = f"{type(exc).__name__}: {exc}"
         print(f"SMA ENTRY CHART ERROR {inst}: {exc}")
+    # One phone notification with the actual entry chart as an image attachment.
+    # If chart generation/upload fails, notify() still delivers the text.
+    bot.notify(
+        f"OPEN {side} {inst} | SMA10/20 cross {bot.SIGNAL_LABEL} | entry {actual_price} "
+        f"| {position['notional_usdt']} USDT | 1x | broker TP +1% {position['tp']} "
+        f"| broker stop {position['sl']} "
+        f"({'SHORT: first of current SL or LIVE MA10 touch' if side == 'SHORT' else 'LONG: MA10 +/-1% trail capped at 1% from entry'}) "
+        f"(ratchets every {bot.SIGNAL_LABEL}; triggers intrabar)",
+        "BloFin LIVE SMA CROSS",
+        attachment_path=position.get("entry_chart"),
+    )
     return True
 
 
