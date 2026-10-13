@@ -1,0 +1,41 @@
+name: Audit ntfy image deliveries 2026-10-13
+on:
+  push:
+    paths:
+      - '.github/workflows/blofin_ntfy_images_audit_20261013.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install requests
+      - name: Read server accepted notification records, no orders
+        run: |
+          python - <<'PY'
+          import requests, json, datetime
+          topic = "blofin-nhd0jt7wspfnhtitdlaowk1n"
+          url = f"https://ntfy.sh/{topic}/json"
+          resp = requests.get(url, params={"poll": "1", "since": "5h"}, timeout=25)
+          resp.raise_for_status()
+          events = []
+          for line in resp.text.splitlines():
+              try:
+                  event = json.loads(line)
+                  if event.get("event") == "message":
+                      events.append(event)
+              except json.JSONDecodeError:
+                  pass
+          charts = [e for e in events if e.get("title") in ("BloFin LIVE SMA CROSS", "BloFin LIVE RESULT", "BloFin LIVE CHART TEST")]
+          print(f"NTFY_TOPIC_SERVER_AUDIT messages={len(events)} trade_charts={len(charts)} attachments={sum(bool(e.get('attachment')) for e in charts)}")
+          for e in charts[-22:]:
+              dt = datetime.datetime.fromtimestamp(int(e.get("time", 0)), datetime.timezone.utc).isoformat()
+              attach=e.get("attachment") or {}
+              print(f"NTFY_TOPIC_MESSAGE utc={dt} title={e.get('title')} attach={bool(attach)} mime={attach.get('type')} bytes={attach.get('size')} attachment_name={attach.get('name')} text={str(e.get('message') or '')[:105]}")
+          PY
