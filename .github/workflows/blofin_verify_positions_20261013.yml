@@ -1,0 +1,103 @@
+name: BloFin one-time read-only reconciliation 2026-10-13
+
+on:
+  push:
+    paths:
+      - '.github/workflows/blofin_verify_positions_20261013.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blofin-readonly-reconciliation-20261013
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install requests
+      - name: Query broker records (GET requests ONLY, no order changes)
+        env:
+          BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
+          BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
+          BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
+          BLOFIN_LIVE_ENABLED: 'false'
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from blofin_live_hourly import private_request
+          
+          targets = {
+              "118093767": "SKL-USDT",
+              "118095195": "Q-USDT",
+              "118099378": "SAFE-USDT",
+              "118099682": "RENDER-USDT",
+              "118100479": "DATA-USDT",
+              "118104417": "TRUTH-USDT",
+          }
+          begin, end = "1791850800000", "1791862200000"
+          state = json.load(open("blofin_live_state.json", encoding="utf-8"))
+          indexed = {str(row.get("history_id")): row for row in state.get("trade_history", [])}
+          all_ok = True
+          for history_id, inst in targets.items():
+              expected = indexed.get(history_id)
+              if not expected:
+                  print(f"AUDIT {inst} {history_id}: NOT_IN_LOCAL_STATE")
+                  all_ok = False
+                  continue
+              expected_open = int(expected["opened_ms"])
+              expected_close = int(expected["closed_ms"])
+              responses = {}
+              for label, endpoint in (
+                  ("history", "/api/v1/account/positions-history"),
+                  ("orders", "/api/v1/trade/orders-history"),
+                  ("fills", "/api/v1/trade/fills-history"),
+              ):
+                  params = {"instId": inst, "begin": begin, "end": end, "limit": "100"}
+                  try:
+                      rows = private_request("GET", endpoint, params=params)
+                      responses[label] = rows if isinstance(rows, list) else []
+                  except Exception as error:
+                      print(f"AUDIT {inst} {label}: ERROR {type(error).__name__}: {error}")
+                      responses[label] = []
+              hist = next((x for x in responses["history"] if str(x.get("historyId") or "") == history_id), None)
+              opens = [
+                  x for x in responses["orders"]
+                  if str(x.get("clientOrderId") or "").startswith("livema")
+                  and str(x.get("state") or "").lower() == "filled"
+                  and abs(int(x.get("createTime") or 0) - expected_open) <= 120000
+              ]
+              linked_fills = [
+                  x for x in responses["fills"]
+                  if str(x.get("orderId") or "") in {str(o.get("orderId") or "") for o in opens}
+                  and abs(int(x.get("ts") or 0) - expected_open) <= 120000
+              ]
+              closes = [
+                  x for x in responses["orders"]
+                  if str(x.get("state") or "").lower() in ("filled", "partially_canceled")
+                  and abs(int(x.get("updateTime") or x.get("createTime") or 0) - expected_close) <= 120000
+                  and str(x.get("side") or "").lower() == ("sell" if expected.get("side") == "LONG" else "buy")
+              ]
+              ok_hist = bool(hist)
+              ok_open = bool(opens)
+              ok_fill = bool(linked_fills)
+              match_pnl = bool(hist) and abs(float(hist.get("realizedPnl") or 0) - float(expected["net_pnl_usdt"])) < 0.000001
+              status = "CONFIRMED_IN_BROKER_ORDERS_AND_FILLS" if all((ok_hist, ok_open, ok_fill, match_pnl)) else "NOT_FULLY_VERIFIED"
+              if status != "CONFIRMED_IN_BROKER_ORDERS_AND_FILLS":
+                  all_ok = False
+              print(f"AUDIT {inst} historyId={history_id} status={status} history_found={ok_hist} pnl_matches={match_pnl} live_entries={len(opens)} linked_fills={len(linked_fills)} closure_orders={len(closes)} net={expected['net_pnl_usdt']:.6f}")
+              if opens:
+                  print("  live_broker_order_ids=" + ",".join(str(x.get("orderId") or "") for x in opens))
+              if hist:
+                  print(f"  history_position_id={hist.get('positionId') or ''} history_create_ms={hist.get('createTime')} history_close_ms={hist.get('updateTime')}")
+          print("AUDIT_RESULT=" + ("ALL_CONFIRMED" if all_ok else "SOME_UNVERIFIED"))
+          PY
