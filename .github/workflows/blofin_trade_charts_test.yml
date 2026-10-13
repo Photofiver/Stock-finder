@@ -6,6 +6,7 @@ on:
     paths:
       - blofin_trade_charts.py
       - test_blofin_trade_charts.py
+      - test_blofin_ntfy_charts.py
       - .github/workflows/blofin_trade_charts_test.yml
 
 permissions:
@@ -21,4 +22,4 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt
-      - run: python -m unittest -v test_blofin_trade_charts.py
+      - run: python -m unittest -v test_blofin_trade_charts.py test_blofin_ntfy_charts.py
