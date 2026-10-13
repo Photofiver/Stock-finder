@@ -1,0 +1,78 @@
+name: BloFin RSI 75 overnight retrospective
+
+on:
+  push:
+    paths:
+      - '.github/workflows/blofin_rsi75_overnight_20261013.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replay recorded entries against saved signal RSI (READ ONLY)
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+          
+          START_MS = 1791836477325  # 2026-10-12 21:21 UK, drawdown reset
+          END_MS = 1791867600000    # 2026-10-13 06:00 UK, stop new entries
+          RSI_LIMIT = 75.0
+          state = json.loads(Path("blofin_live_state.json").read_text(encoding="utf-8"))
+          audit = json.loads(Path("blofin_live_scans/live_watch_history_5m.json").read_text(encoding="utf-8"))
+          scans = {int(item["signal_close_ms"]): item for item in audit["scans"]}
+          trades = [
+              t for t in state.get("trade_history", [])
+              if START_MS <= int(t.get("opened_ms") or 0) < END_MS
+          ]
+          trades.sort(key=lambda x: int(x["opened_ms"]))
+          net_before = sum(float(t["net_pnl_usdt"]) for t in trades)
+          blocked, kept, missing, records = [], [], [], []
+          for t in trades:
+              signal = int(t.get("signal_close_ms") or 0)
+              scan = scans.get(signal) or {}
+              row = next((i for i in scan.get("instruments", []) if i.get("inst") == t["inst"]), None)
+              snapshot = (row or {}).get("indicators_at_signal") or {}
+              raw = snapshot.get("rsi14")
+              if raw is None:
+                  raw = (row or {}).get("rsi14")
+              rsi = None if raw is None else float(raw)
+              time = datetime.fromtimestamp(int(t["opened_ms"]) / 1000, timezone.utc).strftime("%m-%d %H:%M UTC")
+              res = {"coin":t["inst"],"side":t["side"],"time":time,"net":float(t["net_pnl_usdt"]),"rsi":rsi,"snapshot":bool(snapshot)}
+              records.append(res)
+              print("RSI_ENTRY "+json.dumps(res, ensure_ascii=False, separators=(",",":")))
+              if rsi is None:
+                  missing.append(t)
+              elif rsi > RSI_LIMIT:
+                  blocked.append(t)
+              else:
+                  kept.append(t)
+          net_after = sum(float(t["net_pnl_usdt"]) for t in kept)
+          out = {
+              "scope":"reset 2026-10-12 21:21 UK through entries before 2026-10-13 06:00 UK",
+              "rsi_method":"RSI14 on confirmed CLOSED 5m signal candle from saved LIVE scan audits",
+              "threshold_exclusive":RSI_LIMIT,
+              "total_trades":len(trades),
+              "baseline_net_usdt":round(net_before,8),
+              "blocked":len(blocked),
+              "blocked_wins":sum(t["net_pnl_usdt"]>0 for t in blocked),
+              "blocked_losses":sum(t["net_pnl_usdt"]<0 for t in blocked),
+              "blocked_net_usdt":round(sum(float(t["net_pnl_usdt"]) for t in blocked),8),
+              "kept":len(kept),
+              "kept_wins":sum(t["net_pnl_usdt"]>0 for t in kept),
+              "kept_losses":sum(t["net_pnl_usdt"]<0 for t in kept),
+              "kept_net_usdt":round(net_after,8),
+              "change_vs_baseline_usdt":round(net_after-net_before,8),
+              "missing":len(missing),
+              "missing_trades":[t["inst"] for t in missing],
+              "blocked_trades":[{"coin":t["inst"],"side":t["side"],"net_usdt":t["net_pnl_usdt"]} for t in blocked],
+              "caveat":"Removing an entry may allow later trades not observed in this actual historical sequence. This is a filtered trade replay, not a full bot resimulation.",
+          }
+          print("RESULT "+json.dumps(out,ensure_ascii=False, separators=(",",":")))
+          PY
