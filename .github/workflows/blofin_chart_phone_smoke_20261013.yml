@@ -1,0 +1,29 @@
+name: BloFin chart phone delivery smoke 2026-10-13
+on:
+  push:
+    paths:
+      - '.github/workflows/blofin_chart_phone_smoke_20261013.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install requests
+      - name: Send existing SAFE exit PNG using ntfy (READ ONLY)
+        shell: bash
+        run: |
+          python - <<'PY'
+          import blofin_live_hourly as bot
+          bot.notify(
+              "TEST OBRAZ: SAFE-USDT EXIT 02:23 UK (stary zapis, NIE nowa transakcja)",
+              "BloFin LIVE CHART TEST",
+              attachment_path="blofin_trade_charts/2026-10-13/1791854433273_SAFE_USDT_exit.png",
+          )
+          PY
