@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import os
+from pathlib import Path
 import time
 import uuid
 from datetime import datetime, timezone
@@ -115,13 +116,44 @@ def price_step(value, tick, rounding):
     return (value / tick).to_integral_value(rounding=rounding) * tick
 
 
-def notify(message, title="BloFin LIVE"):
+def notify(message, title="BloFin LIVE", attachment_path=None):
+    """Publish one ntfy notification with a PNG chart, or fall back to text.
+
+    Images are only sent after trading protections/close are handled. Network
+    and chart failures must never affect the exchange order state.
+    """
     print(f"{title}: {message}")
     if not NTFY_TOPIC:
         return
+    url = f"https://ntfy.sh/{NTFY_TOPIC}"
+    if attachment_path:
+        try:
+            path = Path(attachment_path)
+            if not path.is_file() or path.suffix.lower() != ".png":
+                raise ValueError(f"chart PNG missing: {path}")
+            # ntfy.sh free instance currently limits attachments to 2 MB.
+            if path.stat().st_size > 1_900_000:
+                raise ValueError(f"chart PNG exceeds ntfy attachment limit: {path}")
+            with path.open("rb") as picture:
+                requests.put(
+                    url,
+                    data=picture,
+                    headers={
+                        "Title": title,
+                        "Message": message,
+                        "Filename": path.name,
+                        "Content-Type": "image/png",
+                        "Priority": "4",
+                    },
+                    timeout=8,
+                ).raise_for_status()
+            print(f"NTFY_CHART_SENT {path}")
+            return
+        except Exception as exc:
+            print(f"NTFY_CHART_FAILED {attachment_path}: {exc}; sending text instead")
     try:
         requests.post(
-            f"https://ntfy.sh/{NTFY_TOPIC}",
+            url,
             data=message.encode("utf-8"),
             headers={"Title": title, "Priority": "4"},
             timeout=HTTP_TIMEOUT,
@@ -2032,6 +2064,7 @@ def record_closed(state, reason_hint=None):
         f"NET {net_pnl:+.4f} USDT | held {hold_minutes:.1f} min | "
         f"exit {hist.get('closeAveragePrice')}",
         "BloFin LIVE RESULT",
+        attachment_path=exit_chart,
     )
     state["position"] = None
     return True
