@@ -19,6 +19,7 @@ PRICE_TAKE_PROFIT_PCT = 0.01
 PRICE_STOP_LOSS_PCT = 0.01
 MA10_TRAIL_OFFSET_PCT = "0.01"
 RSI_AVERAGE_PERIOD = 14
+LONG_MAX_ABOVE_MA10_PCT = 1.0  # Block LONG >1% above MA10.
 RSI_ENTRY_MAX = 75.0  # Block LONG and SHORT entries only when closed 5m RSI(14) > 75.
 DYNAMIC_MA10_HOLD_POLICY = "SMA10_DYNAMIC_BROKER_STOP"
 
@@ -263,9 +264,34 @@ def entry_rsi_rejection(signal):
     return None
 
 
+def long_ma10_distance_rejection(signal, executable_price=None):
+    """Block LONG >1% above SMA10, including the last executable ask quote."""
+    if signal.get("side") != "LONG":
+        return None
+    try:
+        if executable_price is None:
+            price = float(signal["close"])
+            ma10 = float(signal["ma10"])
+        else:
+            price = float(executable_price)
+            ma10 = (float(signal["ma10_stop_nine_closed_sum"]) + price) / 10.0
+        if not (math.isfinite(price) and math.isfinite(ma10) and price > 0 and ma10 > 0):
+            raise ValueError("invalid price/MA10")
+    except (KeyError, ValueError, TypeError, OverflowError) as exc:
+        return f"LONG_MA10_DISTANCE_UNAVAILABLE: {exc}"
+    if price > ma10 * (1.0 + LONG_MAX_ABOVE_MA10_PCT / 100.0):
+        gap_pct = (price / ma10 - 1.0) * 100.0
+        return f"LONG_TOO_FAR_ABOVE_MA10: {gap_pct:.3f}% > {LONG_MAX_ABOVE_MA10_PCT:.2f}%"
+    return None
+
+
 def open_position(bot, state, signal, rank, instruments):
     inst, side = signal["inst"], signal["side"]
     if side not in ("LONG", "SHORT"):
+        return False
+    distance_rejection = long_ma10_distance_rejection(signal)
+    if distance_rejection:
+        print(f"SMA CROSS {inst} {side}: entry blocked: {distance_rejection}")
         return False
     rsi_rejection = entry_rsi_rejection(signal)
     if rsi_rejection:
@@ -287,6 +313,11 @@ def open_position(bot, state, signal, rank, instruments):
     # Do not chase an SMA cross after price has already moved too far
     # in the trade direction. The shared guard blocks >0.25% by default.
     quote = bot.checked_preorder_quote(inst, side, signal["close"], enforce_adverse_gap=True)
+    distance_rejection = long_ma10_distance_rejection(
+        signal, executable_price=quote["expected_fill"],
+    )
+    if distance_rejection:
+        raise RuntimeError(f"SMA CROSS {inst} {side}: {distance_rejection}")
     tick = bot.d(instruments[inst].get("tickSize") or "0.00000001")
     ma_sl = active_dynamic_stop_price(
         bot, side, signal["ma10_stop_nine_closed_sum"], quote["expected_fill"], tick,
@@ -728,6 +759,17 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
                 if state.get("_sma_order_post_started"):
                     last["status"] = "ONE_ORDER_ALREADY_ATTEMPTED"
                     break
+                distance_rejection = long_ma10_distance_rejection(sig)
+                if distance_rejection:
+                    last["events"].append({
+                        "inst": sig["inst"], "side": sig["side"],
+                        "signal_close": sig.get("close"), "ma10": sig.get("ma10"),
+                        "reason": distance_rejection,
+                        "status": "LONG_MA10_DISTANCE_BLOCKED_TRY_NEXT",
+                    })
+                    last["status"] = "LONG_MA10_DISTANCE_BLOCKED_TRY_NEXT"
+                    print(f"SMA CROSS {sig['inst']} pre-order rejected; try next TOP7: {distance_rejection}")
+                    continue
                 rsi_rejection = entry_rsi_rejection(sig)
                 if rsi_rejection:
                     last["events"].append({
