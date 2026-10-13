@@ -12,12 +12,14 @@ Legacy non-SMA positions retain their original protection until closed.
 Only one account position is permitted.
 """
 import uuid
+import math
 
 
 PRICE_TAKE_PROFIT_PCT = 0.01
 PRICE_STOP_LOSS_PCT = 0.01
 MA10_TRAIL_OFFSET_PCT = "0.01"
 RSI_AVERAGE_PERIOD = 14
+RSI_ENTRY_MAX = 75.0  # Block LONG and SHORT entries only when closed 5m RSI(14) > 75.
 DYNAMIC_MA10_HOLD_POLICY = "SMA10_DYNAMIC_BROKER_STOP"
 
 MAX_HOLD_MS = 10 * 60 * 1000
@@ -207,6 +209,7 @@ def crossover(bot, inst, expected_close_ms, bars=None):
         "ma10_stop_nine_closed_sum": sum(closes[-9:]),
         "ma10_stop_offset_pct": 1.0,
         "close": closes[-1],
+        "rsi14": float(bars[-1]["rsi"]) if bars[-1].get("rsi") is not None else None,
         "signal_close_ms": expected_close_ms,
     }
 
@@ -244,9 +247,29 @@ def rsi_average_crossover(bot, inst, expected_close_ms, bars=None):
     }
 
 
+def entry_rsi_rejection(signal):
+    """Fail closed if confirmed-candle RSI(14) is missing, invalid, or > 75."""
+    rsi = signal.get("rsi14")
+    if rsi is None:
+        return "RSI14_UNAVAILABLE: missing confirmed-candle RSI"
+    try:
+        value = float(rsi)
+    except (TypeError, ValueError):
+        return "RSI14_UNAVAILABLE: invalid confirmed-candle RSI"
+    if not math.isfinite(value) or value < 0 or value > 100:
+        return "RSI14_UNAVAILABLE: invalid confirmed-candle RSI"
+    if value > RSI_ENTRY_MAX:
+        return f"RSI14_OVER_75: {value:.2f} > {RSI_ENTRY_MAX:.0f}"
+    return None
+
+
 def open_position(bot, state, signal, rank, instruments):
     inst, side = signal["inst"], signal["side"]
     if side not in ("LONG", "SHORT"):
+        return False
+    rsi_rejection = entry_rsi_rejection(signal)
+    if rsi_rejection:
+        print(f"SMA CROSS {inst} {side}: entry blocked: {rsi_rejection}")
         return False
     if bot.risk_stop_active(state):
         print("SMA CROSS entry blocked by existing 10% bankroll drawdown limit")
@@ -702,6 +725,16 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
                 if state.get("_sma_order_post_started"):
                     last["status"] = "ONE_ORDER_ALREADY_ATTEMPTED"
                     break
+                rsi_rejection = entry_rsi_rejection(sig)
+                if rsi_rejection:
+                    last["events"].append({
+                        "inst": sig["inst"], "side": sig["side"],
+                        "rsi14": sig.get("rsi14"), "reason": rsi_rejection,
+                        "status": "RSI_ENTRY_BLOCKED_TRY_NEXT",
+                    })
+                    last["status"] = "RSI_ENTRY_BLOCKED_TRY_NEXT"
+                    print(f"SMA CROSS {sig['inst']} pre-order rejected; try next TOP7: {rsi_rejection}")
+                    continue
                 try:
                     if open_position(bot, state, sig, rank, instruments):
                         last["status"] = "OPENED"
