@@ -56,7 +56,7 @@ class FakeBot5(FakeBot):
 def candles_with_cross(last_close, interval_ms=600000):
     values = [10.0] * 20 + [last_close]
     return [
-        {"ts": i * interval_ms, "close_ms": (i + 1) * interval_ms, "c": value}
+        {"ts": i * interval_ms, "close_ms": (i + 1) * interval_ms, "c": value, "rsi": 55.0}
         for i, value in enumerate(values)
     ]
 
