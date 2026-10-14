@@ -907,6 +907,12 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
             ranks = {inst: rank for rank, inst in enumerate(top7, start=1)}
             for inst in scan_insts:
                 rank = ranks.get(inst, 0)  # Zero means no longer in TOP7.
+                if inst in ranks and inst not in confirmed_bars:
+                    last["events"].append({
+                        "inst": inst, "rank": rank,
+                        "status": "UNCONFIRMED_CANDLE_SKIPPED",
+                    })
+                    continue
                 try:
                     sig = crossover(bot, inst, expected_close_ms, bars=confirmed_bars.get(inst))
                     if sig["side"]:
