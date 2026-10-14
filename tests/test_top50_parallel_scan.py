@@ -48,7 +48,7 @@ class ParallelTop50Tests(unittest.TestCase):
                 concurrent -= 1
             return [{"close_ms": signal_close, "c": 1.0}]
 
-        with patch.object(bot, "fetch_signal_bars", side_effect=fake_fetch), \\
+        with patch.object(bot, "fetch_signal_bars", side_effect=fake_fetch), \
              patch.object(bot, "bar_close_ms", side_effect=lambda bar: bar["close_ms"]):
             cached = scan.wait_for_confirmed_signal_close(symbols, signal_close)
         self.assertEqual(set(cached), set(symbols))
@@ -65,8 +65,8 @@ class ParallelTop50Tests(unittest.TestCase):
             close = signal_close - 300_000 if inst == "X-USDT" and seen[inst] == 1 else signal_close
             return [{"close_ms": close, "c": 1.0}]
 
-        with patch.object(bot, "fetch_signal_bars", side_effect=fake_fetch), \\
-             patch.object(bot, "bar_close_ms", side_effect=lambda bar: bar["close_ms"]), \\
+        with patch.object(bot, "fetch_signal_bars", side_effect=fake_fetch), \
+             patch.object(bot, "bar_close_ms", side_effect=lambda bar: bar["close_ms"]), \
              patch.object(scan, "CANDLE_CONFIRM_DELAY_SEC", 0):
             cached = scan.wait_for_confirmed_signal_close(["X-USDT", "Y-USDT"], signal_close)
         self.assertEqual(len(cached), 2)
@@ -80,9 +80,9 @@ class ParallelTop50Tests(unittest.TestCase):
              "c": 1.0 if i < 20 else 1.1, "rsi": 50}
             for i in range(21)
         ]
-        with patch.object(bot, "fetch_signal_bars", side_effect=AssertionError("unexpected second fetch")), \\
-             patch.object(bot, "bar_close_ms", side_effect=lambda bar: bar["close_ms"]), \\
-             patch.object(bot, "stochastic_kd_series", return_value=([40.0] * 21, [30.0] * 21)), \\
+        with patch.object(bot, "fetch_signal_bars", side_effect=AssertionError("unexpected second fetch")), \
+             patch.object(bot, "bar_close_ms", side_effect=lambda bar: bar["close_ms"]), \
+             patch.object(bot, "stochastic_kd_series", return_value=([40.0] * 21, [30.0] * 21)), \
              patch.object(ma.sr, "confirmed_levels", return_value={}):
             result = ma.crossover(bot, "X-USDT", signal_close, bars=bars)
         self.assertEqual(result["side"], "LONG")
