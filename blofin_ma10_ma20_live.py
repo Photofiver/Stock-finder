@@ -14,6 +14,8 @@ Only one account position is permitted.
 import uuid
 import math
 
+import blofin_support_resistance as sr
+
 
 PRICE_TAKE_PROFIT_PCT = 0.01
 PRICE_STOP_LOSS_PCT = 0.01
@@ -199,7 +201,13 @@ def crossover(bot, inst, expected_close_ms, bars=None):
         side = "LONG"
     elif old_fast >= old_slow and new_fast < new_slow:
         side = "SHORT"
+    try:
+        sr_levels = sr.confirmed_levels(bars, expected_close_ms, bot.SIGNAL_MS)
+    except (KeyError, ValueError, TypeError, OverflowError) as exc:
+        # Missing/malformed data must block new entries, never bypass S/R.
+        sr_levels = {"error": f"{type(exc).__name__}: {exc}"}
     return {
+        "sr_levels": sr_levels,
         "inst": inst,
         "side": side,
         "ma10_previous": old_fast,
@@ -285,6 +293,11 @@ def long_ma10_distance_rejection(signal, executable_price=None):
     return None
 
 
+def support_resistance_entry_check(signal, executable_price=None):
+    price = signal.get("close") if executable_price is None else executable_price
+    return sr.check_entry(signal.get("sr_levels"), signal.get("side"), price)
+
+
 def open_position(bot, state, signal, rank, instruments):
     inst, side = signal["inst"], signal["side"]
     if side not in ("LONG", "SHORT"):
@@ -296,6 +309,10 @@ def open_position(bot, state, signal, rank, instruments):
     rsi_rejection = entry_rsi_rejection(signal)
     if rsi_rejection:
         print(f"SMA CROSS {inst} {side}: entry blocked: {rsi_rejection}")
+        return False
+    sr_decision = support_resistance_entry_check(signal)
+    if not sr_decision["allowed"]:
+        print(f"SMA CROSS {inst} {side}: entry blocked: {sr_decision}")
         return False
     if bot.risk_stop_active(state):
         print("SMA CROSS entry blocked by existing 10% bankroll drawdown limit")
@@ -318,6 +335,12 @@ def open_position(bot, state, signal, rank, instruments):
     )
     if distance_rejection:
         raise RuntimeError(f"SMA CROSS {inst} {side}: {distance_rejection}")
+    sr_preorder_decision = support_resistance_entry_check(
+        signal, executable_price=quote["expected_fill"],
+    )
+    signal["sr_preorder_decision"] = sr_preorder_decision
+    if not sr_preorder_decision["allowed"]:
+        raise RuntimeError(f"SMA CROSS {inst} {side}: entry rejected before order: {sr_preorder_decision}")
     tick = bot.d(instruments[inst].get("tickSize") or "0.00000001")
     ma_sl = active_dynamic_stop_price(
         bot, side, signal["ma10_stop_nine_closed_sum"], quote["expected_fill"], tick,
@@ -779,6 +802,17 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
                     })
                     last["status"] = "RSI_ENTRY_BLOCKED_TRY_NEXT"
                     print(f"SMA CROSS {sig['inst']} pre-order rejected; try next TOP7: {rsi_rejection}")
+                    continue
+                sr_decision = support_resistance_entry_check(sig)
+                if not sr_decision["allowed"]:
+                    last["events"].append({
+                        "inst": sig["inst"], "side": sig["side"],
+                        "reason": sr_decision["reason"],
+                        "details": sr_decision,
+                        "status": "SR_ENTRY_BLOCKED_TRY_NEXT",
+                    })
+                    last["status"] = "SR_ENTRY_BLOCKED_TRY_NEXT"
+                    print(f"SMA CROSS {sig['inst']} pre-order rejected; try next TOP7: {sr_decision}")
                     continue
                 try:
                     if open_position(bot, state, sig, rank, instruments):
