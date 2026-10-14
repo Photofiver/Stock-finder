@@ -23,7 +23,6 @@ PRICE_STOP_LOSS_PCT = 0.01
 MA10_TRAIL_OFFSET_PCT = "0.01"
 RSI_AVERAGE_PERIOD = 14
 LONG_MAX_ABOVE_MA10_PCT = 1.0  # Block LONG >1% above MA10.
-SMA_SEPARATION_MIN_PCT = 0.12  # Confirmed signal close: abs(SMA10 - SMA20) / close * 100.
 ALLOWED_ENTRY_RANKS = frozenset((1, 2))  # Original TOP1/2 one-entry-per-visit policy.
 EXTENDED_ENTRY_RANK_MAX = max(2, min(100, int(os.getenv("LIVE_ENTRY_TOP_N", "2"))))
 RSI_ENTRY_MAX = 75.0  # Block LONG and SHORT entries only when closed 5m RSI(14) > 75.
@@ -290,7 +289,7 @@ def entry_rsi_rejection(signal):
 
 
 def entry_strength_rejection(signal):
-    """Reject weak MA separation and unfavorable Stochastic 14,1,3 at signal close."""
+    """Validate indicator data and reject unfavorable Stochastic 14,1,3 at signal close."""
     try:
         gap_pct = float(signal["sma_separation_pct"])
         k = float(signal["stoch_k"])
@@ -300,8 +299,6 @@ def entry_strength_rejection(signal):
             raise ValueError("non-finite or out-of-range values")
     except (KeyError, ValueError, TypeError, OverflowError) as exc:
         return f"ENTRY_STRENGTH_UNAVAILABLE: {exc}"
-    if gap_pct < SMA_SEPARATION_MIN_PCT:
-        return f"SMA_SEPARATION_TOO_SMALL: {gap_pct:.4f}% < {SMA_SEPARATION_MIN_PCT:.2f}%"
     if signal.get("side") == "LONG" and k > d:
         return f"STOCH_KD_LONG_BLOCKED: K={k:.2f} > D={d:.2f}; requires K<=D"
     if signal.get("side") == "SHORT" and k < d:

@@ -29,6 +29,22 @@ class ParallelTop50Tests(unittest.TestCase):
         state["ma_top2_watchlist"]["C1"]["entered_once"] = True
         self.assertIsNotNone(ma.rank_entry_rejection(1, state, "C1", 100))
 
+    def test_sma_gap_no_longer_blocks_valid_kd(self):
+        # Small SMA separations are now allowed; confirmed MA crossover remains required.
+        # The Stochastic K/D gate remains unchanged for both directions.
+        for separation in (0.0, 0.0003, 0.0058, 0.05, 0.119, 0.12):
+            with self.subTest(separation=separation):
+                good_long = {"side": "LONG", "sma_separation_pct": separation, "stoch_k": 40.0, "stoch_d": 50.0}
+                good_short = {"side": "SHORT", "sma_separation_pct": separation, "stoch_k": 60.0, "stoch_d": 50.0}
+                self.assertIsNone(ma.entry_strength_rejection(good_long))
+                self.assertIsNone(ma.entry_strength_rejection(good_short))
+        bad_long = {"side": "LONG", "sma_separation_pct": 0.005, "stoch_k": 70.0, "stoch_d": 60.0}
+        bad_short = {"side": "SHORT", "sma_separation_pct": 0.005, "stoch_k": 40.0, "stoch_d": 60.0}
+        self.assertIn("STOCH_KD_LONG_BLOCKED", ma.entry_strength_rejection(bad_long))
+        self.assertIn("STOCH_KD_SHORT_BLOCKED", ma.entry_strength_rejection(bad_short))
+        invalid = {"side": "LONG", "sma_separation_pct": float("nan"), "stoch_k": 30.0, "stoch_d": 40.0}
+        self.assertIn("ENTRY_STRENGTH_UNAVAILABLE", ma.entry_strength_rejection(invalid))
+
     def test_hundred_candles_fetched_once_in_parallel(self):
         symbols = [f"TEST{i}-USDT" for i in range(100)]
         signal_close = 1_790_000_000_000
