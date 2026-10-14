@@ -10,7 +10,7 @@ import requests
 import blofin_live_hourly as bot
 
 SIGNAL_STATE_FILE = os.getenv("SIGNAL_STATE_FILE", "blofin_signal_state.json")
-CANDLE_CONFIRM_ATTEMPTS = 30
+CANDLE_CONFIRM_ATTEMPTS = 3
 CANDLE_CONFIRM_DELAY_SEC = 1
 CANDLE_CONFIRM_WORKERS = 8
 BROKER_ID = os.getenv("BLOFIN_BROKER_ID", "dd3511977f23cc87").strip()
@@ -344,9 +344,13 @@ def wait_for_confirmed_signal_close(top7, expected_close_ms):
         if attempt < CANDLE_CONFIRM_ATTEMPTS - 1:
             time.sleep(CANDLE_CONFIRM_DELAY_SEC)
 
-    raise RuntimeError(
-        f"{bot.SIGNAL_LABEL} candle not confirmed in time for: " + ", ".join(sorted(pending))
+    # Missing or delayed candles must never block fresh signals from other coins.
+    # Their names are absent from the returned cache and cannot be used for entry.
+    print(
+        f"CANDLE CONFIRM SKIPPED {len(pending)} unconfirmed instruments: "
+        + ", ".join(sorted(pending))
     )
+    return confirmed
 
 
 def build_live_diagnostic(state, top7):
