@@ -22,7 +22,8 @@ PRICE_STOP_LOSS_PCT = 0.01
 MA10_TRAIL_OFFSET_PCT = "0.01"
 RSI_AVERAGE_PERIOD = 14
 LONG_MAX_ABOVE_MA10_PCT = 1.0  # Block LONG >1% above MA10.
-ALLOWED_ENTRY_RANKS = frozenset((1, 2))  # Open new LIVE trades only from TOP7 ranks 1-2.
+ALLOWED_ENTRY_RANKS = frozenset((1, 2))  # Original TOP7 entry ranks.
+TOP2_WATCH_TTL_MS = 24 * 60 * 60 * 1000  # 24-hour watch after visiting TOP1 or TOP2.
 RSI_ENTRY_MAX = 75.0  # Block LONG and SHORT entries only when closed 5m RSI(14) > 75.
 DYNAMIC_MA10_HOLD_POLICY = "SMA10_DYNAMIC_BROKER_STOP"
 
@@ -304,16 +305,52 @@ def support_resistance_entry_check(signal, executable_price=None):
     return sr.check_entry(signal.get("sr_levels"), signal.get("side"), price)
 
 
-def rank_entry_rejection(rank):
-    """Fail closed for any new entry outside original TOP7 places 1 and 2."""
-    if type(rank) is not int or rank not in ALLOWED_ENTRY_RANKS:
-        return f"RANK_NOT_ALLOWED: TOP7 place {rank!r}; allowed places 1 and 2"
-    return None
+def refresh_top2_watchlist(state, top7, signal_close_ms):
+    """Persist former TOP1/2 coins for 24h across scheduled runs."""
+    saved = state.get("ma_top2_watchlist")
+    saved = saved if isinstance(saved, dict) else {}
+    active = {}
+    for inst, entry in saved.items():
+        if not isinstance(inst, str) or not isinstance(entry, dict):
+            continue
+        try:
+            last_top2_ms = int(entry["last_top2_ms"])
+            last_rank = int(entry["last_rank"])
+        except (KeyError, ValueError, TypeError, OverflowError):
+            continue
+        if (last_rank not in ALLOWED_ENTRY_RANKS
+                or last_top2_ms > signal_close_ms
+                or signal_close_ms - last_top2_ms >= TOP2_WATCH_TTL_MS):
+            continue
+        active[inst] = {"last_top2_ms": last_top2_ms, "last_rank": last_rank}
+    for rank, inst in enumerate(top7[:2], start=1):
+        active[inst] = {"last_top2_ms": signal_close_ms, "last_rank": rank}
+    state["ma_top2_watchlist"] = active
+    return active
+
+
+def rank_entry_rejection(rank, state=None, inst=None, signal_close_ms=None):
+    """Permit current TOP1/2 or qualifying former TOP1/2; otherwise reject."""
+    if type(rank) is int and rank in ALLOWED_ENTRY_RANKS:
+        return None
+    watch = (state or {}).get("ma_top2_watchlist")
+    entry = watch.get(inst) if isinstance(watch, dict) and isinstance(inst, str) else None
+    if isinstance(entry, dict) and signal_close_ms is not None:
+        try:
+            last_top2_ms = int(entry["last_top2_ms"])
+            last_rank = int(entry["last_rank"])
+            age_ms = int(signal_close_ms) - last_top2_ms
+        except (KeyError, ValueError, TypeError, OverflowError):
+            pass
+        else:
+            if last_rank in ALLOWED_ENTRY_RANKS and 0 <= age_ms < TOP2_WATCH_TTL_MS:
+                return None
+    return f"RANK_NOT_ALLOWED: TOP7 place {rank!r}; not current TOP1/2 or valid 24h TOP2 watch"
 
 
 def open_position(bot, state, signal, rank, instruments):
     inst, side = signal["inst"], signal["side"]
-    rank_rejection = rank_entry_rejection(rank)
+    rank_rejection = rank_entry_rejection(rank, state, inst, signal["signal_close_ms"])
     if rank_rejection:
         print(f"SMA CROSS {inst} {side}: entry blocked: {rank_rejection}")
         return False
@@ -707,6 +744,7 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
     if int(state.get("last_scan_close_ms") or 0) == expected_close_ms:
         print(f"SMA CROSS duplicate {bot.SIGNAL_LABEL} scan skipped")
         return
+    watchlist = refresh_top2_watchlist(state, top7, expected_close_ms)
     current_insts = list(bot.get_tracked_positions(state))
     wait_for_confirmed_close(list(dict.fromkeys(top7 + current_insts)), expected_close_ms)
     bot.sync_all_tracked_positions(state)
@@ -720,7 +758,8 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
             "SMA10_SMA20_OPPOSITE_CROSS", DYNAMIC_MA10_HOLD_POLICY,
         )
     ]
-    last = {"signal_close_ms": expected_close_ms, "strategy": f"SMA10_SMA20_{bot.SIGNAL_LABEL}", "events": []}
+    last = {"signal_close_ms": expected_close_ms, "strategy": f"SMA10_SMA20_{bot.SIGNAL_LABEL}",
+            "events": [], "top2_watchlist": watchlist}
     if previous_strategy_positions:
         print("SMA CROSS: waiting for pre-existing LIVE position to close under original rules")
         last["status"] = "WAITING_FOR_OLD_POSITION"
@@ -784,7 +823,11 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
             last["status"] = "BLOCKED_EXISTING_DRAWDOWN_STOP"
         else:
             signals = []
-            for rank, inst in enumerate(top7, start=1):
+            # Current TOP7 first; also scan former TOP1/2 while within 24h.
+            scan_insts = list(dict.fromkeys(top7 + list(watchlist)))
+            ranks = {inst: rank for rank, inst in enumerate(top7, start=1)}
+            for inst in scan_insts:
+                rank = ranks.get(inst, 0)  # Zero means no longer in TOP7.
                 try:
                     sig = crossover(bot, inst, expected_close_ms)
                     if sig["side"]:
@@ -799,7 +842,7 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
                 if state.get("_sma_order_post_started"):
                     last["status"] = "ONE_ORDER_ALREADY_ATTEMPTED"
                     break
-                rank_rejection = rank_entry_rejection(rank)
+                rank_rejection = rank_entry_rejection(rank, state, sig["inst"], expected_close_ms)
                 if rank_rejection:
                     last["events"].append({
                         "inst": sig["inst"], "side": sig["side"],
