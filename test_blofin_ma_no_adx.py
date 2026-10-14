@@ -114,6 +114,62 @@ class RemoveAdxLiveTests(unittest.TestCase):
         self.assertEqual(selected[0]["side"], "LONG")
         self.assertEqual(bars[-1]["close_ms"], 21 * 300000)
 
+    def test_only_rank_one_or_two_can_open_live_orders(self):
+        from unittest.mock import MagicMock
+        for rank in (0, 3, 4, 5, 6, 7, 8, None, "1"):
+            with self.subTest(rank=rank):
+                bot = MagicMock()
+                result = ma.open_position(
+                    bot, {}, {"inst": "BLOCK-USDT", "side": "LONG"}, rank, {},
+                )
+                self.assertFalse(result)
+                bot.private_request.assert_not_called()
+                bot.get_open_positions.assert_not_called()
+                bot.risk_stop_active.assert_not_called()
+        self.assertIsNone(ma.rank_entry_rejection(1))
+        self.assertIsNone(ma.rank_entry_rejection(2))
+
+    def test_third_through_seventh_rank_signals_never_open(self):
+        # All coins are scanned for diagnostics, but entry must not proceed
+        # for lower ranked signals even when the SMA cross is valid.
+        flat = candles_with_cross(10.0)
+        crossed = candles_with_cross(10.01)
+        names = [f"RANK{i}-USDT" for i in range(1, 8)]
+        bot = FakeBot({name: flat if i < 3 else crossed
+                       for i, name in enumerate(names, 1)})
+        state = {"positions": {}}
+        opened = []
+        with patch.object(ma, "open_position",
+                          side_effect=lambda *args: opened.append(args[3]) or True):
+            ma.run(bot, state, names, {}, {n: {} for n in names},
+                   crossed[-1]["close_ms"], lambda insts, close: None)
+        self.assertEqual(opened, [])
+        events = state["ma_cross_last_scan"]["events"]
+        self.assertEqual(
+            [e["rank"] for e in events if e.get("status") == "RANK_NOT_ALLOWED_TRY_NEXT"],
+            [3, 4, 5, 6, 7],
+        )
+        self.assertEqual(state["ma_cross_last_scan"]["status"], "RANK_NOT_ALLOWED_TRY_NEXT")
+        self.assertEqual(len(state["ma_cross_last_scan"]["signals"]), 5)
+
+    def test_second_rank_can_open_even_if_third_has_signal(self):
+        flat = candles_with_cross(10.0)
+        crossed = candles_with_cross(10.01)
+        bot = FakeBot({"FIRST-USDT": flat, "SECOND-USDT": crossed,
+                       "THIRD-USDT": crossed})
+        state = {"positions": {}}
+        opened = []
+        with patch.object(ma, "open_position",
+                          side_effect=lambda *args: opened.append(args[3]) or True):
+            ma.run(
+                bot, state, ["FIRST-USDT", "SECOND-USDT", "THIRD-USDT"],
+                {}, {"FIRST-USDT": {}, "SECOND-USDT": {}, "THIRD-USDT": {}},
+                crossed[-1]["close_ms"], lambda insts, close: None,
+            )
+        self.assertEqual(opened, [2])
+        self.assertEqual(state["ma_cross_last_scan"]["status"], "OPENED")
+        self.assertEqual(state["ma_cross_last_scan"]["selected"]["inst"], "SECOND-USDT")
+
     def test_entry_risk_controls_still_run(self):
         """The first remaining entry gate is the existing drawdown control."""
         class StopBot:
