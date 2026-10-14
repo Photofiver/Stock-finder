@@ -22,6 +22,7 @@ PRICE_STOP_LOSS_PCT = 0.01
 MA10_TRAIL_OFFSET_PCT = "0.01"
 RSI_AVERAGE_PERIOD = 14
 LONG_MAX_ABOVE_MA10_PCT = 1.0  # Block LONG >1% above MA10.
+ALLOWED_ENTRY_RANKS = frozenset((1, 2))  # Open new LIVE trades only from TOP7 ranks 1-2.
 RSI_ENTRY_MAX = 75.0  # Block LONG and SHORT entries only when closed 5m RSI(14) > 75.
 DYNAMIC_MA10_HOLD_POLICY = "SMA10_DYNAMIC_BROKER_STOP"
 
@@ -303,8 +304,19 @@ def support_resistance_entry_check(signal, executable_price=None):
     return sr.check_entry(signal.get("sr_levels"), signal.get("side"), price)
 
 
+def rank_entry_rejection(rank):
+    """Fail closed for any new entry outside original TOP7 places 1 and 2."""
+    if type(rank) is not int or rank not in ALLOWED_ENTRY_RANKS:
+        return f"RANK_NOT_ALLOWED: TOP7 place {rank!r}; allowed places 1 and 2"
+    return None
+
+
 def open_position(bot, state, signal, rank, instruments):
     inst, side = signal["inst"], signal["side"]
+    rank_rejection = rank_entry_rejection(rank)
+    if rank_rejection:
+        print(f"SMA CROSS {inst} {side}: entry blocked: {rank_rejection}")
+        return False
     if side not in ("LONG", "SHORT"):
         return False
     distance_rejection = long_ma10_distance_rejection(signal)
@@ -787,6 +799,16 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
                 if state.get("_sma_order_post_started"):
                     last["status"] = "ONE_ORDER_ALREADY_ATTEMPTED"
                     break
+                rank_rejection = rank_entry_rejection(rank)
+                if rank_rejection:
+                    last["events"].append({
+                        "inst": sig["inst"], "side": sig["side"],
+                        "rank": rank, "reason": rank_rejection,
+                        "status": "RANK_NOT_ALLOWED_TRY_NEXT",
+                    })
+                    last["status"] = "RANK_NOT_ALLOWED_TRY_NEXT"
+                    print(f"SMA CROSS {sig['inst']} pre-order rejected: {rank_rejection}")
+                    continue
                 distance_rejection = long_ma10_distance_rejection(sig)
                 if distance_rejection:
                     last["events"].append({
