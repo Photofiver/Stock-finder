@@ -1,0 +1,23 @@
+name: BloFin rank 24h historical research (read-only)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/blofin_rank_24h_readonly_test.yml
+      - research_blofin_top2_24h.py
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read-only 24h historical thresholds
+        run: python research_blofin_top2_24h.py
