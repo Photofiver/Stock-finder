@@ -56,7 +56,9 @@ class FakeBot5(FakeBot):
 def candles_with_cross(last_close, interval_ms=600000):
     values = [10.0] * 20 + [last_close]
     return [
-        {"ts": i * interval_ms, "close_ms": (i + 1) * interval_ms, "c": value, "rsi": 55.0}
+        {"ts": i * interval_ms, "close_ms": (i + 1) * interval_ms,
+         "h": value * 1.0005, "l": value * 0.9995,
+         "c": value, "rsi": 55.0}
         for i, value in enumerate(values)
     ]
 
@@ -74,7 +76,8 @@ class RemoveAdxLiveTests(unittest.TestCase):
                 self.assertIn("ma10_live_cross_level", signal)
 
     def test_scan_considers_signal_without_adx(self):
-        bars = candles_with_cross(12.0)
+        # A small real crossover stays within the independent MA10 1% entry cap.
+        bars = candles_with_cross(10.01)
         bot = FakeBot({"A-USDT": bars})
         state = {"positions": {}}
         selected = []
@@ -95,7 +98,7 @@ class RemoveAdxLiveTests(unittest.TestCase):
         self.assertNotIn("adx_filter", selected[0])
 
     def test_five_minute_sma_cross_opens_without_adx(self):
-        bars = candles_with_cross(12.0, interval_ms=300000)
+        bars = candles_with_cross(10.01, interval_ms=300000)
         bot = FakeBot5({"A-USDT": bars})
         state = {"positions": {}}
         selected = []
