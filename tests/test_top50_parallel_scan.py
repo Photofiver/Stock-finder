@@ -1,4 +1,4 @@
-"""Offline checks for the TOP50 candle scanner; no exchange order calls."""
+"""Offline checks for the TOP100 candle scanner; no exchange order calls."""
 import os
 import threading
 import time
@@ -6,8 +6,8 @@ import unittest
 from collections import Counter
 from unittest.mock import patch
 
-os.environ["LIVE_UNIVERSE_TOP_N"] = "50"
-os.environ["LIVE_ENTRY_TOP_N"] = "50"
+os.environ["LIVE_UNIVERSE_TOP_N"] = "100"
+os.environ["LIVE_ENTRY_TOP_N"] = "100"
 os.environ["BLOFIN_LIVE_ENABLED"] = "false"
 
 import blofin_live_hourly as bot
@@ -17,11 +17,11 @@ import blofin_ma10_ma20_live as ma
 
 class ParallelTop50Tests(unittest.TestCase):
     def test_configuration_and_entry_ranks(self):
-        self.assertEqual(bot.TOP_N, 50)
-        self.assertEqual(ma.EXTENDED_ENTRY_RANK_MAX, 50)
+        self.assertEqual(bot.TOP_N, 100)
+        self.assertEqual(ma.EXTENDED_ENTRY_RANK_MAX, 100)
         self.assertIsNone(ma.rank_entry_rejection(3, {}, "C3", 100))
-        self.assertIsNone(ma.rank_entry_rejection(50, {}, "C50", 100))
-        self.assertIsNotNone(ma.rank_entry_rejection(51, {}, "C51", 100))
+        self.assertIsNone(ma.rank_entry_rejection(100, {}, "C100", 100))
+        self.assertIsNotNone(ma.rank_entry_rejection(101, {}, "C101", 100))
         state = {"ma_top2_watchlist": {
             "C1": {"last_rank": 1, "last_top2_ms": 100, "entered_once": False},
         }}
@@ -29,8 +29,8 @@ class ParallelTop50Tests(unittest.TestCase):
         state["ma_top2_watchlist"]["C1"]["entered_once"] = True
         self.assertIsNotNone(ma.rank_entry_rejection(1, state, "C1", 100))
 
-    def test_fifty_candles_fetched_once_in_parallel(self):
-        symbols = [f"TEST{i}-USDT" for i in range(50)]
+    def test_hundred_candles_fetched_once_in_parallel(self):
+        symbols = [f"TEST{i}-USDT" for i in range(100)]
         signal_close = 1_790_000_000_000
         concurrent = 0
         highest = 0
@@ -52,7 +52,7 @@ class ParallelTop50Tests(unittest.TestCase):
              patch.object(bot, "bar_close_ms", side_effect=lambda bar: bar["close_ms"]):
             cached = scan.wait_for_confirmed_signal_close(symbols, signal_close)
         self.assertEqual(set(cached), set(symbols))
-        self.assertEqual(sum(seen.values()), 50)
+        self.assertEqual(sum(seen.values()), 100)
         self.assertGreater(highest, 1)
         self.assertLessEqual(highest, scan.CANDLE_CONFIRM_WORKERS)
 

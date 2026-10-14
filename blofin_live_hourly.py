@@ -34,7 +34,7 @@ if ENTRY_STRATEGY not in ("STRICT", "NEAREST_VOLUME"):
 NEAREST_VOLUME = ENTRY_STRATEGY == "NEAREST_VOLUME"
 LEVERAGE = "1"
 MARGIN_MODE = "isolated"
-TOP_N = max(1, min(50, int(os.getenv("LIVE_UNIVERSE_TOP_N", "7"))))
+TOP_N = max(1, min(100, int(os.getenv("LIVE_UNIVERSE_TOP_N", "7"))))
 MAX_OPEN_POSITIONS = 4
 TRADE_HISTORY_LIMIT = 5000
 POSITION_FRACTION = Decimal("0.25")  # total LIVE bankroll is still hard-capped below
