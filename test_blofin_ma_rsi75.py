@@ -36,6 +36,8 @@ class Rsi75LiveEntryTests(unittest.TestCase):
         bot.risk_stop_active.return_value = True
         self.assertFalse(ma.open_position(bot, {}, {
             "inst": "Q-USDT", "side": "LONG", "rsi14": 75.0,
+            "close": 100.5, "ma10": 100.0,
+            "sr_levels": {"resistance": [], "support": []},
         }, 1, {}))
         bot.risk_stop_active.assert_called_once()
 
@@ -68,6 +70,8 @@ class Rsi75LiveEntryTests(unittest.TestCase):
             return {
                 "inst": inst, "side": "LONG",
                 "rsi14": 79.0 if inst == "OVER-USDT" else 55.0,
+                "close": 100.5, "ma10": 100.0,
+                "sr_levels": {"resistance": [], "support": []},
                 "signal_close_ms": expected_close_ms
             }
         def fake_open(b, s, signal, rank, instruments):
