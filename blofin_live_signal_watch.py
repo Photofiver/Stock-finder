@@ -1,6 +1,7 @@
 import json
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -9,8 +10,9 @@ import requests
 import blofin_live_hourly as bot
 
 SIGNAL_STATE_FILE = os.getenv("SIGNAL_STATE_FILE", "blofin_signal_state.json")
-CANDLE_CONFIRM_ATTEMPTS = 30
+CANDLE_CONFIRM_ATTEMPTS = 3
 CANDLE_CONFIRM_DELAY_SEC = 1
+CANDLE_CONFIRM_WORKERS = 8
 BROKER_ID = os.getenv("BLOFIN_BROKER_ID", "dd3511977f23cc87").strip()
 UK_TZ = ZoneInfo("Europe/London")
 LEARNING_FILE = os.getenv("LIVE_LEARNING_FILE", "blofin_learning_12h.json")
@@ -308,32 +310,47 @@ def expected_signal_close_ms():
 
 
 def wait_for_confirmed_signal_close(top7, expected_close_ms):
+    """Verify each closed candle concurrently and reuse that exact snapshot for entry decisions.
+
+    Never trade from an unconfirmed candle. At most eight candle requests run
+    simultaneously; retry only the instruments that are not ready yet.
+    """
     pending = set(top7)
+    confirmed = {}
     for attempt in range(CANDLE_CONFIRM_ATTEMPTS):
         ready = []
-        for inst in list(pending):
-            try:
-                bars = bot.fetch_signal_bars(inst)
-                if bars:
-                    latest_close_ms = bot.bar_close_ms(bars[-1])
-                    if latest_close_ms >= expected_close_ms:
+        with ThreadPoolExecutor(max_workers=min(CANDLE_CONFIRM_WORKERS, max(1, len(pending)))) as pool:
+            futures = {
+                pool.submit(bot.fetch_signal_bars, inst): inst
+                for inst in sorted(pending)
+            }
+            for future in as_completed(futures):
+                inst = futures[future]
+                try:
+                    bars = future.result()
+                    if bars and bot.bar_close_ms(bars[-1]) >= expected_close_ms:
+                        confirmed[inst] = bars
                         ready.append(inst)
-            except Exception as exc:
-                print(f"CANDLE CONFIRM {inst}: {type(exc).__name__}: {exc}")
+                except Exception as exc:
+                    print(f"CANDLE CONFIRM {inst}: {type(exc).__name__}: {exc}")
         for inst in ready:
             pending.discard(inst)
         if not pending:
             print(
                 f"{bot.SIGNAL_LABEL} candle {expected_close_ms} confirmed for all TOP{bot.TOP_N} "
-                f"after {attempt + 1} check(s)."
+                f"after {attempt + 1} check(s) with {CANDLE_CONFIRM_WORKERS} workers."
             )
-            return
+            return confirmed
         if attempt < CANDLE_CONFIRM_ATTEMPTS - 1:
             time.sleep(CANDLE_CONFIRM_DELAY_SEC)
 
-    raise RuntimeError(
-        f"{bot.SIGNAL_LABEL} candle not confirmed in time for: " + ", ".join(sorted(pending))
+    # Missing or delayed candles must never block fresh signals from other coins.
+    # Their names are absent from the returned cache and cannot be used for entry.
+    print(
+        f"CANDLE CONFIRM SKIPPED {len(pending)} unconfirmed instruments: "
+        + ", ".join(sorted(pending))
     )
+    return confirmed
 
 
 def build_live_diagnostic(state, top7):

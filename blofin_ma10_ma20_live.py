@@ -13,6 +13,7 @@ Only one account position is permitted.
 """
 import uuid
 import math
+import os
 
 import blofin_support_resistance as sr
 
@@ -23,7 +24,8 @@ MA10_TRAIL_OFFSET_PCT = "0.01"
 RSI_AVERAGE_PERIOD = 14
 LONG_MAX_ABOVE_MA10_PCT = 1.0  # Block LONG >1% above MA10.
 SMA_SEPARATION_MIN_PCT = 0.12  # Confirmed signal close: abs(SMA10 - SMA20) / close * 100.
-ALLOWED_ENTRY_RANKS = frozenset((1, 2))  # Original TOP7 entry ranks.
+ALLOWED_ENTRY_RANKS = frozenset((1, 2))  # Original TOP1/2 one-entry-per-visit policy.
+EXTENDED_ENTRY_RANK_MAX = max(2, min(50, int(os.getenv("LIVE_ENTRY_TOP_N", "2"))))
 RSI_ENTRY_MAX = 75.0  # Block LONG and SHORT entries only when closed 5m RSI(14) > 75.
 DYNAMIC_MA10_HOLD_POLICY = "SMA10_DYNAMIC_BROKER_STOP"
 
@@ -385,7 +387,9 @@ def refresh_top2_watchlist(state, top7, signal_close_ms):
 
 
 def rank_entry_rejection(rank, state=None, inst=None, signal_close_ms=None):
-    """Allow exactly one successful entry after each visit to TOP1/2."""
+    """Keep original TOP1/2 one-entry policy; also allow configured TOP3..TOP50."""
+    if 3 <= rank <= EXTENDED_ENTRY_RANK_MAX:
+        return None
     watch = (state or {}).get("ma_top2_watchlist")
     entry = watch.get(inst) if isinstance(watch, dict) and isinstance(inst, str) else None
     if isinstance(entry, dict) and signal_close_ms is not None:
@@ -817,7 +821,9 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
         return
     watchlist = refresh_top2_watchlist(state, top7, expected_close_ms)
     current_insts = list(bot.get_tracked_positions(state))
-    wait_for_confirmed_close(list(dict.fromkeys(top7 + current_insts)), expected_close_ms)
+    confirmed_bars = wait_for_confirmed_close(
+        list(dict.fromkeys(top7 + current_insts)), expected_close_ms
+    ) or {}
     bot.sync_all_tracked_positions(state)
     ensure_broker_sl_for_existing_sma(bot, state, instruments)
     # Legacy positions keep their existing broker TP/SL and 60m exit.
@@ -837,7 +843,7 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
     elif tracked:
         # Follow the instrument even after it has left TOP7.
         inst, pos = next(iter(tracked.items()))
-        bars = bot.fetch_signal_bars(inst)
+        bars = confirmed_bars.get(inst) or bot.fetch_signal_bars(inst)
         sig = crossover(bot, inst, expected_close_ms, bars=bars)
         if pos.get("hold_policy") == DYNAMIC_MA10_HOLD_POLICY:
             # Policy: broker TP +1% or one-way MA10 +/-1% trailing stop only.
@@ -901,8 +907,14 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
             ranks = {inst: rank for rank, inst in enumerate(top7, start=1)}
             for inst in scan_insts:
                 rank = ranks.get(inst, 0)  # Zero means no longer in TOP7.
+                if inst in ranks and inst not in confirmed_bars:
+                    last["events"].append({
+                        "inst": inst, "rank": rank,
+                        "status": "UNCONFIRMED_CANDLE_SKIPPED",
+                    })
+                    continue
                 try:
-                    sig = crossover(bot, inst, expected_close_ms)
+                    sig = crossover(bot, inst, expected_close_ms, bars=confirmed_bars.get(inst))
                     if sig["side"]:
                         signals.append((rank, sig))
                 except Exception as exc:
