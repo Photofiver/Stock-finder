@@ -1,0 +1,28 @@
+name: Validate TOP50 parallel scan (no trading)
+
+on:
+  pull_request:
+    paths:
+      - 'blofin_live_hourly.py'
+      - 'blofin_live_signal_watch.py'
+      - 'blofin_ma10_ma20_live.py'
+      - '.github/workflows/blofin_live_signal_watch.yml'
+      - 'tests/test_top50_parallel_scan.py'
+      - '.github/workflows/top50_parallel_validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-validation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Python syntax check
+        run: python -m py_compile blofin_live_hourly.py blofin_live_signal_watch.py blofin_ma10_ma20_live.py
+      - name: Mock parallel scan and rank checks (never calls BloFin)
+        run: python -m unittest discover -s tests -p 'test_top50_parallel_scan.py' -v
