@@ -22,6 +22,7 @@ PRICE_STOP_LOSS_PCT = 0.01
 MA10_TRAIL_OFFSET_PCT = "0.01"
 RSI_AVERAGE_PERIOD = 14
 LONG_MAX_ABOVE_MA10_PCT = 1.0  # Block LONG >1% above MA10.
+SMA_SEPARATION_MIN_PCT = 0.12  # Confirmed signal close: abs(SMA10 - SMA20) / close * 100.
 ALLOWED_ENTRY_RANKS = frozenset((1, 2))  # Original TOP7 entry ranks.
 RSI_ENTRY_MAX = 75.0  # Block LONG and SHORT entries only when closed 5m RSI(14) > 75.
 DYNAMIC_MA10_HOLD_POLICY = "SMA10_DYNAMIC_BROKER_STOP"
@@ -202,6 +203,11 @@ def crossover(bot, inst, expected_close_ms, bars=None):
         side = "LONG"
     elif old_fast >= old_slow and new_fast < new_slow:
         side = "SHORT"
+    # Stochastic 14,1,3 at the confirmed signal close; never use live/incomplete bars.
+    stoch_k = stoch_d = None
+    if side is not None:
+        k_series, d_series = bot.stochastic_kd_series(bars, 14, 3)
+        stoch_k, stoch_d = k_series[-1], d_series[-1]
     # S/R is an entry-only filter. Existing positions and their exits must
     # never depend on support/resistance calculations.
     sr_levels = None
@@ -220,6 +226,9 @@ def crossover(bot, inst, expected_close_ms, bars=None):
         "ma20_previous": old_slow,
         "ma10": new_fast,
         "ma20": new_slow,
+        "sma_separation_pct": abs(new_fast - new_slow) / closes[-1] * 100.0 if closes[-1] > 0 else None,
+        "stoch_k": stoch_k,
+        "stoch_d": stoch_d,
         "ma10_live_cross_level": ma10_live_cross_level,
         "ma10_stop_nine_closed_sum": sum(closes[-9:]),
         "ma10_stop_offset_pct": 1.0,
@@ -275,6 +284,26 @@ def entry_rsi_rejection(signal):
         return "RSI14_UNAVAILABLE: invalid confirmed-candle RSI"
     if value > RSI_ENTRY_MAX:
         return f"RSI14_OVER_75: {value:.2f} > {RSI_ENTRY_MAX:.0f}"
+    return None
+
+
+def entry_strength_rejection(signal):
+    """Reject weak MA separation and unfavorable Stochastic 14,1,3 at signal close."""
+    try:
+        gap_pct = float(signal["sma_separation_pct"])
+        k = float(signal["stoch_k"])
+        d = float(signal["stoch_d"])
+        if not (math.isfinite(gap_pct) and math.isfinite(k) and math.isfinite(d)
+                and gap_pct >= 0 and 0 <= k <= 100 and 0 <= d <= 100):
+            raise ValueError("non-finite or out-of-range values")
+    except (KeyError, ValueError, TypeError, OverflowError) as exc:
+        return f"ENTRY_STRENGTH_UNAVAILABLE: {exc}"
+    if gap_pct < SMA_SEPARATION_MIN_PCT:
+        return f"SMA_SEPARATION_TOO_SMALL: {gap_pct:.4f}% < {SMA_SEPARATION_MIN_PCT:.2f}%"
+    if signal.get("side") == "LONG" and k > d:
+        return f"STOCH_KD_LONG_BLOCKED: K={k:.2f} > D={d:.2f}; requires K<=D"
+    if signal.get("side") == "SHORT" and k < d:
+        return f"STOCH_KD_SHORT_BLOCKED: K={k:.2f} < D={d:.2f}; requires K>=D"
     return None
 
 
@@ -393,6 +422,10 @@ def open_position(bot, state, signal, rank, instruments):
         print(f"SMA CROSS {inst} {side}: entry blocked: {rank_rejection}")
         return False
     if side not in ("LONG", "SHORT"):
+        return False
+    strength_rejection = entry_strength_rejection(signal)
+    if strength_rejection:
+        print(f"SMA CROSS {inst} {side}: entry blocked: {strength_rejection}")
         return False
     distance_rejection = long_ma10_distance_rejection(signal)
     if distance_rejection:
@@ -891,6 +924,18 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
                     })
                     last["status"] = "RANK_NOT_ALLOWED_TRY_NEXT"
                     print(f"SMA CROSS {sig['inst']} pre-order rejected: {rank_rejection}")
+                    continue
+                strength_rejection = entry_strength_rejection(sig)
+                if strength_rejection:
+                    last["events"].append({
+                        "inst": sig["inst"], "side": sig["side"], "rank": rank,
+                        "sma_separation_pct": sig.get("sma_separation_pct"),
+                        "stoch_k": sig.get("stoch_k"), "stoch_d": sig.get("stoch_d"),
+                        "reason": strength_rejection,
+                        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT",
+                    })
+                    last["status"] = "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+                    print(f"SMA CROSS {sig['inst']} pre-order rejected; try next: {strength_rejection}")
                     continue
                 distance_rejection = long_ma10_distance_rejection(sig)
                 if distance_rejection:
