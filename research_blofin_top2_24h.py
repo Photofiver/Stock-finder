@@ -104,11 +104,29 @@ def main():
         and str(x.get("strategy", "")).endswith("_5m")
         and 1 <= int(x.get("signal_rank") or 0) <= 7
     ]
+    # Match each entry to the historically saved TOP7 as it existed AT the signal.
+    # This is essential: today's TOP7 cannot establish the old top-1/top-2 gap.
+    with open("blofin_live_scans/live_watch_history_5m.json", encoding="utf-8") as f:
+        audit = json.load(f)
+    archived_top7 = {
+        int(z["signal_close_ms"]): z.get("top7", [])
+        for z in audit.get("scans", []) if z.get("signal_close_ms")
+    }
     required = {}
+    trade_top2 = {}
     for t in original:
         anchor = int(t.get("signal_close_ms") or t["opened_ms"] // STEP * STEP)
         required[t["inst"]] = min(required.get(t["inst"], anchor), anchor)
-    print("original_trade_count", len(original), "instruments", len(required), flush=True)
+        if int(t.get("signal_rank") or 0) not in (1, 2):
+            continue
+        top7 = archived_top7.get(anchor)
+        if top7 and len(top7) >= 2 and t["inst"] == top7[t["signal_rank"] - 1]:
+            trade_top2[(t["inst"], anchor)] = top7[:2]
+            for coin in top7[:2]:
+                required[coin] = min(required.get(coin, anchor), anchor)
+        else:
+            print("HISTORICAL_TOP2_UNAVAILABLE", t["inst"], anchor, "archive", top7[:3] if top7 else [], flush=True)
+    print("original_trade_count", len(original), "instruments", len(required), "archived_top2", len(trade_top2), flush=True)
     print("oldest", dt.datetime.fromtimestamp(min(required.values()) / 1000, dt.timezone.utc), flush=True)
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         tasks = {
@@ -153,6 +171,24 @@ def main():
             result[key] = pct(cur_price, reference)
         if not any_missing:
             augmented.append(result)
+    for t in augmented:
+        if int(t["signal_rank"]) not in (1, 2):
+            continue
+        anchor = int(t.get("signal_close_ms") or t["opened_ms"] // STEP * STEP)
+        top2 = trade_top2.get((t["inst"], anchor))
+        if not top2:
+            continue
+        changes = []
+        for coin in top2:
+            closes = fetched.get(coin, {})
+            target = closes.get(anchor)
+            old = closes.get(anchor - 24 * HOUR)
+            if target and old:
+                changes.append(pct(target, old))
+        if len(changes) == 2:
+            t["gap_top1_top2_pct_points"] = changes[0] - changes[1]
+            t["leader_24h_change"] = changes[0]
+            t["runner_up_24h_change"] = changes[1]
     print("MATCHED", len(augmented), "SKIPPED", len(skipped))
     for item in skipped:
         print("SKIPPED", *item)
@@ -168,12 +204,22 @@ def main():
     for left, right in zip(BINS, BINS[1:]):
         subset = [x for x in rank12 if left <= x["change24h"] < right]
         print("BUCKET_24H", str(left), str(right), json.dumps(metric(subset),sort_keys=True))
+    gap_available = [x for x in rank12 if "gap_top1_top2_pct_points" in x]
+    print("GAP_COVERAGE", len(gap_available), "of", len(rank12))
+    for threshold in [0, 2, 5, 10, 15, 20, 25, 30]:
+        subset = [x for x in gap_available if x["gap_top1_top2_pct_points"] >= threshold]
+        print("LEADER_GAP_MIN", threshold, json.dumps(metric(subset), sort_keys=True))
+    for threshold in [2, 5, 10, 15, 20, 25, 30]:
+        subset = [x for x in gap_available if x["gap_top1_top2_pct_points"] <= threshold]
+        print("LEADER_GAP_MAX", threshold, json.dumps(metric(subset), sort_keys=True))
     for t in sorted(rank12, key=lambda x: x["opened_ms"]):
         print("TRADE", json.dumps({
             "inst": t["inst"], "rank": t["signal_rank"], "side": t["side"],
             "signal_utc": dt.datetime.fromtimestamp(t["signal_close_ms"]/1000, dt.timezone.utc).isoformat(),
             "change24h": round(t["change24h"],3), "change4h": round(t["change4h"],3),
             "change1h": round(t["change1h"],3),
+            "gap_top1_top2_pct_points": round(t["gap_top1_top2_pct_points"],3)
+                if "gap_top1_top2_pct_points" in t else None,
             "gross_pnl_usdt": round(float(t["gross_pnl_usdt"]),5),
             "net_pnl_usdt": round(float(t["net_pnl_usdt"]),5)},sort_keys=True))
 
