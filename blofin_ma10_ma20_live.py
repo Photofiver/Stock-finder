@@ -201,11 +201,16 @@ def crossover(bot, inst, expected_close_ms, bars=None):
         side = "LONG"
     elif old_fast >= old_slow and new_fast < new_slow:
         side = "SHORT"
-    try:
-        sr_levels = sr.confirmed_levels(bars, expected_close_ms, bot.SIGNAL_MS)
-    except (KeyError, ValueError, TypeError, OverflowError) as exc:
-        # Missing/malformed data must block new entries, never bypass S/R.
-        sr_levels = {"error": f"{type(exc).__name__}: {exc}"}
+    # S/R is an entry-only filter. Existing positions and their exits must
+    # never depend on support/resistance calculations.
+    sr_levels = None
+    if side is not None:
+        try:
+            interval_ms = int(getattr(bot, "SIGNAL_MS", bot.SIGNAL_MINUTES * 60000))
+            sr_levels = sr.confirmed_levels(bars, expected_close_ms, interval_ms)
+        except (AttributeError, KeyError, ValueError, TypeError, OverflowError) as exc:
+            # Missing/malformed data must block new entries, never bypass S/R.
+            sr_levels = {"error": f"{type(exc).__name__}: {exc}"}
     return {
         "sr_levels": sr_levels,
         "inst": inst,
