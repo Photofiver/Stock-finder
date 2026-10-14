@@ -73,6 +73,17 @@ class ParallelTop50Tests(unittest.TestCase):
         self.assertEqual(seen["X-USDT"], 2)
         self.assertEqual(seen["Y-USDT"], 1)
 
+    def test_unconfirmed_symbol_is_skipped_not_traded(self):
+        signal_close = 1_790_000_000_000
+        def fake_fetch(inst):
+            return [{"close_ms": signal_close if inst == "FRESH" else signal_close - 300_000, "c": 1.0}]
+
+        with patch.object(bot, "fetch_signal_bars", side_effect=fake_fetch), \
+             patch.object(bot, "bar_close_ms", side_effect=lambda bar: bar["close_ms"]), \
+             patch.object(scan, "CANDLE_CONFIRM_DELAY_SEC", 0):
+            cached = scan.wait_for_confirmed_signal_close(["FRESH", "STALE"], signal_close)
+        self.assertEqual(set(cached), {"FRESH"})
+
     def test_cached_bars_skip_second_market_fetch(self):
         signal_close = 1_790_000_000_000
         bars = [
