@@ -305,7 +305,7 @@ def support_resistance_entry_check(signal, executable_price=None):
 
 
 def refresh_top2_watchlist(state, top7, signal_close_ms):
-    """Arm TOP1/2; keep past TOP1/2 until exactly one observed MA crossover."""
+    """Keep former TOP1/2 coins until an actual LIVE entry; blocked crosses do not consume."""
     saved = state.get("ma_top2_watchlist")
     saved = saved if isinstance(saved, dict) else {}
     previous_top2 = set((state.get("last_top7") or [])[:2])
@@ -322,24 +322,26 @@ def refresh_top2_watchlist(state, top7, signal_close_ms):
         if last_rank not in ALLOWED_ENTRY_RANKS or last_top2_ms > signal_close_ms:
             continue
         previously_current = bool(entry.get("in_top2", inst in previous_top2))
-        crossed_once = bool(entry.get("crossed_once", False))
+        # Legacy crossed_once means a CROSS was seen, not that a trade opened.
+        # Do not carry that obsolete marker into the new entry-based policy.
+        entered_once = bool(entry.get("entered_once", False))
         if inst in current_top2:
-            # Being added to TOP2 after an absence creates a NEW one-cross hunt.
+            # A new visit to TOP2 re-arms the coin for one successful entry.
             if not previously_current:
-                crossed_once = False
+                entered_once = False
             active[inst] = {
                 "last_rank": current_top2[inst],
                 "last_top2_ms": signal_close_ms,
                 "in_top2": True,
-                "crossed_once": crossed_once,
+                "entered_once": entered_once,
             }
-        elif not crossed_once:
-            # No expiry: stop following ONLY after the next confirmed crossover.
+        elif not entered_once:
+            # No time limit: continue watching after all rejected cross signals.
             active[inst] = {
                 "last_rank": last_rank,
                 "last_top2_ms": last_top2_ms,
                 "in_top2": False,
-                "crossed_once": False,
+                "entered_once": False,
             }
     for inst, rank in current_top2.items():
         if inst not in active:
@@ -347,16 +349,14 @@ def refresh_top2_watchlist(state, top7, signal_close_ms):
                 "last_rank": rank,
                 "last_top2_ms": signal_close_ms,
                 "in_top2": True,
-                "crossed_once": False,
+                "entered_once": False,
             }
     state["ma_top2_watchlist"] = active
     return active
 
 
 def rank_entry_rejection(rank, state=None, inst=None, signal_close_ms=None):
-    """Allow current TOP1/2 and one pending cross from a former TOP1/2 coin."""
-    if type(rank) is int and rank in ALLOWED_ENTRY_RANKS:
-        return None
+    """Allow exactly one successful entry after each visit to TOP1/2."""
     watch = (state or {}).get("ma_top2_watchlist")
     entry = watch.get(inst) if isinstance(watch, dict) and isinstance(inst, str) else None
     if isinstance(entry, dict) and signal_close_ms is not None:
@@ -367,10 +367,24 @@ def rank_entry_rejection(rank, state=None, inst=None, signal_close_ms=None):
         except (KeyError, ValueError, TypeError, OverflowError):
             pass
         else:
-            if last_rank in ALLOWED_ENTRY_RANKS and age_ms >= 0 and not entry.get("crossed_once", False):
+            if (last_rank in ALLOWED_ENTRY_RANKS and age_ms >= 0
+                    and not entry.get("entered_once", False)):
                 return None
-    return f"RANK_NOT_ALLOWED: TOP7 place {rank!r}; not TOP1/2 or still awaiting its first cross"
+    return f"RANK_NOT_ALLOWED: TOP7 place {rank!r}; not on active TOP1/2 entry hunt"
 
+
+def mark_top2_entry_opened(state, inst):
+    """Consume a watched coin only after open_position confirms success."""
+    watch = state.get("ma_top2_watchlist")
+    if not isinstance(watch, dict):
+        return
+    entry = watch.get(inst)
+    if not isinstance(entry, dict):
+        return
+    if entry.get("in_top2"):
+        entry["entered_once"] = True
+    else:
+        watch.pop(inst, None)
 
 def open_position(bot, state, signal, rank, instruments):
     inst, side = signal["inst"], signal["side"]
@@ -837,6 +851,8 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
                     last["reversed"] = open_position(
                         bot, state, sig, top7.index(inst) + 1 if inst in top7 else 0, instruments,
                     )
+                    if last["reversed"]:
+                        mark_top2_entry_opened(state, inst)
             else:
                 last["status"] = "HOLDING_UNTIL_TP_OR_OPPOSITE_RSI_OR_MA_CROSS"
     else:
@@ -847,8 +863,7 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
             last["status"] = "BLOCKED_EXISTING_DRAWDOWN_STOP"
         else:
             signals = []
-            caught_crosses = []
-            # Current TOP7 first; then previous TOP1/2 until their FIRST cross.
+            # Current TOP7 first; then previous TOP1/2 until a successful entry.
             scan_insts = list(dict.fromkeys(top7 + list(watchlist)))
             ranks = {inst: rank for rank, inst in enumerate(top7, start=1)}
             for inst in scan_insts:
@@ -857,8 +872,6 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
                     sig = crossover(bot, inst, expected_close_ms)
                     if sig["side"]:
                         signals.append((rank, sig))
-                        if inst in watchlist:
-                            caught_crosses.append(inst)
                 except Exception as exc:
                     last["events"].append({"inst": inst, "error": str(exc)})
             last["signals"] = [{"rank": rank, **sig} for rank, sig in signals]
@@ -913,6 +926,7 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
                     continue
                 try:
                     if open_position(bot, state, sig, rank, instruments):
+                        mark_top2_entry_opened(state, sig["inst"])
                         last["status"] = "OPENED"
                         last["selected"] = sig
                         break
@@ -942,17 +956,6 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
                     last["status"] = "PRE_ORDER_REJECTED_TRY_NEXT"
                     print(f"SMA CROSS {sig['inst']} pre-order rejected; try next TOP7: {exc}")
                     continue
-            # Consume the FIRST observed cross even if RSI/SR/order rules blocked
-            # the entry. Keep a consumed marker for coins still in today's TOP2
-            # so they are not rearmed while they remain there.
-            for inst in caught_crosses:
-                entry = watchlist.get(inst)
-                if not isinstance(entry, dict):
-                    continue
-                if entry.get("in_top2"):
-                    entry["crossed_once"] = True
-                else:
-                    watchlist.pop(inst, None)
     state.pop("_sma_order_post_started", None)
     state["ma_cross_last_scan"] = last
     state.setdefault("last_diagnostic", {})["ma_cross"] = last
