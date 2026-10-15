@@ -88,9 +88,11 @@ jobs:
           # A diagnostics/API failure must never block saving LIVE state.
           if [ -f blofin_live_state.json ]; then
             LIVE_SIGNAL_MINUTES=5 python blofin_live_scan_audit.py || echo 'AUDIT_ERROR: scan diagnostics failed; preserving LIVE state'
-            if [ -f blofin_live_scans/live_watch_history_5m.json ]; then
-              git add -- blofin_live_scans/live_watch_history_5m.json
-            fi
+            for audit_file in blofin_live_scans/live_watch_history_5m_part*.json; do
+              if [ -f "$audit_file" ]; then
+                git add -- "$audit_file"
+              fi
+            done
           fi
           git add blofin_signal_state.json
           if [ -f blofin_pending_signal.json ]; then
