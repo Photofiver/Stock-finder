@@ -32,6 +32,25 @@ def initialize_bankroll(state):
     return True
 
 
+def max_color_volumes_last_5(bars, i):
+    """Largest green and red volumes from five CLOSED signal candles up to i.
+
+    Doji candles count as neither color. Zero means that color was absent.
+    Never use a partially formed next candle or older volume spikes.
+    """
+    if i < 4 or i >= len(bars):
+        raise ValueError("Five closed candles are required for volume dominance")
+    max_green = 0.0
+    max_red = 0.0
+    for bar in bars[i - 4:i + 1]:
+        volume = float(bar["v"])
+        if float(bar["c"]) > float(bar["o"]):
+            max_green = max(max_green, volume)
+        elif float(bar["c"]) < float(bar["o"]):
+            max_red = max(max_red, volume)
+    return max_green, max_red
+
+
 def score_options(bot, bars, i):
     """Strict >110 occurrences strategy; AND all rules for each direction."""
     if i < 40 or i >= len(bars):
@@ -57,6 +76,8 @@ def score_options(bot, bars, i):
     if long_metrics is None or volume_ma5 is None:
         return []
 
+    max_green_5, max_red_5 = max_color_volumes_last_5(bars, i)
+
     checks = {
         "LONG": [
             ("RSI_LT_67", float(rsi) < 67.0),
@@ -65,11 +86,13 @@ def score_options(bot, bars, i):
             ("MACD_HIST_RISING", float(current_hist) > float(previous_hist)),
             ("VOLUME_BELOW_MA5", volume < float(volume_ma5)),
             ("VOLUME_GT_LAST_RED", bool(long_metrics["volume_higher_than_last_red"])),
+            ("MAX_GREEN_GT_RED_LAST_5", max_green_5 > max_red_5),
         ],
         "SHORT": [
             ("OBV_RISING_5", obv_change > 0),
             ("MACD_HIST_NEGATIVE", float(current_hist) < 0),
             ("RSI_GE_55", float(rsi) >= 55.0),
+            ("MAX_RED_GT_GREEN_LAST_5", max_red_5 > max_green_5),
         ],
     }
     last_red = long_metrics.get("last_red_volume")
@@ -91,6 +114,12 @@ def score_options(bot, bars, i):
             "entry_eligible": not missing,
             "volume_rule_passed": bool(long_metrics["volume_higher_than_last_red"]) if side == "LONG" else None,
             "volume_advantage_pct": advantage if side == "LONG" else None,
+            "max_green_volume_last_5": max_green_5,
+            "max_red_volume_last_5": max_red_5,
+            "volume_dominance_last_5_passed": (
+                max_green_5 > max_red_5 if side == "LONG"
+                else max_red_5 > max_green_5
+            ),
             "obv_delta_5": obv_change,
             "volume_ma5": volume_ma5,
             "rsi14": float(rsi),
@@ -182,8 +211,8 @@ def select_signals(state, top7):
     state["last_pretrade_ranking"] = {
         "generated_at_ms": bot.now_ms(),
         "strategy": "HISTORICAL_GT110_STRICT",
-        "conditions_long": 6,
-        "conditions_short": 3,
+        "conditions_long": 7,
+        "conditions_short": 4,
         "selection_method": "HIGHEST_QUALITY_SCORE_AMONG_STRICT_GT110_SIGNALS",
         "quality_model": "selection_rank.score_at_close",
         "quality_model_not_profit_prediction": True,
