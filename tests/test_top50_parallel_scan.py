@@ -19,15 +19,40 @@ class ParallelTop50Tests(unittest.TestCase):
     def test_configuration_and_entry_ranks(self):
         self.assertEqual(bot.TOP_N, 100)
         self.assertEqual(ma.EXTENDED_ENTRY_RANK_MAX, 100)
-        self.assertIsNone(ma.rank_entry_rejection(3, {}, "C3", 100))
+        self.assertIsNotNone(ma.rank_entry_rejection(3, {}, "C3", 100))
+        self.assertIsNotNone(ma.rank_entry_rejection(50, {}, "C50", 100))
+        self.assertIsNone(ma.rank_entry_rejection(51, {}, "C51", 100))
         self.assertIsNone(ma.rank_entry_rejection(100, {}, "C100", 100))
         self.assertIsNotNone(ma.rank_entry_rejection(101, {}, "C101", 100))
         state = {"ma_top2_watchlist": {
             "C1": {"last_rank": 1, "last_top2_ms": 100, "entered_once": False},
         }}
-        self.assertIsNone(ma.rank_entry_rejection(1, state, "C1", 100))
+        self.assertIsNotNone(ma.rank_entry_rejection(1, state, "C1", 100))
+        self.assertIsNotNone(ma.rank_entry_rejection(0, state, "C1", 100))
         state["ma_top2_watchlist"]["C1"]["entered_once"] = True
         self.assertIsNotNone(ma.rank_entry_rejection(1, state, "C1", 100))
+
+    def test_directional_rsi_and_existing_upper_limit(self):
+        for side, rsi, allowed in (
+            ("LONG", 49.99, False), ("LONG", 50, True),
+            ("LONG", 75, True), ("LONG", 75.01, False),
+            ("SHORT", 0, True), ("SHORT", 50, True),
+            ("SHORT", 50.01, False), ("SHORT", 76, False),
+            ("LONG", None, False), ("SHORT", float("nan"), False),
+        ):
+            with self.subTest(side=side, rsi=rsi):
+                self.assertEqual(ma.entry_rsi_rejection({"side": side, "rsi14": rsi}) is None, allowed)
+
+    def test_filters_block_before_any_broker_access(self):
+        from unittest.mock import MagicMock
+        for rank, side, rsi in ((50, "LONG", 55), (51, "LONG", 49), (100, "SHORT", 51)):
+            bot_mock = MagicMock()
+            signal = {"inst": "TEST", "side": side, "rsi14": rsi,
+                      "signal_close_ms": 100, "sma_separation_pct": 0.01,
+                      "stoch_k": 40 if side == "LONG" else 60, "stoch_d": 50,
+                      "close": 100, "ma10": 100}
+            self.assertFalse(ma.open_position(bot_mock, {}, signal, rank, {}))
+            self.assertEqual(bot_mock.mock_calls, [])
 
     def test_sma_gap_no_longer_blocks_valid_kd(self):
         # Small SMA separations are now allowed; confirmed MA crossover remains required.

@@ -25,6 +25,7 @@ RSI_AVERAGE_PERIOD = 14
 LONG_MAX_ABOVE_MA10_PCT = 1.0  # Block LONG >1% above MA10.
 ALLOWED_ENTRY_RANKS = frozenset((1, 2))  # Original TOP1/2 one-entry-per-visit policy.
 EXTENDED_ENTRY_RANK_MAX = max(2, min(100, int(os.getenv("LIVE_ENTRY_TOP_N", "2"))))
+ENTRY_RANK_MIN = 51  # Only current ranks 51..100 may open new positions.
 RSI_ENTRY_MAX = 75.0  # Block LONG and SHORT entries only when closed 5m RSI(14) > 75.
 DYNAMIC_MA10_HOLD_POLICY = "SMA10_DYNAMIC_BROKER_STOP"
 
@@ -273,7 +274,7 @@ def rsi_average_crossover(bot, inst, expected_close_ms, bars=None):
 
 
 def entry_rsi_rejection(signal):
-    """Fail closed if confirmed-candle RSI(14) is missing, invalid, or > 75."""
+    """Confirmed RSI: LONG 50..75, SHORT 0..50; invalid data fails closed."""
     rsi = signal.get("rsi14")
     if rsi is None:
         return "RSI14_UNAVAILABLE: missing confirmed-candle RSI"
@@ -285,6 +286,10 @@ def entry_rsi_rejection(signal):
         return "RSI14_UNAVAILABLE: invalid confirmed-candle RSI"
     if value > RSI_ENTRY_MAX:
         return f"RSI14_OVER_75: {value:.2f} > {RSI_ENTRY_MAX:.0f}"
+    if signal.get("side") == "LONG" and value < 50.0:
+        return f"RSI14_LONG_BELOW_50: {value:.2f} < 50"
+    if signal.get("side") == "SHORT" and value > 50.0:
+        return f"RSI14_SHORT_ABOVE_50: {value:.2f} > 50"
     return None
 
 
@@ -384,23 +389,10 @@ def refresh_top2_watchlist(state, top7, signal_close_ms):
 
 
 def rank_entry_rejection(rank, state=None, inst=None, signal_close_ms=None):
-    """Keep original TOP1/2 one-entry policy; also allow configured TOP3..TOP100."""
-    if 3 <= rank <= EXTENDED_ENTRY_RANK_MAX:
+    """Only current ranks 51..100; historical TOP2 visits cannot bypass this gate."""
+    if ENTRY_RANK_MIN <= rank <= EXTENDED_ENTRY_RANK_MAX:
         return None
-    watch = (state or {}).get("ma_top2_watchlist")
-    entry = watch.get(inst) if isinstance(watch, dict) and isinstance(inst, str) else None
-    if isinstance(entry, dict) and signal_close_ms is not None:
-        try:
-            last_rank = int(entry["last_rank"])
-            last_top2_ms = int(entry["last_top2_ms"])
-            age_ms = int(signal_close_ms) - last_top2_ms
-        except (KeyError, ValueError, TypeError, OverflowError):
-            pass
-        else:
-            if (last_rank in ALLOWED_ENTRY_RANKS and age_ms >= 0
-                    and not entry.get("entered_once", False)):
-                return None
-    return f"RANK_NOT_ALLOWED: TOP7 place {rank!r}; not on active TOP1/2 entry hunt"
+    return f"RANK_NOT_ALLOWED: current place {rank!r}; requires {ENTRY_RANK_MIN}..{EXTENDED_ENTRY_RANK_MAX}"
 
 
 def mark_top2_entry_opened(state, inst):
