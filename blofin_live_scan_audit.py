@@ -1,4 +1,4 @@
-"""Read-only BloFin diagnostics in one continually updated JSON file.
+"""Read-only BloFin diagnostics in bounded, automatically rotated JSON files.
 
 This script does not place orders, modify the LIVE bot, or read private API keys.
 """
@@ -8,8 +8,29 @@ from pathlib import Path
 
 import blofin_live_hourly as bot
 
-HISTORY_FILE = (Path("blofin_live_scans/live_watch_history.json") if bot.SIGNAL_MINUTES == 15
-                else Path(f"blofin_live_scans/live_watch_history_{bot.SIGNAL_MINUTES}m.json"))
+# Keep the full historical 5m file read-only. All NEW 5m audits go into
+# numbered segments so GitHub's 100 MB per-file limit cannot block LIVE state.
+# Leave generous headroom: switch to the next part at 20 MiB.
+HISTORY_DIR = Path("blofin_live_scans")
+AUDIT_PART_MAX_BYTES = 20 * 1024 * 1024
+
+
+def choose_history_file(signal_minutes=None):
+    minutes = bot.SIGNAL_MINUTES if signal_minutes is None else signal_minutes
+    if minutes == 15:
+        return HISTORY_DIR / "live_watch_history.json"
+    if minutes != 5:
+        return HISTORY_DIR / f"live_watch_history_{minutes}m.json"
+
+    part = 2
+    while True:
+        candidate = HISTORY_DIR / f"live_watch_history_5m_part{part:04d}.json"
+        if not candidate.exists() or candidate.stat().st_size < AUDIT_PART_MAX_BYTES:
+            return candidate
+        part += 1
+
+
+HISTORY_FILE = choose_history_file()
 REVIEW_LABEL = f"{bot.SIGNAL_MINUTES}m"
 COMPARISON_KEY = f"best_coin_comparison_after_{REVIEW_LABEL}"
 INDICATOR_CHANGE_KEY = f"indicator_change_over_{REVIEW_LABEL}"
