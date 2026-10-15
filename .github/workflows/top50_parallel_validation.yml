@@ -8,6 +8,9 @@ on:
       - 'blofin_ma10_ma20_live.py'
       - '.github/workflows/blofin_live_signal_watch.yml'
       - 'tests/test_top50_parallel_scan.py'
+      - 'blofin_live_scan_audit.py'
+      - 'tests/test_audit_rotation.py'
+      - 'blofin_live_scans/live_watch_history_5m_part0002.json'
       - '.github/workflows/top50_parallel_validation.yml'
 
 permissions:
@@ -23,6 +26,8 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt
       - name: Python syntax check
-        run: python -m py_compile blofin_live_hourly.py blofin_live_signal_watch.py blofin_ma10_ma20_live.py
+        run: python -m py_compile blofin_live_hourly.py blofin_live_signal_watch.py blofin_ma10_ma20_live.py blofin_live_scan_audit.py
       - name: Mock 100-coin parallel scan and rank checks (no BloFin trading)
         run: python -m unittest discover -s tests -p 'test_top50_parallel_scan.py' -v
+      - name: Verify 5m journal rotation (offline)
+        run: python -m unittest discover -s tests -p 'test_audit_rotation.py' -v
