@@ -203,6 +203,92 @@ class Ma10TrailingStopTests(unittest.TestCase):
         )
         self.assertEqual(target, Decimal("99.75"))
 
+    def test_short_executable_ask_triggers_before_last_price(self):
+        b = BrokerStub()
+        p = pos("SHORT", "0.007695")
+        p["inst"] = "BLESS-USDT"
+        quote = {"bid": Decimal("0.007681"), "ask": Decimal("0.007696")}
+        self.assertTrue(ma.executable_stop_reached(b, p, quote))
+        self.assertFalse(ma.executable_stop_reached(
+            b, p, {"bid": Decimal("0.007681"), "ask": Decimal("0.007694")},
+        ))
+
+    def test_long_executable_bid_triggers_before_last_price(self):
+        b = BrokerStub()
+        p = pos("LONG", "99.75")
+        self.assertTrue(ma.executable_stop_reached(
+            b, p, {"bid": Decimal("99.74"), "ask": Decimal("100.00")},
+        ))
+        self.assertFalse(ma.executable_stop_reached(
+            b, p, {"bid": Decimal("99.76"), "ask": Decimal("100.00")},
+        ))
+
+    def test_executable_quote_rejects_stale_order_book(self):
+        class QuoteBot(BrokerStub):
+            def market_get(self, route, query):
+                self.assert_called_on_book = (route, query)
+                return [{
+                    "ts": "1", "bids": [["99.7", "1"]],
+                    "asks": [["100.3", "1"]],
+                }]
+        b = QuoteBot()
+        with self.assertRaisesRegex(RuntimeError, "stale"):
+            ma.executable_exit_quote(b, "A-USDT")
+        self.assertEqual(b.assert_called_on_book[1]["size"], "1")
+
+    def test_executable_short_sl_closes_before_ten_minute_timeout(self):
+        class MonitorBot(BrokerStub):
+            SIGNAL_MS = 5 * 60 * 1000
+
+            def __init__(self):
+                super().__init__()
+                self.clock = 101000
+                self.time = self
+                self.closed = []
+                self.saved = 0
+
+            def now_ms(self):
+                return self.clock
+
+            def sleep(self, seconds):
+                self.clock += int(seconds * 1000)
+
+            def get_tracked_positions(self, state):
+                return state["positions"]
+
+            def get_open_positions(self):
+                return [{"instId": "BLESS-USDT"}]
+
+            def sync_all_tracked_positions(self, state):
+                return self.get_open_positions()
+
+            def market_get(self, route, query):
+                return [{
+                    "ts": str(self.clock),
+                    "bids": [["0.007683", "1"]],
+                    "asks": [["0.007696", "1"]],
+                }]
+
+            def _run_for_tracked_position(self, state, inst, func, reason):
+                self.closed.append((inst, reason))
+                state["positions"].pop(inst, None)
+
+            def save_state(self, state):
+                self.saved += 1
+
+        b = MonitorBot()
+        p = pos("SHORT", "0.007695")
+        p["inst"] = "BLESS-USDT"
+        p["opened_ms"] = 100000
+        p["hold_policy"] = ma.DYNAMIC_MA10_HOLD_POLICY
+        state = {"positions": {"BLESS-USDT": p}}
+        result = ma.enforce_max_ten_minutes(b, state, "BLESS-USDT", {})
+        self.assertEqual(result, "EXECUTABLE_SL_EXIT")
+        self.assertEqual(len(b.closed), 1)
+        self.assertIn("EXECUTABLE SL", b.closed[0][1])
+        self.assertLess(b.clock - p["opened_ms"], ma.MAX_HOLD_MS)
+        self.assertEqual(b.saved, 1)
+
     def test_missing_entry_price_fails_safe_instead_of_amending(self):
         b = BrokerStub()
         p = pos("LONG", "97")
