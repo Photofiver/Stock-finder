@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-16T16:47:29.688742+00:00",
+  "generated_utc": "2026-10-16T16:51:47.707253+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,28 +172,49 @@
         "side": "SHORT"
       }
     ],
-    "last_live_scan_utc": "2026-10-16T16:45:00+00:00",
-    "last_run_utc": "2026-10-16T16:46:49.562000+00:00",
+    "last_live_scan_utc": "2026-10-16T16:50:00+00:00",
+    "last_run_utc": "2026-10-16T16:51:08.103000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "NAORIS-USDT",
-        "rank": 10,
-        "reason": "RANK_NOT_ALLOWED: current place 10; requires 51..100",
+        "inst": "PHAROS-USDT",
+        "rank": 12,
+        "reason": "RANK_NOT_ALLOWED: current place 12; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "TAKE-USDT",
+        "rank": 49,
+        "reason": "RANK_NOT_ALLOWED: current place 49; requires 51..100",
         "side": "LONG",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "POPCAT-USDT",
-        "rank": 40,
-        "reason": "RANK_NOT_ALLOWED: current place 40; requires 51..100",
+        "inst": "PHA-USDT",
+        "rank": null,
+        "reason": "RSI14_LONG_BELOW_50: 44.96 < 50",
         "side": "LONG",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+        "status": "RSI_ENTRY_BLOCKED_TRY_NEXT"
       },
       {
-        "inst": "PENDLE-USDT",
-        "rank": 56,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=87.96 > D=73.89; requires K<=D",
+        "inst": "MNT-USDT",
+        "rank": null,
+        "reason": "RSI14_LONG_BELOW_50: 42.34 < 50",
         "side": "LONG",
+        "status": "RSI_ENTRY_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "PORTAL-USDT",
+        "rank": null,
+        "reason": "RSI14_LONG_BELOW_50: 45.89 < 50",
+        "side": "LONG",
+        "status": "RSI_ENTRY_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "AR-USDT",
+        "rank": 86,
+        "reason": "STOCH_KD_SHORT_BLOCKED: K=0.00 < D=10.20; requires K>=D",
+        "side": "SHORT",
         "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
       }
     ],
@@ -284,7 +305,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-16T16:46:49.562000+00:00",
+    "latest_live_run_utc": "2026-10-16T16:51:08.103000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
