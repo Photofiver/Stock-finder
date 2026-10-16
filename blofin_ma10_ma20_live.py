@@ -30,10 +30,47 @@ RSI_ENTRY_MAX = 75.0  # Block LONG and SHORT entries only when closed 5m RSI(14)
 DYNAMIC_MA10_HOLD_POLICY = "SMA10_DYNAMIC_BROKER_STOP"
 
 MAX_HOLD_MS = 10 * 60 * 1000
+# A broker-native TP/SL stays live; this checks the executable exit side
+# because BloFin native SL triggers on LAST, not the SHORT buy ASK / LONG sell BID.
+EXIT_QUOTE_POLL_SECONDS = 1.0
+EXIT_QUOTE_MAX_AGE_MS = 15000
+EXIT_POSITION_SYNC_MS = 5000
+
+
+def executable_exit_quote(bot, inst):
+    """Fresh BloFin order book BID/ASK (the two executable exit directions)."""
+    rows = bot.market_get("/api/v1/market/books", {"instId": inst, "size": "1"})
+    book = rows[0] if isinstance(rows, list) and rows else {}
+    timestamp = int(book.get("ts") or 0)
+    age = bot.now_ms() - timestamp
+    if timestamp <= 0 or not (-5000 <= age <= EXIT_QUOTE_MAX_AGE_MS):
+        raise RuntimeError(f"{inst}: stale/missing order book timestamp (age {age}ms)")
+    bids, asks = book.get("bids") or [], book.get("asks") or []
+    if not bids or not asks:
+        raise RuntimeError(f"{inst}: order book has no executable bid/ask")
+    bid, ask = bot.d(bids[0][0]), bot.d(asks[0][0])
+    if not (bid.is_finite() and ask.is_finite() and 0 < bid <= ask):
+        raise RuntimeError(f"{inst}: invalid best bid/ask")
+    return {"bid": bid, "ask": ask, "age_ms": age}
+
+
+def executable_stop_reached(bot, pos, quote):
+    """LONG sells at BID; SHORT buys to close at ASK, not at LAST."""
+    stop = bot.d(pos.get("sl") or "0")
+    if stop <= 0:
+        raise RuntimeError(f"{pos['inst']}: missing protected SL level")
+    side = pos["side"]
+    if side == "LONG":
+        return quote["bid"] <= stop
+    if side == "SHORT":
+        return quote["ask"] >= stop
+    raise ValueError(f"Unknown position side: {side}")
+
+
 
 
 def enforce_max_ten_minutes(bot, state, inst, instruments):
-    """Close a LIVE SMA trade at age 10m unless an exchange TP/SL closed it."""
+    """Monitor real executable SL every second, retaining native broker TP/SL."""
     pos = bot.get_tracked_positions(state).get(inst)
     if not pos or pos.get("hold_policy") != DYNAMIC_MA10_HOLD_POLICY:
         return "NO_TIMED_TRADE"
@@ -42,12 +79,17 @@ def enforce_max_ten_minutes(bot, state, inst, instruments):
         raise RuntimeError(f"{inst}: no opening timestamp to enforce 10m exit")
     deadline = opened_ms + MAX_HOLD_MS
     last_checked_close = 0
+    last_sync_ms = 0
+    last_quote_warning_ms = 0
     while True:
-        # Keep the original exchange TP/SL working throughout the 10m period.
-        try:
-            bot.sync_all_tracked_positions(state)
-        except Exception as exc:
-            print(f"10m monitor broker sync retry {inst}: {exc}")
+        now = bot.now_ms()
+        # Native broker TP/SL always remains in place, even if an API poll fails.
+        if now - last_sync_ms >= EXIT_POSITION_SYNC_MS:
+            last_sync_ms = now
+            try:
+                bot.sync_all_tracked_positions(state)
+            except Exception as exc:
+                print(f"10m monitor broker sync retry {inst}: {exc}")
         pos = bot.get_tracked_positions(state).get(inst)
         if not pos:
             return "CLOSED_BY_BROKER"
@@ -64,7 +106,45 @@ def enforce_max_ten_minutes(bot, state, inst, instruments):
                 bot.save_state(state)
                 return "TIME_EXIT_10M"
             return "ALREADY_CLOSED_ON_EXCHANGE"
-        # Maintain the existing MA10 broker stop update at every closed 5m bar.
+        # Exchange SL listens for LAST trades. A SHORT is bought back at ASK,
+        # and a LONG is sold at BID, so EXIT exposure may hit SL sooner.
+        try:
+            quote = executable_exit_quote(bot, inst)
+            if executable_stop_reached(bot, pos, quote):
+                # An exchange-native TP/SL could have filled during this poll.
+                broker_open = any(
+                    row.get("instId") == inst for row in bot.get_open_positions()
+                )
+                if not broker_open:
+                    bot.sync_all_tracked_positions(state)
+                    if not bot.get_tracked_positions(state).get(inst):
+                        return "CLOSED_BY_BROKER"
+                else:
+                    executable_price = quote["bid"] if pos["side"] == "LONG" else quote["ask"]
+                    reason = (
+                        f"EXECUTABLE SL: {pos['side']} exit quote {executable_price} "
+                        f"reached broker SL {pos['sl']} (BID for LONG / ASK for SHORT)"
+                    )
+                    print(f"{inst}: {reason}")
+                    try:
+                        bot._run_for_tracked_position(
+                            state, inst, bot.close_tracked_position, reason,
+                        )
+                    except Exception as exc:
+                        # Broker SL may fill in the race; do not submit a second close.
+                        print(f"EXECUTABLE SL close uncertain {inst}: {exc}")
+                        try:
+                            bot.sync_all_tracked_positions(state)
+                        except Exception as sync_exc:
+                            print(f"EXECUTABLE SL sync retry {inst}: {sync_exc}")
+                    bot.save_state(state)
+                    if not bot.get_tracked_positions(state).get(inst):
+                        return "EXECUTABLE_SL_EXIT"
+        except Exception as exc:
+            if now - last_quote_warning_ms >= 10000:
+                print(f"EXCHANGE SL BACKUP ONLY {inst}: exit bid/ask unavailable: {exc}")
+                last_quote_warning_ms = now
+        # Maintain existing MA10 one-way broker stop update at confirmed 5m close.
         close_ms = (now // bot.SIGNAL_MS) * bot.SIGNAL_MS
         previous_update = int(
             pos.get("ma10_stop_signal_close_ms")
@@ -81,8 +161,7 @@ def enforce_max_ten_minutes(bot, state, inst, instruments):
                     )
             except Exception as exc:
                 print(f"10m monitor MA10 stop refresh failed {inst}: {exc}")
-        bot.time.sleep(min(5, max(0.05, (deadline - bot.now_ms()) / 1000)))
-
+        bot.time.sleep(min(EXIT_QUOTE_POLL_SECONDS, max(0.05, (deadline - bot.now_ms()) / 1000)))
 
 
 def gross_one_percent_tp(bot, side, entry, tick):
