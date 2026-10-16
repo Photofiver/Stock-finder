@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-16T15:32:38.633710+00:00",
+  "generated_utc": "2026-10-16T15:36:20.156286+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,74 +172,95 @@
         "side": "SHORT"
       }
     ],
-    "last_live_scan_utc": "2026-10-16T15:30:00+00:00",
-    "last_run_utc": "2026-10-16T15:31:52.127000+00:00",
+    "last_live_scan_utc": "2026-10-16T15:35:00+00:00",
+    "last_run_utc": "2026-10-16T15:35:38.973000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "SKR-USDT",
-        "rank": 16,
-        "reason": "RANK_NOT_ALLOWED: current place 16; requires 51..100",
-        "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+        "inst": "SAFE-USDT",
+        "rank": 30,
+        "reason": "",
+        "side": null,
+        "status": "UNCONFIRMED_CANDLE_SKIPPED"
       },
       {
-        "inst": "XPIN-USDT",
-        "rank": null,
-        "reason": "XPIN-USDT SHORT: adverse price move 0.395% > 0.25% from signal close",
-        "side": "SHORT",
-        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
+        "inst": "AKT-USDT",
+        "rank": 32,
+        "reason": "",
+        "side": null,
+        "status": "UNCONFIRMED_CANDLE_SKIPPED"
       },
       {
-        "inst": "NEO-USDT",
-        "rank": null,
-        "reason": "NEAR_SUPPORT",
-        "side": "SHORT",
-        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
+        "inst": "DUSK-USDT",
+        "rank": 34,
+        "reason": "",
+        "side": null,
+        "status": "UNCONFIRMED_CANDLE_SKIPPED"
       },
       {
-        "inst": "ACU-USDT",
+        "inst": "BLUAI-USDT",
+        "rank": 36,
+        "reason": "",
+        "side": null,
+        "status": "UNCONFIRMED_CANDLE_SKIPPED"
+      },
+      {
+        "inst": "AR-USDT",
+        "rank": 43,
+        "reason": "",
+        "side": null,
+        "status": "UNCONFIRMED_CANDLE_SKIPPED"
+      },
+      {
+        "inst": "IOTA-USDT",
+        "rank": 55,
+        "reason": "",
+        "side": null,
+        "status": "UNCONFIRMED_CANDLE_SKIPPED"
+      },
+      {
+        "inst": "BIGTIME-USDT",
+        "rank": 62,
+        "reason": "",
+        "side": null,
+        "status": "UNCONFIRMED_CANDLE_SKIPPED"
+      },
+      {
+        "inst": "XNY-USDT",
         "rank": 66,
-        "reason": "STOCH_KD_SHORT_BLOCKED: K=7.02 < D=31.91; requires K>=D",
-        "side": "SHORT",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+        "reason": "",
+        "side": null,
+        "status": "UNCONFIRMED_CANDLE_SKIPPED"
       },
       {
-        "inst": "KSM-USDT",
-        "rank": null,
-        "reason": "ORDER_BOOK_DIRECTION_BLOCKED: KSM-USDT SHORT: aligned depth 41.22% < 55.00% (20 levels)",
-        "side": "SHORT",
-        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
+        "inst": "CLANKER-USDT",
+        "rank": 76,
+        "reason": "",
+        "side": null,
+        "status": "UNCONFIRMED_CANDLE_SKIPPED"
       },
       {
-        "inst": "BLESS-USDT",
+        "inst": "ME-USDT",
+        "rank": 100,
+        "reason": "",
+        "side": null,
+        "status": "UNCONFIRMED_CANDLE_SKIPPED"
+      },
+      {
+        "inst": "PORTAL-USDT",
         "rank": null,
-        "reason": "RSI14_SHORT_ABOVE_50: 51.65 > 50",
+        "reason": "NEAR_SUPPORT",
         "side": "SHORT",
+        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "ZEST-USDT",
+        "rank": null,
+        "reason": "RSI14_LONG_BELOW_50: 49.45 < 50",
+        "side": "LONG",
         "status": "RSI_ENTRY_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "SIGN-USDT",
-        "rank": null,
-        "reason": "NEAR_SUPPORT",
-        "side": "SHORT",
-        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "ATOM-USDT",
-        "rank": null,
-        "reason": "NEAR_SUPPORT",
-        "side": "SHORT",
-        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "KAT-USDT",
-        "rank": null,
-        "reason": "NEAR_SUPPORT",
-        "side": "SHORT",
-        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "SR_ENTRY_BLOCKED_TRY_NEXT",
+    "last_scan_status": "RSI_ENTRY_BLOCKED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 264,
@@ -326,7 +347,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-16T15:31:52.127000+00:00",
+    "latest_live_run_utc": "2026-10-16T15:35:38.973000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
