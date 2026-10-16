@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-16T14:32:19.431660+00:00",
+  "generated_utc": "2026-10-16T14:37:23.993208+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,32 +172,67 @@
         "side": "SHORT"
       }
     ],
-    "last_live_scan_utc": "2026-10-16T14:30:00+00:00",
-    "last_run_utc": "2026-10-16T14:31:28.725000+00:00",
+    "last_live_scan_utc": "2026-10-16T14:35:00+00:00",
+    "last_run_utc": "2026-10-16T14:36:39.680000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "KMNO-USDT",
-        "rank": 17,
-        "reason": "RANK_NOT_ALLOWED: current place 17; requires 51..100",
+        "inst": "INJ-USDT",
+        "rank": 4,
+        "reason": "RANK_NOT_ALLOWED: current place 4; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "AZTEC-USDT",
+        "rank": 23,
+        "reason": "RANK_NOT_ALLOWED: current place 23; requires 51..100",
         "side": "LONG",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "GMX-USDT",
-        "rank": 35,
-        "reason": "RANK_NOT_ALLOWED: current place 35; requires 51..100",
+        "inst": "4STOCK-USDT",
+        "rank": 55,
+        "reason": "STOCH_KD_LONG_BLOCKED: K=100.00 > D=96.67; requires K<=D",
         "side": "LONG",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
       },
       {
-        "inst": "RENDER-USDT",
+        "inst": "ONDO-USDT",
+        "rank": 58,
+        "reason": "STOCH_KD_SHORT_BLOCKED: K=64.81 < D=73.46; requires K>=D",
+        "side": "SHORT",
+        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "PHAROS-USDT",
+        "rank": 75,
+        "reason": "STOCH_KD_LONG_BLOCKED: K=91.41 > D=87.59; requires K<=D",
+        "side": "LONG",
+        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "DUSK-USDT",
+        "rank": 83,
+        "reason": "STOCH_KD_LONG_BLOCKED: K=97.32 > D=81.36; requires K<=D",
+        "side": "LONG",
+        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "EGLD-USDT",
+        "rank": 85,
+        "reason": "STOCH_KD_LONG_BLOCKED: K=88.57 > D=88.57; requires K<=D",
+        "side": "LONG",
+        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "APEX-USDT",
         "rank": null,
-        "reason": "SMA CROSS RENDER-USDT LONG: entry rejected before order: {'allowed': False, 'reason': 'NEAR_RESISTANCE', 'reference_price': 1.98, 'level': 1.983, 'distance_pct': 0.15151515151515726, 'min_distance_pct': 0.3}",
+        "reason": "NEAR_RESISTANCE",
         "side": "LONG",
-        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
+        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "PRE_ORDER_REJECTED_TRY_NEXT",
+    "last_scan_status": "SR_ENTRY_BLOCKED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 263,
@@ -284,7 +319,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-16T14:31:28.725000+00:00",
+    "latest_live_run_utc": "2026-10-16T14:36:39.680000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
