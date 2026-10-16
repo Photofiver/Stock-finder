@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-16T09:02:27.042861+00:00",
+  "generated_utc": "2026-10-16T09:17:25.247041+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -11,23 +11,10 @@
   ],
   "last_known_state": {
     "bankroll_start_usdt": "13.825381808195",
-    "current_bankroll_estimated_usdt": "13.250843951994999",
-    "fees_usdt": -6.94639918002,
-    "gross_realized_pnl_usdt": -7.510776442414251,
+    "current_bankroll_estimated_usdt": "13.242257351994998",
+    "fees_usdt": -6.96158578002,
+    "gross_realized_pnl_usdt": -7.504176442414251,
     "last_12_trades": [
-      {
-        "closed_utc": "2026-10-16T00:21:39.164000+00:00",
-        "exit_reason": "TIME EXIT: 10 minutes since position opened",
-        "gross_pnl_usdt": -0.0928,
-        "inst": "FLOCK-USDT",
-        "net_pnl_usdt": -0.1090168,
-        "opened_utc": "2026-10-16T00:11:38.534000+00:00",
-        "order_book_confirmed": null,
-        "order_book_directional_pct": null,
-        "rank": 78,
-        "result": "LOSS",
-        "side": "LONG"
-      },
       {
         "closed_utc": "2026-10-16T00:46:52.224000+00:00",
         "exit_reason": "TIME EXIT: 10 minutes since position opened",
@@ -170,108 +157,51 @@
         "rank": 60,
         "result": "LOSS",
         "side": "LONG"
+      },
+      {
+        "closed_utc": "2026-10-16T09:16:41.621000+00:00",
+        "exit_reason": "TIME EXIT: 10 minutes since position opened",
+        "gross_pnl_usdt": 0.006599999999999988,
+        "inst": "AKT-USDT",
+        "net_pnl_usdt": -0.008586600000000012,
+        "opened_utc": "2026-10-16T09:06:41.255000+00:00",
+        "order_book_confirmed": true,
+        "order_book_directional_pct": 63.88315731503024,
+        "rank": 54,
+        "result": "LOSS",
+        "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-16T09:00:00+00:00",
-    "last_run_utc": "2026-10-16T09:01:42.063000+00:00",
+    "last_live_scan_utc": "2026-10-16T09:05:00+00:00",
+    "last_run_utc": "2026-10-16T09:06:43.946000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "KMNO-USDT",
-        "rank": 4,
-        "reason": "RANK_NOT_ALLOWED: current place 4; requires 51..100",
-        "side": "SHORT",
+        "inst": "ARB-USDT",
+        "rank": 10,
+        "reason": "RANK_NOT_ALLOWED: current place 10; requires 51..100",
+        "side": "LONG",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
         "inst": "SUPER-USDT",
-        "rank": 28,
-        "reason": "RANK_NOT_ALLOWED: current place 28; requires 51..100",
-        "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "ID-USDT",
-        "rank": null,
-        "reason": "NEAR_RESISTANCE",
+        "rank": 34,
+        "reason": "RANK_NOT_ALLOWED: current place 34; requires 51..100",
         "side": "LONG",
-        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "UNI-USDT",
-        "rank": null,
-        "reason": "NEAR_RESISTANCE",
-        "side": "LONG",
-        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "IOTA-USDT",
-        "rank": null,
-        "reason": "ORDER_BOOK_DIRECTION_BLOCKED: IOTA-USDT LONG: aligned depth 47.32% < 55.00% (20 levels)",
-        "side": "LONG",
-        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
-      },
-      {
-        "inst": "FLUX-USDT",
-        "rank": null,
-        "reason": "NEAR_RESISTANCE",
-        "side": "LONG",
-        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "AZTEC-USDT",
-        "rank": 68,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=56.10 > D=55.09; requires K<=D",
-        "side": "LONG",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "AVAX-USDT",
-        "rank": null,
-        "reason": "NEAR_RESISTANCE",
-        "side": "LONG",
-        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "NEO-USDT",
-        "rank": null,
-        "reason": "RSI14_LONG_BELOW_50: 48.10 < 50",
-        "side": "LONG",
-        "status": "RSI_ENTRY_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "LIGHT-USDT",
-        "rank": null,
-        "reason": "RSI14_SHORT_ABOVE_50: 62.19 > 50",
-        "side": "SHORT",
-        "status": "RSI_ENTRY_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "BSV-USDT",
-        "rank": null,
-        "reason": "SMA CROSS BSV-USDT LONG: entry rejected before order: {'allowed': False, 'reason': 'NEAR_RESISTANCE', 'reference_price': 18.86, 'level': 18.91, 'distance_pct': 0.26511134676564535, 'min_distance_pct': 0.3}",
-        "side": "LONG",
-        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
-      },
-      {
-        "inst": "TRUTH-USDT",
-        "rank": 0,
-        "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
-        "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "RANK_NOT_ALLOWED_TRY_NEXT",
+    "last_scan_status": "OPENED",
     "lifetime_counters": {
       "flat": 0,
-      "losses": 260,
-      "total": 450,
+      "losses": 261,
+      "total": 451,
       "unverified": 4,
       "wins": 186
     },
-    "net_realized_pnl_usdt": -14.457175622434255,
+    "net_realized_pnl_usdt": -14.465762222434256,
     "open_positions": [],
     "risk_stop_triggered": false,
-    "trade_history_records": 444
+    "trade_history_records": 445
   },
   "live_strategy": {
     "additional_entry_filters": [
@@ -347,7 +277,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-16T09:01:42.063000+00:00",
+    "latest_live_run_utc": "2026-10-16T09:06:43.946000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
