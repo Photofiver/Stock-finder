@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-16T18:57:24.776201+00:00",
+  "generated_utc": "2026-10-16T19:11:40.447600+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -11,23 +11,10 @@
   ],
   "last_known_state": {
     "bankroll_start_usdt": "13.825381808195",
-    "current_bankroll_estimated_usdt": "13.153866193194996",
-    "fees_usdt": -7.02251493882,
-    "gross_realized_pnl_usdt": -7.531638442414251,
+    "current_bankroll_estimated_usdt": "13.132907073194996",
+    "fees_usdt": -7.03827405882,
+    "gross_realized_pnl_usdt": -7.536838442414251,
     "last_12_trades": [
-      {
-        "closed_utc": "2026-10-16T02:56:43.272000+00:00",
-        "exit_reason": "TIME EXIT: 10 minutes since position opened",
-        "gross_pnl_usdt": -0.0572,
-        "inst": "ACU-USDT",
-        "net_pnl_usdt": -0.07257224,
-        "opened_utc": "2026-10-16T02:46:42.574000+00:00",
-        "order_book_confirmed": null,
-        "order_book_directional_pct": null,
-        "rank": 51,
-        "result": "LOSS",
-        "side": "LONG"
-      },
       {
         "closed_utc": "2026-10-16T03:26:41.591000+00:00",
         "exit_reason": "TIME EXIT: 10 minutes since position opened",
@@ -170,108 +157,121 @@
         "rank": 88,
         "result": "WIN",
         "side": "SHORT"
+      },
+      {
+        "closed_utc": "2026-10-16T19:11:00.834000+00:00",
+        "exit_reason": "TIME EXIT: 10 minutes since position opened",
+        "gross_pnl_usdt": -0.0052,
+        "inst": "SHIB-USDT",
+        "net_pnl_usdt": -0.02095912,
+        "opened_utc": "2026-10-16T19:01:00.105000+00:00",
+        "order_book_confirmed": true,
+        "order_book_directional_pct": 63.270714652635135,
+        "rank": 99,
+        "result": "LOSS",
+        "side": "SHORT"
       }
     ],
-    "last_live_scan_utc": "2026-10-16T18:55:00+00:00",
-    "last_run_utc": "2026-10-16T18:56:41.676000+00:00",
+    "last_live_scan_utc": "2026-10-16T19:00:00+00:00",
+    "last_run_utc": "2026-10-16T19:01:02.971000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "PHAROS-USDT",
-        "rank": 10,
-        "reason": "RANK_NOT_ALLOWED: current place 10; requires 51..100",
+        "inst": "BEAM-USDT",
+        "rank": 24,
+        "reason": "RANK_NOT_ALLOWED: current place 24; requires 51..100",
         "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "SKR-USDT",
-        "rank": 13,
-        "reason": "RANK_NOT_ALLOWED: current place 13; requires 51..100",
-        "side": "LONG",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "BLUAI-USDT",
-        "rank": 19,
-        "reason": "RANK_NOT_ALLOWED: current place 19; requires 51..100",
+        "inst": "POWER-USDT",
+        "rank": 32,
+        "reason": "RANK_NOT_ALLOWED: current place 32; requires 51..100",
         "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "APE-USDT",
-        "rank": 21,
-        "reason": "RANK_NOT_ALLOWED: current place 21; requires 51..100",
-        "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "COLLECT-USDT",
-        "rank": 31,
-        "reason": "RANK_NOT_ALLOWED: current place 31; requires 51..100",
-        "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "AZTEC-USDT",
-        "rank": 50,
-        "reason": "RANK_NOT_ALLOWED: current place 50; requires 51..100",
-        "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "XAU-USDT",
+        "inst": "POPCAT-USDT",
         "rank": null,
-        "reason": "NEAR_SUPPORT",
+        "reason": "ORDER_BOOK_DIRECTION_BLOCKED: POPCAT-USDT SHORT: aligned depth 53.69% < 62.00% (20 levels)",
         "side": "SHORT",
-        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
+        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
       },
       {
-        "inst": "SUPER-USDT",
-        "rank": 71,
-        "reason": "STOCH_KD_SHORT_BLOCKED: K=1.19 < D=3.71; requires K>=D",
+        "inst": "LIT-USDT",
+        "rank": 58,
+        "reason": "STOCH_KD_SHORT_BLOCKED: K=12.34 < D=14.65; requires K>=D",
         "side": "SHORT",
         "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
       },
       {
         "inst": "ETHBTC-USDT",
         "rank": null,
-        "reason": "RSI14_LONG_BELOW_50: 30.21 < 50",
-        "side": "LONG",
-        "status": "RSI_ENTRY_BLOCKED_TRY_NEXT"
+        "reason": "ORDER_BOOK_DIRECTION_BLOCKED: ETHBTC-USDT SHORT: aligned depth 48.71% < 62.00% (20 levels)",
+        "side": "SHORT",
+        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
       },
       {
-        "inst": "TOSHI-USDT",
-        "rank": 89,
-        "reason": "STOCH_KD_SHORT_BLOCKED: K=0.00 < D=2.56; requires K>=D",
+        "inst": "FLOCK-USDT",
+        "rank": null,
+        "reason": "SMA CROSS FLOCK-USDT SHORT: entry rejected before order: {'allowed': False, 'reason': 'NEAR_SUPPORT', 'reference_price': 0.04612, 'level': 0.04611, 'distance_pct': 0.021682567215965006, 'min_distance_pct': 0.3}",
+        "side": "SHORT",
+        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
+      },
+      {
+        "inst": "AVAX-USDT",
+        "rank": null,
+        "reason": "ORDER_BOOK_DIRECTION_BLOCKED: AVAX-USDT SHORT: aligned depth 53.07% < 62.00% (20 levels)",
+        "side": "SHORT",
+        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
+      },
+      {
+        "inst": "XDC-USDT",
+        "rank": 83,
+        "reason": "STOCH_KD_SHORT_BLOCKED: K=4.17 < D=6.15; requires K>=D",
         "side": "SHORT",
         "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
       },
       {
-        "inst": "EGLD-USDT",
+        "inst": "KAS-USDT",
         "rank": null,
-        "reason": "ORDER_BOOK_DIRECTION_BLOCKED: EGLD-USDT SHORT: aligned depth 44.74% < 62.00% (20 levels)",
+        "reason": "ORDER_BOOK_DIRECTION_BLOCKED: KAS-USDT SHORT: aligned depth 35.54% < 62.00% (20 levels)",
         "side": "SHORT",
         "status": "PRE_ORDER_REJECTED_TRY_NEXT"
       },
       {
-        "inst": "DRIFT-USDT",
+        "inst": "AR-USDT",
         "rank": null,
-        "reason": "DRIFT-USDT SHORT: adverse price move 0.252% > 0.25% from signal close",
+        "reason": "SMA CROSS AR-USDT SHORT: entry rejected before order: {'allowed': False, 'reason': 'NEAR_SUPPORT', 'reference_price': 3.878, 'level': 3.87, 'distance_pct': 0.20629190304280576, 'min_distance_pct': 0.3}",
+        "side": "SHORT",
+        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
+      },
+      {
+        "inst": "FLOW-USDT",
+        "rank": null,
+        "reason": "ORDER_BOOK_DIRECTION_BLOCKED: FLOW-USDT SHORT: aligned depth 59.87% < 62.00% (20 levels)",
+        "side": "SHORT",
+        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
+      },
+      {
+        "inst": "TRADOOR-USDT",
+        "rank": null,
+        "reason": "ORDER_BOOK_DIRECTION_BLOCKED: TRADOOR-USDT SHORT: aligned depth 60.42% < 62.00% (20 levels)",
         "side": "SHORT",
         "status": "PRE_ORDER_REJECTED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "PRE_ORDER_REJECTED_TRY_NEXT",
+    "last_scan_status": "OPENED",
     "lifetime_counters": {
       "flat": 0,
-      "losses": 264,
-      "total": 455,
+      "losses": 265,
+      "total": 456,
       "unverified": 4,
       "wins": 187
     },
-    "net_realized_pnl_usdt": -14.554153381234258,
+    "net_realized_pnl_usdt": -14.575112501234258,
     "open_positions": [],
     "risk_stop_triggered": false,
-    "trade_history_records": 449
+    "trade_history_records": 450
   },
   "live_strategy": {
     "additional_entry_filters": [
@@ -347,7 +347,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-16T18:56:41.676000+00:00",
+    "latest_live_run_utc": "2026-10-16T19:01:02.971000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
