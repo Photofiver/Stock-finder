@@ -1,13 +1,18 @@
-"""Regression tests: LIVE SMA entries must not be gated on ADX."""
+"""Regression tests: LIVE SMA no ADX; current permitted ranks are 51..100.
+
+Fixtures include a confirmed-candle timestamp and all current strength
+indicators. The LIVE strategy is NOT changed to make these tests pass.
+"""
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import blofin_ma10_ma20_live as ma
 
 
 class FakeBot:
-    SIGNAL_MINUTES = 10
-    SIGNAL_LABEL = "10m"
+    SIGNAL_MINUTES = 5
+    SIGNAL_LABEL = "5m"
+    SIGNAL_MS = 300000
 
     def __init__(self, candles):
         self.candles = candles
@@ -19,6 +24,11 @@ class FakeBot:
     @staticmethod
     def bar_close_ms(bar):
         return bar["close_ms"]
+
+    @staticmethod
+    def stochastic_kd_series(bars, k_period, d_period):
+        assert (k_period, d_period) == (14, 3)
+        return ([40.0], [60.0]) if bars[-1]["c"] >= 10 else ([60.0], [40.0])
 
     @staticmethod
     def get_tracked_positions(state):
@@ -48,19 +58,32 @@ class FakeBot:
         self.saved = state.copy()
 
 
-class FakeBot5(FakeBot):
-    SIGNAL_MINUTES = 5
-    SIGNAL_LABEL = "5m"
-
-
-def candles_with_cross(last_close, interval_ms=600000):
-    values = [10.0] * 20 + [last_close]
+def candles_with_cross(last_close, interval_ms=300000):
+    prices = [10.0] * 20 + [last_close]
     return [
         {"ts": i * interval_ms, "close_ms": (i + 1) * interval_ms,
-         "h": value * 1.0005, "l": value * 0.9995,
-         "c": value, "rsi": 55.0}
-        for i, value in enumerate(values)
+         "h": price * 1.0005, "l": price * 0.9995,
+         "c": price, "rsi": 55.0 if last_close >= 10 else 45.0}
+        for i, price in enumerate(prices)
     ]
+
+
+def confirmed(bot):
+    return lambda insts, expected: {inst: bot.candles[inst] for inst in insts}
+
+
+def complete_signal(side="LONG", rsi=55.0):
+    return {
+        "inst": "A-USDT", "side": side,
+        "signal_close_ms": 300000,
+        "close": 10.01 if side == "LONG" else 9.99,
+        "ma10": 10.0,
+        "sma_separation_pct": 0.05,
+        "stoch_k": 40 if side == "LONG" else 60,
+        "stoch_d": 60 if side == "LONG" else 40,
+        "rsi14": rsi,
+        "sr_levels": {"resistance": [], "support": []},
+    }
 
 
 class RemoveAdxLiveTests(unittest.TestCase):
@@ -74,110 +97,88 @@ class RemoveAdxLiveTests(unittest.TestCase):
                 self.assertNotIn("adx_entry_allowed", signal)
                 self.assertNotIn("adx14", signal)
                 self.assertIn("ma10_live_cross_level", signal)
+                self.assertIsNone(ma.entry_rsi_rejection(signal))
+                self.assertIsNone(ma.entry_strength_rejection(signal))
 
-    def test_scan_considers_signal_without_adx(self):
-        # A small real crossover stays within the independent MA10 1% entry cap.
-        bars = candles_with_cross(10.01)
-        bot = FakeBot({"A-USDT": bars})
+    def test_five_minute_sma_rank_51_opens_without_adx(self):
+        flat = candles_with_cross(10.0)
+        crossed = candles_with_cross(10.01)
+        names = [f"RANK{i}-USDT" for i in range(1, 53)]
+        bot = FakeBot({name: crossed if i == 51 else flat
+                       for i, name in enumerate(names, 1)})
         state = {"positions": {}}
-        selected = []
+        opened = []
 
-        def simulated_open(bot, state, signal, rank, instruments):
-            selected.append(signal)
-            return True
-
-        with patch.object(ma, "open_position", side_effect=simulated_open):
+        with patch.object(ma, "open_position",
+                          side_effect=lambda b, s, sig, rank, m: opened.append((rank, sig)) or True):
             ma.run(
-                bot, state, ["A-USDT"], {}, {"A-USDT": {}},
-                bars[-1]["close_ms"], lambda insts, close: None,
+                bot, state, names, {}, {name: {} for name in names},
+                crossed[-1]["close_ms"], confirmed(bot),
             )
 
         self.assertEqual(state["ma_cross_last_scan"]["status"], "OPENED")
-        self.assertEqual(len(selected), 1)
-        self.assertEqual(selected[0]["side"], "LONG")
-        self.assertNotIn("adx_filter", selected[0])
+        self.assertEqual([row[0] for row in opened], [51])
+        self.assertEqual(opened[0][1]["side"], "LONG")
+        self.assertNotIn("adx_filter", opened[0][1])
 
-    def test_five_minute_sma_cross_opens_without_adx(self):
-        bars = candles_with_cross(10.01, interval_ms=300000)
-        bot = FakeBot5({"A-USDT": bars})
-        state = {"positions": {}}
-        selected = []
-
-        with patch.object(ma, "open_position", side_effect=lambda *args: selected.append(args[2]) or True):
-            ma.run(
-                bot, state, ["A-USDT"], {}, {"A-USDT": {}},
-                bars[-1]["close_ms"], lambda insts, close: None,
-            )
-
-        self.assertEqual(state["ma_cross_last_scan"]["status"], "OPENED")
-        self.assertEqual(state["ma_cross_last_scan"]["strategy"], "SMA10_SMA20_5m")
-        self.assertEqual(selected[0]["side"], "LONG")
-        self.assertEqual(bars[-1]["close_ms"], 21 * 300000)
-
-    def test_only_rank_one_or_two_can_open_live_orders(self):
-        from unittest.mock import MagicMock
-        for rank in (0, 3, 4, 5, 6, 7, 8, None, "1"):
+    def test_only_current_rank_51_through_100_permitted(self):
+        self.assertEqual(ma.ENTRY_RANK_MIN, 51)
+        self.assertEqual(ma.EXTENDED_ENTRY_RANK_MAX, 100)
+        self.assertIsNone(ma.rank_entry_rejection(51))
+        self.assertIsNone(ma.rank_entry_rejection(100))
+        for rank in (0, 1, 2, 3, 50, 101, None, "51", True):
             with self.subTest(rank=rank):
+                self.assertIsNotNone(ma.rank_entry_rejection(rank))
                 bot = MagicMock()
-                result = ma.open_position(
-                    bot, {}, {"inst": "BLOCK-USDT", "side": "LONG"}, rank, {},
+                self.assertFalse(
+                    ma.open_position(bot, {}, complete_signal(), rank, {})
                 )
-                self.assertFalse(result)
                 bot.private_request.assert_not_called()
                 bot.get_open_positions.assert_not_called()
                 bot.risk_stop_active.assert_not_called()
-        self.assertIsNone(ma.rank_entry_rejection(1))
-        self.assertIsNone(ma.rank_entry_rejection(2))
 
-    def test_third_through_seventh_rank_signals_never_open(self):
-        # All coins are scanned for diagnostics, but entry must not proceed
-        # for lower ranked signals even when the SMA cross is valid.
+    def test_current_rank_50_is_rejected_before_rank_51(self):
         flat = candles_with_cross(10.0)
         crossed = candles_with_cross(10.01)
-        names = [f"RANK{i}-USDT" for i in range(1, 8)]
-        bot = FakeBot({name: flat if i < 3 else crossed
+        names = [f"RANK{i}-USDT" for i in range(1, 53)]
+        bot = FakeBot({name: crossed if i in (1, 50, 51) else flat
                        for i, name in enumerate(names, 1)})
         state = {"positions": {}}
         opened = []
         with patch.object(ma, "open_position",
-                          side_effect=lambda *args: opened.append(args[3]) or True):
+                          side_effect=lambda b, s, sig, rank, m: opened.append(rank) or True):
             ma.run(bot, state, names, {}, {n: {} for n in names},
-                   crossed[-1]["close_ms"], lambda insts, close: None)
-        self.assertEqual(opened, [])
-        events = state["ma_cross_last_scan"]["events"]
-        self.assertEqual(
-            [e["rank"] for e in events if e.get("status") == "RANK_NOT_ALLOWED_TRY_NEXT"],
-            [3, 4, 5, 6, 7],
-        )
-        self.assertEqual(state["ma_cross_last_scan"]["status"], "RANK_NOT_ALLOWED_TRY_NEXT")
-        self.assertEqual(len(state["ma_cross_last_scan"]["signals"]), 5)
+                   crossed[-1]["close_ms"], confirmed(bot))
+        self.assertEqual(opened, [51])
+        rejected = [e["rank"] for e in state["ma_cross_last_scan"]["events"]
+                    if e.get("status") == "RANK_NOT_ALLOWED_TRY_NEXT"]
+        self.assertEqual(rejected, [1, 50])
 
-    def test_second_rank_can_open_even_if_third_has_signal(self):
+    def test_rank_100_is_permitted_if_other_99_have_no_cross(self):
         flat = candles_with_cross(10.0)
         crossed = candles_with_cross(10.01)
-        bot = FakeBot({"FIRST-USDT": flat, "SECOND-USDT": crossed,
-                       "THIRD-USDT": crossed})
-        state = {"positions": {}}
+        names = [f"RANK{i}-USDT" for i in range(1, 101)]
+        bot = FakeBot({name: crossed if i == 100 else flat
+                       for i, name in enumerate(names, 1)})
         opened = []
+        state = {"positions": {}}
         with patch.object(ma, "open_position",
-                          side_effect=lambda *args: opened.append(args[3]) or True):
-            ma.run(
-                bot, state, ["FIRST-USDT", "SECOND-USDT", "THIRD-USDT"],
-                {}, {"FIRST-USDT": {}, "SECOND-USDT": {}, "THIRD-USDT": {}},
-                crossed[-1]["close_ms"], lambda insts, close: None,
-            )
-        self.assertEqual(opened, [2])
-        self.assertEqual(state["ma_cross_last_scan"]["status"], "OPENED")
-        self.assertEqual(state["ma_cross_last_scan"]["selected"]["inst"], "SECOND-USDT")
+                          side_effect=lambda b, s, sig, rank, m: opened.append(rank) or True):
+            ma.run(bot, state, names, {}, {n: {} for n in names},
+                   crossed[-1]["close_ms"], confirmed(bot))
+        self.assertEqual(opened, [100])
 
     def test_entry_risk_controls_still_run(self):
-        """The first remaining entry gate is the existing drawdown control."""
-        class StopBot:
-            @staticmethod
-            def risk_stop_active(state):
-                return True
-        signal = {"inst": "A-USDT", "side": "LONG"}
-        self.assertFalse(ma.open_position(StopBot(), {}, signal, 1, {}))
+        """A valid rank/RSI/Stoch/SR signal still hits the drawdown gate."""
+        bot = MagicMock()
+        bot.risk_stop_active.return_value = True
+        bot.get_tracked_positions.return_value = {}
+        bot.get_open_positions.return_value = []
+        self.assertFalse(ma.open_position(
+            bot, {}, complete_signal(), 51, {},
+        ))
+        bot.risk_stop_active.assert_called_once()
+        bot.private_request.assert_not_called()
 
 
 if __name__ == "__main__":
