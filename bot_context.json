@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-16T18:32:22.339802+00:00",
+  "generated_utc": "2026-10-16T18:37:42.530046+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,53 +172,74 @@
         "side": "SHORT"
       }
     ],
-    "last_live_scan_utc": "2026-10-16T18:30:00+00:00",
-    "last_run_utc": "2026-10-16T18:31:37.520000+00:00",
+    "last_live_scan_utc": "2026-10-16T18:35:00+00:00",
+    "last_run_utc": "2026-10-16T18:36:59.648000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "FIGHT-USDT",
-        "rank": 47,
-        "reason": "RANK_NOT_ALLOWED: current place 47; requires 51..100",
+        "inst": "BASED-USDT",
+        "rank": 3,
+        "reason": "RANK_NOT_ALLOWED: current place 3; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "FIL-USDT",
+        "rank": 23,
+        "reason": "RANK_NOT_ALLOWED: current place 23; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "XPIN-USDT",
+        "rank": 32,
+        "reason": "RANK_NOT_ALLOWED: current place 32; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "ALGO-USDT",
+        "rank": 40,
+        "reason": "RANK_NOT_ALLOWED: current place 40; requires 51..100",
         "side": "LONG",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
         "inst": "LAB-USDT",
-        "rank": null,
-        "reason": "RSI14_LONG_BELOW_50: 49.67 < 50",
-        "side": "LONG",
-        "status": "RSI_ENTRY_BLOCKED_TRY_NEXT"
+        "rank": 47,
+        "reason": "RANK_NOT_ALLOWED: current place 47; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "OURA-USDT",
-        "rank": 75,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=73.68 > D=67.70; requires K<=D",
+        "inst": "TRX-USDT",
+        "rank": 56,
+        "reason": "STOCH_KD_LONG_BLOCKED: K=100.00 > D=86.89; requires K<=D",
         "side": "LONG",
         "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
       },
       {
         "inst": "XCU-USDT",
         "rank": null,
-        "reason": "RSI14_LONG_BELOW_50: 37.66 < 50",
-        "side": "LONG",
-        "status": "RSI_ENTRY_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "TRADOOR-USDT",
-        "rank": 84,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=94.32 > D=91.73; requires K<=D",
-        "side": "LONG",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+        "reason": "NEAR_SUPPORT",
+        "side": "SHORT",
+        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
       },
       {
         "inst": "AAVE-USDT",
-        "rank": 90,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=46.26 > D=42.15; requires K<=D",
+        "rank": null,
+        "reason": "ORDER_BOOK_DIRECTION_BLOCKED: AAVE-USDT SHORT: aligned depth 58.04% < 62.00% (20 levels)",
+        "side": "SHORT",
+        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
+      },
+      {
+        "inst": "ZEREBRO-USDT",
+        "rank": 0,
+        "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
         "side": "LONG",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT",
+    "last_scan_status": "RANK_NOT_ALLOWED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 264,
@@ -305,7 +326,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-16T18:31:37.520000+00:00",
+    "latest_live_run_utc": "2026-10-16T18:36:59.648000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
