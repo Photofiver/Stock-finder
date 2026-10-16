@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-16T21:37:31.711877+00:00",
+  "generated_utc": "2026-10-16T21:42:44.530057+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,46 +172,25 @@
         "side": "SHORT"
       }
     ],
-    "last_live_scan_utc": "2026-10-16T21:35:00+00:00",
-    "last_run_utc": "2026-10-16T21:36:37.135000+00:00",
+    "last_live_scan_utc": "2026-10-16T21:40:00+00:00",
+    "last_run_utc": "2026-10-16T21:42:00.617000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "STBL-USDT",
-        "rank": 8,
-        "reason": "RANK_NOT_ALLOWED: current place 8; requires 51..100",
+        "inst": "XCU-USDT",
+        "rank": 92,
+        "reason": "STOCH_KD_LONG_BLOCKED: K=98.59 > D=92.77; requires K<=D",
+        "side": "LONG",
+        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "ZEREBRO-USDT",
+        "rank": 0,
+        "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
         "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "MNT-USDT",
-        "rank": 51,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=100.00 > D=93.65; requires K<=D",
-        "side": "LONG",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "BTCDOM-USDT",
-        "rank": 64,
-        "reason": "STOCH_KD_SHORT_BLOCKED: K=12.50 < D=16.22; requires K>=D",
-        "side": "SHORT",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "MEGA-USDT",
-        "rank": 77,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=100.00 > D=98.25; requires K<=D",
-        "side": "LONG",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "ASTER-USDT",
-        "rank": 81,
-        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-3.9380389e-05, current=2.5179237e-05; requires current<0 and current<previous",
-        "side": "SHORT",
-        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "MACD_ENTRY_BLOCKED_TRY_NEXT",
+    "last_scan_status": "RANK_NOT_ALLOWED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 265,
@@ -299,7 +278,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-16T21:36:37.135000+00:00",
+    "latest_live_run_utc": "2026-10-16T21:42:00.617000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
