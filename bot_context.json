@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-16T13:27:19.673145+00:00",
+  "generated_utc": "2026-10-16T13:32:26.155661+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,8 +172,8 @@
         "side": "SHORT"
       }
     ],
-    "last_live_scan_utc": "2026-10-16T13:25:00+00:00",
-    "last_run_utc": "2026-10-16T13:26:38.719000+00:00",
+    "last_live_scan_utc": "2026-10-16T13:30:00+00:00",
+    "last_run_utc": "2026-10-16T13:31:41.747000+00:00",
     "last_scan_rejections": [
       {
         "inst": "DNA-USDT",
@@ -183,14 +183,56 @@
         "status": null
       },
       {
-        "inst": "FIL-USDT",
-        "rank": 16,
-        "reason": "RANK_NOT_ALLOWED: current place 16; requires 51..100",
+        "inst": "AZTEC-USDT",
+        "rank": 22,
+        "reason": "RANK_NOT_ALLOWED: current place 22; requires 51..100",
         "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "NAORIS-USDT",
+        "rank": 25,
+        "reason": "RANK_NOT_ALLOWED: current place 25; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "DOT-USDT",
+        "rank": 42,
+        "reason": "RANK_NOT_ALLOWED: current place 42; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "FLOCK-USDT",
+        "rank": 49,
+        "reason": "RANK_NOT_ALLOWED: current place 49; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "DUSK-USDT",
+        "rank": 50,
+        "reason": "RANK_NOT_ALLOWED: current place 50; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "PHAROS-USDT",
+        "rank": null,
+        "reason": "PHAROS-USDT SHORT: adverse price move 1.025% > 0.25% from signal close",
+        "side": "SHORT",
+        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
+      },
+      {
+        "inst": "LPT-USDT",
+        "rank": 86,
+        "reason": "STOCH_KD_SHORT_BLOCKED: K=47.37 < D=66.67; requires K>=D",
+        "side": "SHORT",
+        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "RANK_NOT_ALLOWED_TRY_NEXT",
+    "last_scan_status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 263,
@@ -277,7 +319,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-16T13:26:38.719000+00:00",
+    "latest_live_run_utc": "2026-10-16T13:31:41.747000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
