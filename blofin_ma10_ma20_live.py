@@ -674,6 +674,27 @@ def open_position(bot, state, signal, rank, instruments):
                 "BloFin LIVE SAFETY",
             )
         return False
+    # Check executable exit price IMMEDIATELY after broker protection is live.
+    # Chart rendering/notification can be slow; do not wait for them to
+    # discover a SHORT ASK or LONG BID that has already breached the SL.
+    try:
+        first_exit_quote = executable_exit_quote(bot, inst)
+        if executable_stop_reached(bot, position, first_exit_quote):
+            if any(row.get("instId") == inst for row in bot.get_open_positions()):
+                exit_price = first_exit_quote["bid"] if side == "LONG" else first_exit_quote["ask"]
+                bot._run_for_tracked_position(
+                    state, inst, bot.close_tracked_position,
+                    f"EXECUTABLE SL at entry: {side} exit quote {exit_price} "
+                    f"reached SL {position['sl']}",
+                )
+                bot.save_state(state)
+                # Order was attempted: never open a different candidate on this scan.
+                return True
+            bot.sync_all_tracked_positions(state)
+            if not bot.get_tracked_positions(state).get(inst):
+                return True
+    except Exception as exc:
+        print(f"INITIAL EXECUTABLE SL check unavailable {inst}: {exc}; native broker SL remains live")
     # Visual diagnostics run only after the exchange TP/SL is installed.
     # They must never block a live trade or alter the position's protection.
     try:
