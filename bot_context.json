@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-16T23:22:33.688281+00:00",
+  "generated_utc": "2026-10-16T23:27:01.498070+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,25 +172,39 @@
         "side": "SHORT"
       }
     ],
-    "last_live_scan_utc": "2026-10-16T23:20:00+00:00",
-    "last_run_utc": "2026-10-16T23:21:47.598000+00:00",
+    "last_live_scan_utc": "2026-10-16T23:25:00+00:00",
+    "last_run_utc": "2026-10-16T23:26:20.325000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "Q-USDT",
-        "rank": 4,
-        "reason": "RANK_NOT_ALLOWED: current place 4; requires 51..100",
+        "inst": "MINA-USDT",
+        "rank": 24,
+        "reason": "RANK_NOT_ALLOWED: current place 24; requires 51..100",
         "side": "LONG",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "LIGHT-USDT",
-        "rank": 9,
-        "reason": "RANK_NOT_ALLOWED: current place 9; requires 51..100",
+        "inst": "XPIN-USDT",
+        "rank": 39,
+        "reason": "RANK_NOT_ALLOWED: current place 39; requires 51..100",
         "side": "LONG",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "PENDLE-USDT",
+        "rank": 56,
+        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-9.8080142e-05, current=-3.9581054e-05; requires current<0 and current<previous",
+        "side": "SHORT",
+        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "ZETA-USDT",
+        "rank": 97,
+        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-3.3799277e-05, current=-3.2239272e-05; requires current<0 and current<previous",
+        "side": "SHORT",
+        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "RANK_NOT_ALLOWED_TRY_NEXT",
+    "last_scan_status": "MACD_ENTRY_BLOCKED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 265,
@@ -278,7 +292,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-16T23:21:47.598000+00:00",
+    "latest_live_run_utc": "2026-10-16T23:26:20.325000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
