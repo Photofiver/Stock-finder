@@ -10,6 +10,8 @@ on:
       - blofin_ma10_ma20_live.py
       - blofin_order_book.py
       - test_blofin_order_book.py
+      - bot_context_builder.py
+      - test_bot_context_builder.py
       - blofin_support_resistance.py
       - test_blofin_sr_filter.py
       - blofin_adaptive_adx.py
@@ -35,6 +37,6 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt
       - name: Compile Python modules
-        run: python -m py_compile blofin_live_hourly.py blofin_live_signal_watch.py blofin_live_scan_audit.py blofin_selection_rank.py blofin_ma10_ma20_live.py blofin_order_book.py test_blofin_order_book.py blofin_adaptive_adx.py test_blofin_adaptive_adx.py test_blofin_ma_no_adx.py test_blofin_ma_rsi75.py test_blofin_ma10_trailing.py test_blofin_preorder_quote.py blofin_support_resistance.py test_blofin_sr_filter.py
+        run: python -m py_compile blofin_live_hourly.py blofin_live_signal_watch.py blofin_live_scan_audit.py blofin_selection_rank.py blofin_ma10_ma20_live.py blofin_order_book.py test_blofin_order_book.py bot_context_builder.py test_bot_context_builder.py blofin_adaptive_adx.py test_blofin_adaptive_adx.py test_blofin_ma_no_adx.py test_blofin_ma_rsi75.py test_blofin_ma10_trailing.py test_blofin_preorder_quote.py blofin_support_resistance.py test_blofin_sr_filter.py
       - name: Run offline trade-selection tests
-        run: python -m unittest -q test_blofin_selection_rank test_blofin_adaptive_adx test_blofin_ma_no_adx test_blofin_ma_rsi75 test_blofin_ma10_trailing test_blofin_order_book test_blofin_preorder_quote test_blofin_sr_filter
+        run: python -m unittest -q test_blofin_selection_rank test_blofin_adaptive_adx test_blofin_ma_no_adx test_blofin_ma_rsi75 test_blofin_ma10_trailing test_blofin_order_book test_bot_context_builder test_blofin_preorder_quote test_blofin_sr_filter
