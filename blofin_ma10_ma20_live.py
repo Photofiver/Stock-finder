@@ -25,7 +25,7 @@ MA10_TRAIL_OFFSET_PCT = "0.01"
 RSI_AVERAGE_PERIOD = 14
 LONG_MAX_ABOVE_MA10_PCT = 1.0  # Block LONG >1% above MA10.
 ALLOWED_ENTRY_RANKS = frozenset((1, 2))  # Original TOP1/2 one-entry-per-visit policy.
-EXTENDED_ENTRY_RANK_MAX = max(2, min(100, int(os.getenv("LIVE_ENTRY_TOP_N", "2"))))
+EXTENDED_ENTRY_RANK_MAX = max(51, min(100, int(os.getenv("LIVE_ENTRY_TOP_N", "100"))))
 ENTRY_RANK_MIN = 51  # Only current ranks 51..100 may open new positions.
 RSI_ENTRY_MAX = 75.0  # Block LONG and SHORT entries only when closed 5m RSI(14) > 75.
 DYNAMIC_MA10_HOLD_POLICY = "SMA10_DYNAMIC_BROKER_STOP"
@@ -470,7 +470,7 @@ def refresh_top2_watchlist(state, top7, signal_close_ms):
 
 def rank_entry_rejection(rank, state=None, inst=None, signal_close_ms=None):
     """Only current ranks 51..100; historical TOP2 visits cannot bypass this gate."""
-    if ENTRY_RANK_MIN <= rank <= EXTENDED_ENTRY_RANK_MAX:
+    if isinstance(rank, int) and not isinstance(rank, bool) and ENTRY_RANK_MIN <= rank <= EXTENDED_ENTRY_RANK_MAX:
         return None
     return f"RANK_NOT_ALLOWED: current place {rank!r}; requires {ENTRY_RANK_MIN}..{EXTENDED_ENTRY_RANK_MAX}"
 
