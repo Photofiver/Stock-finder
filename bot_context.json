@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-16T17:12:09.287857+00:00",
+  "generated_utc": "2026-10-16T17:17:40.246181+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,67 +172,60 @@
         "side": "SHORT"
       }
     ],
-    "last_live_scan_utc": "2026-10-16T17:10:00+00:00",
-    "last_run_utc": "2026-10-16T17:11:30.048000+00:00",
+    "last_live_scan_utc": "2026-10-16T17:15:00+00:00",
+    "last_run_utc": "2026-10-16T17:17:00.425000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "1000RATS-USDT",
-        "rank": 12,
-        "reason": "RANK_NOT_ALLOWED: current place 12; requires 51..100",
+        "inst": "DUSK-USDT",
+        "rank": 20,
+        "reason": "RANK_NOT_ALLOWED: current place 20; requires 51..100",
+        "side": "LONG",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "STONK-USDT",
+        "rank": 30,
+        "reason": "RANK_NOT_ALLOWED: current place 30; requires 51..100",
         "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "ETHFI-USDT",
-        "rank": 18,
-        "reason": "RANK_NOT_ALLOWED: current place 18; requires 51..100",
-        "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "PHA-USDT",
+        "inst": "SAFE-USDT",
         "rank": 43,
         "reason": "RANK_NOT_ALLOWED: current place 43; requires 51..100",
         "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "MNT-USDT",
-        "rank": 50,
-        "reason": "RANK_NOT_ALLOWED: current place 50; requires 51..100",
-        "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "LAB-USDT",
+        "inst": "ENJ-USDT",
         "rank": null,
-        "reason": "NEAR_SUPPORT",
-        "side": "SHORT",
-        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "PORTAL-USDT",
-        "rank": null,
-        "reason": "ORDER_BOOK_DIRECTION_BLOCKED: PORTAL-USDT SHORT: aligned depth 39.47% < 55.00% (20 levels)",
+        "reason": "ENJ-USDT SHORT: adverse price move 0.611% > 0.25% from signal close",
         "side": "SHORT",
         "status": "PRE_ORDER_REJECTED_TRY_NEXT"
       },
       {
         "inst": "BLESS-USDT",
         "rank": null,
-        "reason": "RSI14_LONG_BELOW_50: 37.31 < 50",
-        "side": "LONG",
-        "status": "RSI_ENTRY_BLOCKED_TRY_NEXT"
+        "reason": "BLESS-USDT SHORT: adverse price move 0.530% > 0.25% from signal close",
+        "side": "SHORT",
+        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
       },
       {
-        "inst": "NIL-USDT",
-        "rank": 0,
-        "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
+        "inst": "WAVES-USDT",
+        "rank": null,
+        "reason": "WAVES-USDT SHORT: adverse price move 0.404% > 0.25% from signal close",
         "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
+      },
+      {
+        "inst": "FIGHT-USDT",
+        "rank": null,
+        "reason": "NEAR_SUPPORT",
+        "side": "SHORT",
+        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "RANK_NOT_ALLOWED_TRY_NEXT",
+    "last_scan_status": "SR_ENTRY_BLOCKED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 264,
@@ -319,7 +312,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-16T17:11:30.048000+00:00",
+    "latest_live_run_utc": "2026-10-16T17:17:00.425000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
