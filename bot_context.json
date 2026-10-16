@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-16T15:02:40.206269+00:00",
+  "generated_utc": "2026-10-16T15:07:14.800239+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,39 +172,46 @@
         "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-16T15:00:00+00:00",
-    "last_run_utc": "2026-10-16T15:01:49.171000+00:00",
+    "last_live_scan_utc": "2026-10-16T15:05:00+00:00",
+    "last_run_utc": "2026-10-16T15:06:30.037000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "ZEC-USDT",
-        "rank": 40,
-        "reason": "RANK_NOT_ALLOWED: current place 40; requires 51..100",
+        "inst": "APE-USDT",
+        "rank": 11,
+        "reason": "RANK_NOT_ALLOWED: current place 11; requires 51..100",
         "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "ALT-USDT",
-        "rank": 43,
-        "reason": "RANK_NOT_ALLOWED: current place 43; requires 51..100",
-        "side": "LONG",
+        "inst": "GMX-USDT",
+        "rank": 22,
+        "reason": "RANK_NOT_ALLOWED: current place 22; requires 51..100",
+        "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "MANTA-USDT",
+        "inst": "POPCAT-USDT",
         "rank": 50,
         "reason": "RANK_NOT_ALLOWED: current place 50; requires 51..100",
-        "side": "LONG",
+        "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "NEAR-USDT",
+        "rank": 55,
+        "reason": "STOCH_KD_SHORT_BLOCKED: K=20.80 < D=27.66; requires K>=D",
+        "side": "SHORT",
+        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
       },
       {
         "inst": "AAVE-USDT",
         "rank": null,
-        "reason": "RSI14_LONG_BELOW_50: 38.12 < 50",
-        "side": "LONG",
-        "status": "RSI_ENTRY_BLOCKED_TRY_NEXT"
+        "reason": "AAVE-USDT SHORT: adverse price move 0.702% > 0.25% from signal close",
+        "side": "SHORT",
+        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "RSI_ENTRY_BLOCKED_TRY_NEXT",
+    "last_scan_status": "PRE_ORDER_REJECTED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 264,
@@ -291,7 +298,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-16T15:01:49.171000+00:00",
+    "latest_live_run_utc": "2026-10-16T15:06:30.037000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
