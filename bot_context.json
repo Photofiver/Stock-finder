@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-16T17:47:32.133224+00:00",
+  "generated_utc": "2026-10-16T17:52:29.596455+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,10 +172,18 @@
         "side": "SHORT"
       }
     ],
-    "last_live_scan_utc": "2026-10-16T17:45:00+00:00",
-    "last_run_utc": "2026-10-16T17:46:48.037000+00:00",
-    "last_scan_rejections": [],
-    "last_scan_status": "NO_CROSS",
+    "last_live_scan_utc": "2026-10-16T17:50:00+00:00",
+    "last_run_utc": "2026-10-16T17:51:50.171000+00:00",
+    "last_scan_rejections": [
+      {
+        "inst": "BEAM-USDT",
+        "rank": 34,
+        "reason": "RANK_NOT_ALLOWED: current place 34; requires 51..100",
+        "side": "LONG",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      }
+    ],
+    "last_scan_status": "RANK_NOT_ALLOWED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 264,
@@ -262,7 +270,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-16T17:46:48.037000+00:00",
+    "latest_live_run_utc": "2026-10-16T17:51:50.171000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
