@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-16T10:21:54.909209+00:00",
+  "generated_utc": "2026-10-16T10:27:17.843176+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,39 +172,46 @@
         "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-16T10:20:00+00:00",
-    "last_run_utc": "2026-10-16T10:21:10.900000+00:00",
+    "last_live_scan_utc": "2026-10-16T10:25:00+00:00",
+    "last_run_utc": "2026-10-16T10:26:37.762000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "UB-USDT",
-        "rank": 12,
-        "reason": "RANK_NOT_ALLOWED: current place 12; requires 51..100",
+        "inst": "INJ-USDT",
+        "rank": 1,
+        "reason": "RANK_NOT_ALLOWED: current place 1; requires 51..100",
         "side": "LONG",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "AZTEC-USDT",
-        "rank": 45,
-        "reason": "RANK_NOT_ALLOWED: current place 45; requires 51..100",
+        "inst": "STBL-USDT",
+        "rank": 7,
+        "reason": "RANK_NOT_ALLOWED: current place 7; requires 51..100",
+        "side": "LONG",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "SUPER-USDT",
+        "rank": 11,
+        "reason": "RANK_NOT_ALLOWED: current place 11; requires 51..100",
+        "side": "LONG",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "WET-USDT",
+        "rank": null,
+        "reason": "NEAR_SUPPORT",
         "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
       },
       {
-        "inst": "SKR-USDT",
-        "rank": 59,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=72.60 > D=60.96; requires K<=D",
+        "inst": "BIGTIME-USDT",
+        "rank": null,
+        "reason": "NEAR_RESISTANCE",
         "side": "LONG",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "BCH-USDT",
-        "rank": 63,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=67.17 > D=59.60; requires K<=D",
-        "side": "LONG",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT",
+    "last_scan_status": "SR_ENTRY_BLOCKED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 261,
@@ -291,7 +298,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-16T10:21:10.900000+00:00",
+    "latest_live_run_utc": "2026-10-16T10:26:37.762000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
