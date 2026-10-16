@@ -1,289 +1,6 @@
 {
-  "schema_version": 1,
-  "generated_utc": "2026-10-16T07:33:34.989Z",
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "provenance": {
-    "repository": "Photofiver/Stock-finder",
-    "workflow": ".github/workflows/blofin_live_signal_watch.yml",
-    "main_strategy_file": "blofin_ma10_ma20_live.py",
-    "source_sha256": {},
-    "latest_live_run_utc": "2026-10-16T07:31:37.878Z",
-    "note": "Bootstrap context. Subsequent LIVE runs populate exact source hashes and refresh state."
-  },
-  "live_strategy": {
-    "type": "SMA10_SMA20_CROSS",
-    "candle_minutes": 5,
-    "rank_min": 51,
-    "rank_max": 100,
-    "rank_scope": "ONLY CURRENT RANKS 51-100",
-    "allowed_directions": [
-      "LONG",
-      "SHORT"
-    ],
-    "rsi_long_min": 50,
-    "rsi_long_max": 75,
-    "rsi_short_min": 0,
-    "rsi_short_max": 50,
-    "stochastic": {
-      "periods": [
-        14,
-        1,
-        3
-      ],
-      "long_rule": "K <= D",
-      "short_rule": "K >= D"
-    },
-    "additional_entry_filters": [
-      "MA10/MA20 CROSS at confirmed close",
-      "long distance from live SMA10 max 1%",
-      "support/resistance avoidance",
-      "fresh BID/ASK and pre-order price checks",
-      "TOP20 order book directional depth confirmation"
-    ],
-    "order_book": {
-      "indicator": "TOP20_ORDER_BOOK_DEPTH_IMBALANCE",
-      "levels_per_side": 20,
-      "min_directional_share_pct": 55,
-      "required_for_entry": true,
-      "missing_or_stale_data": "BLOCK_ENTRY",
-      "raw_snapshots": "blofin_order_books/YYYY-MM-DD.jsonl",
-      "note": "Resting depth does not establish future price direction."
-    },
-    "take_profit_pct": 1,
-    "stop_loss_initial_cap_pct": 0.25,
-    "stop_reference": "SMA10 ratchet, plus executable BID/ASK polling and broker TP/SL",
-    "max_hold_minutes": 10,
-    "executable_exit_poll_seconds": 1,
-    "max_bankroll_allocation_usdt": 20,
-    "leverage": "1x",
-    "drawdown_stop_pct": 10,
-    "strategy_family": "NEAREST_VOLUME",
-    "workflow_enabled": true
-  },
-  "last_known_state": {
-    "last_live_scan_utc": "2026-10-16T07:30:00.000Z",
-    "last_run_utc": "2026-10-16T07:31:37.878Z",
-    "last_scan_status": "RANK_NOT_ALLOWED_TRY_NEXT",
-    "risk_stop_triggered": false,
-    "open_positions": [],
-    "trade_history_records": 444,
-    "lifetime_counters": {
-      "total": 450,
-      "wins": 186,
-      "losses": 260,
-      "flat": 0,
-      "unverified": 4
-    },
-    "gross_realized_pnl_usdt": -7.510776442414251,
-    "fees_usdt": -6.94639918002,
-    "net_realized_pnl_usdt": -14.457175622434255,
-    "bankroll_start_usdt": "13.825381808195",
-    "current_bankroll_estimated_usdt": "13.250843951995",
-    "last_scan_rejections": [
-      {
-        "inst": "ICNT-USDT",
-        "side": "LONG",
-        "rank": 1,
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT",
-        "reason": "RANK_NOT_ALLOWED: current place 1; requires 51..100"
-      },
-      {
-        "inst": "FIL-USDT",
-        "side": "LONG",
-        "rank": 30,
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT",
-        "reason": "RANK_NOT_ALLOWED: current place 30; requires 51..100"
-      }
-    ],
-    "last_12_trades": [
-      {
-        "inst": "FLOCK-USDT",
-        "side": "LONG",
-        "rank": 78,
-        "opened_utc": "2026-10-16T00:11:38.534Z",
-        "closed_utc": "2026-10-16T00:21:39.164Z",
-        "gross_pnl_usdt": -0.0928,
-        "net_pnl_usdt": -0.1090168,
-        "result": "LOSS",
-        "exit_reason": "TIME EXIT: 10 minutes since position opened",
-        "order_book_directional_pct": null,
-        "order_book_confirmed": null
-      },
-      {
-        "inst": "SAFE-USDT",
-        "side": "SHORT",
-        "rank": 53,
-        "opened_utc": "2026-10-16T00:36:51.533Z",
-        "closed_utc": "2026-10-16T00:46:52.224Z",
-        "gross_pnl_usdt": 0.05810000000000009,
-        "net_pnl_usdt": 0.04186377200000009,
-        "result": "WIN",
-        "exit_reason": "TIME EXIT: 10 minutes since position opened",
-        "order_book_directional_pct": null,
-        "order_book_confirmed": null
-      },
-      {
-        "inst": "HOME-USDT",
-        "side": "LONG",
-        "rank": 98,
-        "opened_utc": "2026-10-16T01:11:09.080Z",
-        "closed_utc": "2026-10-16T01:21:09.865Z",
-        "gross_pnl_usdt": -0.03458,
-        "net_pnl_usdt": -0.050975708,
-        "result": "LOSS",
-        "exit_reason": "TIME EXIT: 10 minutes since position opened",
-        "order_book_directional_pct": null,
-        "order_book_confirmed": null
-      },
-      {
-        "inst": "LTC-USDT",
-        "side": "SHORT",
-        "rank": 59,
-        "opened_utc": "2026-10-16T01:41:40.208Z",
-        "closed_utc": "2026-10-16T01:51:41.089Z",
-        "gross_pnl_usdt": 0.0066,
-        "net_pnl_usdt": -0.0094578,
-        "result": "LOSS",
-        "exit_reason": "TIME EXIT: 10 minutes since position opened",
-        "order_book_directional_pct": null,
-        "order_book_confirmed": null
-      },
-      {
-        "inst": "PORTAL-USDT",
-        "side": "SHORT",
-        "rank": 75,
-        "opened_utc": "2026-10-16T02:06:40.273Z",
-        "closed_utc": "2026-10-16T02:16:41.104Z",
-        "gross_pnl_usdt": 0,
-        "net_pnl_usdt": -0.01635516,
-        "result": "LOSS",
-        "exit_reason": "TIME EXIT: 10 minutes since position opened",
-        "order_book_directional_pct": null,
-        "order_book_confirmed": null
-      },
-      {
-        "inst": "ACU-USDT",
-        "side": "LONG",
-        "rank": 51,
-        "opened_utc": "2026-10-16T02:46:42.574Z",
-        "closed_utc": "2026-10-16T02:56:43.272Z",
-        "gross_pnl_usdt": -0.0572,
-        "net_pnl_usdt": -0.07257224,
-        "result": "LOSS",
-        "exit_reason": "TIME EXIT: 10 minutes since position opened",
-        "order_book_directional_pct": null,
-        "order_book_confirmed": null
-      },
-      {
-        "inst": "FLOCK-USDT",
-        "side": "SHORT",
-        "rank": 54,
-        "opened_utc": "2026-10-16T03:16:40.817Z",
-        "closed_utc": "2026-10-16T03:26:41.591Z",
-        "gross_pnl_usdt": 0.0588,
-        "net_pnl_usdt": 0.04300968,
-        "result": "WIN",
-        "exit_reason": "TIME EXIT: 10 minutes since position opened",
-        "order_book_directional_pct": null,
-        "order_book_confirmed": null
-      },
-      {
-        "inst": "AERO-USDT",
-        "side": "SHORT",
-        "rank": 56,
-        "opened_utc": "2026-10-16T03:41:30.940Z",
-        "closed_utc": "2026-10-16T03:47:26.633Z",
-        "gross_pnl_usdt": -0.1344,
-        "net_pnl_usdt": -0.14976864,
-        "result": "LOSS",
-        "exit_reason": "external close",
-        "order_book_directional_pct": null,
-        "order_book_confirmed": null
-      },
-      {
-        "inst": "ZIL-USDT",
-        "side": "LONG",
-        "rank": 85,
-        "opened_utc": "2026-10-16T04:06:50.019Z",
-        "closed_utc": "2026-10-16T04:16:50.795Z",
-        "gross_pnl_usdt": -0.0039,
-        "net_pnl_usdt": -0.01963182,
-        "result": "LOSS",
-        "exit_reason": "TIME EXIT: 10 minutes since position opened",
-        "order_book_directional_pct": null,
-        "order_book_confirmed": null
-      },
-      {
-        "inst": "COLLECT-USDT",
-        "side": "LONG",
-        "rank": 92,
-        "opened_utc": "2026-10-16T04:31:42.686Z",
-        "closed_utc": "2026-10-16T04:41:43.397Z",
-        "gross_pnl_usdt": -0.0378,
-        "net_pnl_usdt": -0.05372136,
-        "result": "LOSS",
-        "exit_reason": "TIME EXIT: 10 minutes since position opened",
-        "order_book_directional_pct": null,
-        "order_book_confirmed": null
-      },
-      {
-        "inst": "BLESS-USDT",
-        "side": "SHORT",
-        "rank": 60,
-        "opened_utc": "2026-10-16T06:26:39.254Z",
-        "closed_utc": "2026-10-16T06:31:44.794Z",
-        "gross_pnl_usdt": -0.05568,
-        "net_pnl_usdt": -0.071742984,
-        "result": "LOSS",
-        "exit_reason": "external close",
-        "order_book_directional_pct": null,
-        "order_book_confirmed": null
-      },
-      {
-        "inst": "BASED-USDT",
-        "side": "LONG",
-        "rank": 60,
-        "opened_utc": "2026-10-16T06:46:11.389Z",
-        "closed_utc": "2026-10-16T06:56:12.170Z",
-        "gross_pnl_usdt": -0.0232,
-        "net_pnl_usdt": -0.03900268,
-        "result": "LOSS",
-        "exit_reason": "TIME EXIT: 10 minutes since position opened",
-        "order_book_directional_pct": null,
-        "order_book_confirmed": null
-      }
-    ]
-  },
-  "persistent_analysis_notes": [
-    {
-      "checked_utc": "2026-10-16T07:21:34Z",
-      "topic": "LATEST_CI_BASELINE",
-      "finding": "Current LIVE selection safety test suite passed 65/65 after updating RSI and allowed rank test fixtures.",
-      "evidence": "https://github.com/Photofiver/Stock-finder/actions/runs/38866525956",
-      "caveat": "This pass predates the bot_context_builder tests."
-    },
-    {
-      "checked_utc": "2026-10-16",
-      "topic": "ORDER_BOOK_DATA_LIMITATION",
-      "finding": "Pre-2026-10-16 LIVE trade history stored BID/ASK and spread, not full 20-level depth. Historical comparison of directional resting depth and win rate was not possible.",
-      "evidence": "blofin_live_state.json; blofin_order_book.py",
-      "caveat": "New top-20 JSONL recording must accumulate observations before evaluating performance."
-    },
-    {
-      "checked_utc": "2026-10-16",
-      "topic": "SPREAD_EXPLORATORY_ANALYSIS",
-      "finding": "At checked point, 254 closed trades had recorded entry spreads: 108 gross wins, 140 gross losses, 6 flat. Mean spread wins ~0.0678%, losses ~0.0719%.",
-      "evidence": "blofin_live_state.json trade_history, previous comparison",
-      "caveat": "Spread is not order book imbalance and results do not prove predictive value."
-    }
-  ],
-  "source_files": {
-    "full_trade_history": "blofin_live_state.json",
-    "detailed_order_books": "blofin_order_books/",
-    "scan_audits": "blofin_live_scans/",
-    "generated_trade_charts": "blofin_trade_charts/",
-    "tests": "test_blofin_ma_no_adx.py, test_blofin_ma_rsi75.py, test_blofin_order_book.py"
-  },
+  "generated_utc": "2026-10-16T07:37:26.945129+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -291,5 +8,294 @@
     "Do not treat order book imbalance as a historically validated predictor without an out-of-sample comparison.",
     "Add explicitly verified research findings to persistent_analysis_notes; the updater preserves them.",
     "Never store API credentials, access tokens, or personal notification endpoints here."
-  ]
+  ],
+  "last_known_state": {
+    "bankroll_start_usdt": "13.825381808195",
+    "current_bankroll_estimated_usdt": "13.250843951994999",
+    "fees_usdt": -6.94639918002,
+    "gross_realized_pnl_usdt": -7.510776442414251,
+    "last_12_trades": [
+      {
+        "closed_utc": "2026-10-16T00:21:39.164000+00:00",
+        "exit_reason": "TIME EXIT: 10 minutes since position opened",
+        "gross_pnl_usdt": -0.0928,
+        "inst": "FLOCK-USDT",
+        "net_pnl_usdt": -0.1090168,
+        "opened_utc": "2026-10-16T00:11:38.534000+00:00",
+        "order_book_confirmed": null,
+        "order_book_directional_pct": null,
+        "rank": 78,
+        "result": "LOSS",
+        "side": "LONG"
+      },
+      {
+        "closed_utc": "2026-10-16T00:46:52.224000+00:00",
+        "exit_reason": "TIME EXIT: 10 minutes since position opened",
+        "gross_pnl_usdt": 0.05810000000000009,
+        "inst": "SAFE-USDT",
+        "net_pnl_usdt": 0.04186377200000009,
+        "opened_utc": "2026-10-16T00:36:51.533000+00:00",
+        "order_book_confirmed": null,
+        "order_book_directional_pct": null,
+        "rank": 53,
+        "result": "WIN",
+        "side": "SHORT"
+      },
+      {
+        "closed_utc": "2026-10-16T01:21:09.865000+00:00",
+        "exit_reason": "TIME EXIT: 10 minutes since position opened",
+        "gross_pnl_usdt": -0.03458,
+        "inst": "HOME-USDT",
+        "net_pnl_usdt": -0.050975708,
+        "opened_utc": "2026-10-16T01:11:09.080000+00:00",
+        "order_book_confirmed": null,
+        "order_book_directional_pct": null,
+        "rank": 98,
+        "result": "LOSS",
+        "side": "LONG"
+      },
+      {
+        "closed_utc": "2026-10-16T01:51:41.089000+00:00",
+        "exit_reason": "TIME EXIT: 10 minutes since position opened",
+        "gross_pnl_usdt": 0.0066,
+        "inst": "LTC-USDT",
+        "net_pnl_usdt": -0.0094578,
+        "opened_utc": "2026-10-16T01:41:40.208000+00:00",
+        "order_book_confirmed": null,
+        "order_book_directional_pct": null,
+        "rank": 59,
+        "result": "LOSS",
+        "side": "SHORT"
+      },
+      {
+        "closed_utc": "2026-10-16T02:16:41.104000+00:00",
+        "exit_reason": "TIME EXIT: 10 minutes since position opened",
+        "gross_pnl_usdt": 0.0,
+        "inst": "PORTAL-USDT",
+        "net_pnl_usdt": -0.01635516,
+        "opened_utc": "2026-10-16T02:06:40.273000+00:00",
+        "order_book_confirmed": null,
+        "order_book_directional_pct": null,
+        "rank": 75,
+        "result": "LOSS",
+        "side": "SHORT"
+      },
+      {
+        "closed_utc": "2026-10-16T02:56:43.272000+00:00",
+        "exit_reason": "TIME EXIT: 10 minutes since position opened",
+        "gross_pnl_usdt": -0.0572,
+        "inst": "ACU-USDT",
+        "net_pnl_usdt": -0.07257224,
+        "opened_utc": "2026-10-16T02:46:42.574000+00:00",
+        "order_book_confirmed": null,
+        "order_book_directional_pct": null,
+        "rank": 51,
+        "result": "LOSS",
+        "side": "LONG"
+      },
+      {
+        "closed_utc": "2026-10-16T03:26:41.591000+00:00",
+        "exit_reason": "TIME EXIT: 10 minutes since position opened",
+        "gross_pnl_usdt": 0.0588,
+        "inst": "FLOCK-USDT",
+        "net_pnl_usdt": 0.04300968,
+        "opened_utc": "2026-10-16T03:16:40.817000+00:00",
+        "order_book_confirmed": null,
+        "order_book_directional_pct": null,
+        "rank": 54,
+        "result": "WIN",
+        "side": "SHORT"
+      },
+      {
+        "closed_utc": "2026-10-16T03:47:26.633000+00:00",
+        "exit_reason": "external close",
+        "gross_pnl_usdt": -0.1344,
+        "inst": "AERO-USDT",
+        "net_pnl_usdt": -0.14976864,
+        "opened_utc": "2026-10-16T03:41:30.940000+00:00",
+        "order_book_confirmed": null,
+        "order_book_directional_pct": null,
+        "rank": 56,
+        "result": "LOSS",
+        "side": "SHORT"
+      },
+      {
+        "closed_utc": "2026-10-16T04:16:50.795000+00:00",
+        "exit_reason": "TIME EXIT: 10 minutes since position opened",
+        "gross_pnl_usdt": -0.0039,
+        "inst": "ZIL-USDT",
+        "net_pnl_usdt": -0.01963182,
+        "opened_utc": "2026-10-16T04:06:50.019000+00:00",
+        "order_book_confirmed": null,
+        "order_book_directional_pct": null,
+        "rank": 85,
+        "result": "LOSS",
+        "side": "LONG"
+      },
+      {
+        "closed_utc": "2026-10-16T04:41:43.397000+00:00",
+        "exit_reason": "TIME EXIT: 10 minutes since position opened",
+        "gross_pnl_usdt": -0.0378,
+        "inst": "COLLECT-USDT",
+        "net_pnl_usdt": -0.05372136,
+        "opened_utc": "2026-10-16T04:31:42.686000+00:00",
+        "order_book_confirmed": null,
+        "order_book_directional_pct": null,
+        "rank": 92,
+        "result": "LOSS",
+        "side": "LONG"
+      },
+      {
+        "closed_utc": "2026-10-16T06:31:44.794000+00:00",
+        "exit_reason": "external close",
+        "gross_pnl_usdt": -0.05568,
+        "inst": "BLESS-USDT",
+        "net_pnl_usdt": -0.071742984,
+        "opened_utc": "2026-10-16T06:26:39.254000+00:00",
+        "order_book_confirmed": null,
+        "order_book_directional_pct": null,
+        "rank": 60,
+        "result": "LOSS",
+        "side": "SHORT"
+      },
+      {
+        "closed_utc": "2026-10-16T06:56:12.170000+00:00",
+        "exit_reason": "TIME EXIT: 10 minutes since position opened",
+        "gross_pnl_usdt": -0.0232,
+        "inst": "BASED-USDT",
+        "net_pnl_usdt": -0.03900268,
+        "opened_utc": "2026-10-16T06:46:11.389000+00:00",
+        "order_book_confirmed": null,
+        "order_book_directional_pct": null,
+        "rank": 60,
+        "result": "LOSS",
+        "side": "LONG"
+      }
+    ],
+    "last_live_scan_utc": "2026-10-16T07:35:00+00:00",
+    "last_run_utc": "2026-10-16T07:36:47.425000+00:00",
+    "last_scan_rejections": [
+      {
+        "inst": "PENDLE-USDT",
+        "rank": 37,
+        "reason": "RANK_NOT_ALLOWED: current place 37; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "S-USDT",
+        "rank": null,
+        "reason": "RSI14_LONG_BELOW_50: 41.54 < 50",
+        "side": "LONG",
+        "status": "RSI_ENTRY_BLOCKED_TRY_NEXT"
+      }
+    ],
+    "last_scan_status": "RSI_ENTRY_BLOCKED_TRY_NEXT",
+    "lifetime_counters": {
+      "flat": 0,
+      "losses": 260,
+      "total": 450,
+      "unverified": 4,
+      "wins": 186
+    },
+    "net_realized_pnl_usdt": -14.457175622434255,
+    "open_positions": [],
+    "risk_stop_triggered": false,
+    "trade_history_records": 444
+  },
+  "live_strategy": {
+    "additional_entry_filters": [
+      "MA10/MA20 CROSS at confirmed close",
+      "long distance from live SMA10 max 1%",
+      "support/resistance avoidance",
+      "fresh BID/ASK and pre-order price checks",
+      "TOP20 order book directional depth confirmation"
+    ],
+    "allowed_directions": [
+      "LONG",
+      "SHORT"
+    ],
+    "candle_minutes": 5,
+    "drawdown_stop_pct": 10.0,
+    "executable_exit_poll_seconds": 1.0,
+    "leverage": "1x",
+    "max_bankroll_allocation_usdt": 20.0,
+    "max_hold_minutes": 10.0,
+    "order_book": {
+      "indicator": "TOP20_ORDER_BOOK_DEPTH_IMBALANCE",
+      "levels_per_side": 20,
+      "min_directional_share_pct": 55.0,
+      "missing_or_stale_data": "BLOCK_ENTRY",
+      "note": "Resting depth does not establish future price direction.",
+      "raw_snapshots": "blofin_order_books/YYYY-MM-DD.jsonl",
+      "required_for_entry": true
+    },
+    "rank_max": 100,
+    "rank_min": 51,
+    "rank_scope": "ONLY CURRENT RANKS 51-100",
+    "rsi_long_max": 75.0,
+    "rsi_long_min": 50.0,
+    "rsi_short_max": 50.0,
+    "rsi_short_min": 0.0,
+    "stochastic": {
+      "long_rule": "K <= D",
+      "periods": [
+        14,
+        1,
+        3
+      ],
+      "short_rule": "K >= D"
+    },
+    "stop_loss_initial_cap_pct": 0.25,
+    "stop_reference": "SMA10 ratchet, plus executable BID/ASK polling and broker TP/SL",
+    "strategy_family": "NEAREST_VOLUME",
+    "take_profit_pct": 1.0,
+    "type": "SMA10_SMA20_CROSS",
+    "workflow_enabled": true
+  },
+  "persistent_analysis_notes": [
+    {
+      "caveat": "This pass predates the bot_context_builder tests.",
+      "checked_utc": "2026-10-16T07:21:34Z",
+      "evidence": "https://github.com/Photofiver/Stock-finder/actions/runs/38866525956",
+      "finding": "Current LIVE selection safety test suite passed 65/65 after updating RSI and allowed rank test fixtures.",
+      "topic": "LATEST_CI_BASELINE"
+    },
+    {
+      "caveat": "New top-20 JSONL recording must accumulate observations before evaluating performance.",
+      "checked_utc": "2026-10-16",
+      "evidence": "blofin_live_state.json; blofin_order_book.py",
+      "finding": "Pre-2026-10-16 LIVE trade history stored BID/ASK and spread, not full 20-level depth. Historical comparison of directional resting depth and win rate was not possible.",
+      "topic": "ORDER_BOOK_DATA_LIMITATION"
+    },
+    {
+      "caveat": "Spread is not order book imbalance and results do not prove predictive value.",
+      "checked_utc": "2026-10-16",
+      "evidence": "blofin_live_state.json trade_history, previous comparison",
+      "finding": "At checked point, 254 closed trades had recorded entry spreads: 108 gross wins, 140 gross losses, 6 flat. Mean spread wins ~0.0678%, losses ~0.0719%.",
+      "topic": "SPREAD_EXPLORATORY_ANALYSIS"
+    }
+  ],
+  "provenance": {
+    "latest_live_run_utc": "2026-10-16T07:36:47.425000+00:00",
+    "main_strategy_file": "blofin_ma10_ma20_live.py",
+    "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
+    "repository": "Photofiver/Stock-finder",
+    "source_sha256": {
+      ".github/workflows/blofin_live_signal_watch.yml": "09c8c038fbb1e64e804d2cdd0932eed3f16e065a22ea5b886d10055ba1d87f28",
+      "blofin_live_hourly.py": "55782eb5b2793b119e65e37568976f9f2083f7136986b4a17d3b7a2b5107a546",
+      "blofin_live_signal_watch.py": "f327fecf7f4ca05e1bbe2cb14651a1e743a1deaae0ca9b24750230d5c9b60978",
+      "blofin_ma10_ma20_live.py": "5d781ad90dec1bf484d47986b5537a2b64c3022e49c461ec5fd0ebf78f46e7f4",
+      "blofin_order_book.py": "7477bbc4f14c362e00965c8e4390e5b6234049ddbb18caee90c89267f1bdeea5"
+    },
+    "workflow": ".github/workflows/blofin_live_signal_watch.yml"
+  },
+  "schema_version": 1,
+  "source_files": {
+    "detailed_order_books": "blofin_order_books/",
+    "full_trade_history": "blofin_live_state.json",
+    "generated_trade_charts": "blofin_trade_charts/",
+    "scan_audits": "blofin_live_scans/",
+    "tests": "test_blofin_ma_no_adx.py, test_blofin_ma_rsi75.py, test_blofin_order_book.py"
+  }
 }
