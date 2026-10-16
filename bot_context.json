@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-16T16:27:35.103656+00:00",
+  "generated_utc": "2026-10-16T16:32:37.478477+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,25 +172,46 @@
         "side": "SHORT"
       }
     ],
-    "last_live_scan_utc": "2026-10-16T16:25:00+00:00",
-    "last_run_utc": "2026-10-16T16:26:50.414000+00:00",
+    "last_live_scan_utc": "2026-10-16T16:30:00+00:00",
+    "last_run_utc": "2026-10-16T16:31:58.386000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "MITO-USDT",
-        "rank": 63,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=100.00 > D=86.75; requires K<=D",
-        "side": "LONG",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+        "inst": "Q-USDT",
+        "rank": 9,
+        "reason": "RANK_NOT_ALLOWED: current place 9; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "BCH-USDT",
-        "rank": null,
-        "reason": "RSI14_LONG_BELOW_50: 40.06 < 50",
+        "inst": "FIL-USDT",
+        "rank": 18,
+        "reason": "RANK_NOT_ALLOWED: current place 18; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "APE-USDT",
+        "rank": 20,
+        "reason": "RANK_NOT_ALLOWED: current place 20; requires 51..100",
         "side": "LONG",
-        "status": "RSI_ENTRY_BLOCKED_TRY_NEXT"
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "FIGHT-USDT",
+        "rank": null,
+        "reason": "ORDER_BOOK_DIRECTION_BLOCKED: FIGHT-USDT LONG: aligned depth 43.43% < 55.00% (20 levels)",
+        "side": "LONG",
+        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
+      },
+      {
+        "inst": "GENIUS-USDT",
+        "rank": 87,
+        "reason": "STOCH_KD_SHORT_BLOCKED: K=46.15 < D=61.54; requires K>=D",
+        "side": "SHORT",
+        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "RSI_ENTRY_BLOCKED_TRY_NEXT",
+    "last_scan_status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 264,
@@ -277,7 +298,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-16T16:26:50.414000+00:00",
+    "latest_live_run_utc": "2026-10-16T16:31:58.386000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
