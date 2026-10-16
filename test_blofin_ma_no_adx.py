@@ -63,7 +63,11 @@ def candles_with_cross(last_close, interval_ms=300000):
     return [
         {"ts": i * interval_ms, "close_ms": (i + 1) * interval_ms,
          "h": price * 1.0005, "l": price * 0.9995,
-         "c": price, "rsi": 55.0 if last_close >= 10 else 45.0}
+         "c": price, "rsi": 55.0 if last_close >= 10 else 45.0,
+         "macd_hist": (
+             (0.003 if i == 20 else 0.001) if last_close >= 10
+             else (-0.003 if i == 20 else -0.001)
+         )}
         for i, price in enumerate(prices)
     ]
 
@@ -82,6 +86,8 @@ def complete_signal(side="LONG", rsi=55.0):
         "stoch_k": 40 if side == "LONG" else 60,
         "stoch_d": 60 if side == "LONG" else 40,
         "rsi14": rsi,
+        "macd_hist_previous": 0.001 if side == "LONG" else -0.001,
+        "macd_hist": 0.003 if side == "LONG" else -0.003,
         "sr_levels": {"resistance": [], "support": []},
     }
 
@@ -99,6 +105,7 @@ class RemoveAdxLiveTests(unittest.TestCase):
                 self.assertIn("ma10_live_cross_level", signal)
                 self.assertIsNone(ma.entry_rsi_rejection(signal))
                 self.assertIsNone(ma.entry_strength_rejection(signal))
+                self.assertIsNone(ma.entry_macd_rejection(signal))
 
     def test_five_minute_sma_rank_51_opens_without_adx(self):
         flat = candles_with_cross(10.0)
