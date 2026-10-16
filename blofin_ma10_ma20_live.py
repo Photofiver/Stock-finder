@@ -16,6 +16,7 @@ import math
 import os
 
 import blofin_support_resistance as sr
+import blofin_order_book as ob
 
 
 PRICE_TAKE_PROFIT_PCT = 0.01
@@ -538,6 +539,31 @@ def open_position(bot, state, signal, rank, instruments):
     signal["sr_preorder_decision"] = sr_preorder_decision
     if not sr_preorder_decision["allowed"]:
         raise RuntimeError(f"SMA CROSS {inst} {side}: entry rejected before order: {sr_preorder_decision}")
+    # New mandatory indicator: confirm intended trade side with fresh real
+    # 20-level BUY/SELL resting depth, immediately before the live order.
+    # The precise order book and result are archived even if this gate rejects.
+    try:
+        order_book = ob.capture(bot, inst, side, rank, signal["signal_close_ms"])
+    except Exception as exc:
+        ob.append_audit({
+            "inst": inst, "side": side, "rank": rank,
+            "signal_close_ms": signal["signal_close_ms"],
+            "captured_ms": bot.now_ms(),
+            "indicator": "TOP20_ORDER_BOOK_DEPTH_IMBALANCE",
+        }, "DATA_UNAVAILABLE", error=exc)
+        raise RuntimeError(f"ORDER_BOOK_UNAVAILABLE: {inst} {side}: {exc}") from exc
+    signal["order_book"] = order_book
+    ob.append_audit(
+        order_book,
+        "DIRECTION_CONFIRMED" if order_book["direction_confirmed"]
+        else "DIRECTION_REJECTED",
+    )
+    if not order_book["direction_confirmed"]:
+        raise RuntimeError(
+            f"ORDER_BOOK_DIRECTION_BLOCKED: {inst} {side}: "
+            f"aligned depth {order_book['directional_pct']:.2f}% "
+            f"< {order_book['min_directional_pct']:.2f}% (20 levels)"
+        )
     tick = bot.d(instruments[inst].get("tickSize") or "0.00000001")
     ma_sl = active_dynamic_stop_price(
         bot, side, signal["ma10_stop_nine_closed_sum"], quote["expected_fill"], tick,
