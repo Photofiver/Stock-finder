@@ -57,12 +57,24 @@ class OrderBookTests(unittest.TestCase):
         self.assertFalse(ob.capture(BookBot(bids2, asks2),
                                     "T-USDT", "SHORT", 55, 1)["direction_confirmed"])
 
-    def test_balanced_depth_blocks_with_55_percent_threshold(self):
+    def test_balanced_depth_blocks_with_62_percent_threshold(self):
         bids, asks = book(1, 1)
         for side in ("LONG", "SHORT"):
             self.assertFalse(
                 ob.capture(BookBot(bids, asks), "T-USDT", side, 55, 1)["direction_confirmed"]
             )
+
+    def test_new_62_percent_threshold_blocks_60_but_allows_67(self):
+        # At nearly equal prices, book(3, 2) yields about 60% on the bid side.
+        bids, asks = book(3, 2)
+        below = ob.capture(BookBot(bids, asks), "T-USDT", "LONG", 60, 1)
+        self.assertLess(below["directional_pct"], 62)
+        self.assertEqual(below["min_directional_pct"], 62.0)
+        self.assertFalse(below["direction_confirmed"])
+        bids, asks = book(2, 1)
+        above = ob.capture(BookBot(bids, asks), "T-USDT", "LONG", 60, 1)
+        self.assertGreater(above["directional_pct"], 62)
+        self.assertTrue(above["direction_confirmed"])
 
     def test_stale_missing_and_broken_book_fail_closed(self):
         bids, asks = book(2, 1)
