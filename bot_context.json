@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-16T11:47:54.681314+00:00",
+  "generated_utc": "2026-10-16T11:51:56.854621+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,91 +172,28 @@
         "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-16T11:45:00+00:00",
-    "last_run_utc": "2026-10-16T11:45:40.115000+00:00",
+    "last_live_scan_utc": "2026-10-16T11:50:00+00:00",
+    "last_run_utc": "2026-10-16T11:51:16.953000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "SUSHI-USDT",
-        "rank": 56,
-        "reason": "",
-        "side": null,
-        "status": "UNCONFIRMED_CANDLE_SKIPPED"
+        "inst": "ZRO-USDT",
+        "rank": 4,
+        "reason": "RANK_NOT_ALLOWED: current place 4; requires 51..100",
+        "side": "LONG",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "ID-USDT",
-        "rank": 61,
-        "reason": "",
-        "side": null,
-        "status": "UNCONFIRMED_CANDLE_SKIPPED"
+        "inst": "ETHFI-USDT",
+        "rank": 10,
+        "reason": "RANK_NOT_ALLOWED: current place 10; requires 51..100",
+        "side": "LONG",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "AVAX-USDT",
-        "rank": 65,
-        "reason": "",
-        "side": null,
-        "status": "UNCONFIRMED_CANDLE_SKIPPED"
-      },
-      {
-        "inst": "XTZ-USDT",
-        "rank": 75,
-        "reason": "",
-        "side": null,
-        "status": "UNCONFIRMED_CANDLE_SKIPPED"
-      },
-      {
-        "inst": "PLUME-USDT",
-        "rank": 82,
-        "reason": "",
-        "side": null,
-        "status": "UNCONFIRMED_CANDLE_SKIPPED"
-      },
-      {
-        "inst": "MANTRA-USDT",
-        "rank": 84,
-        "reason": "",
-        "side": null,
-        "status": "UNCONFIRMED_CANDLE_SKIPPED"
-      },
-      {
-        "inst": "SUI-USDT",
-        "rank": 88,
-        "reason": "",
-        "side": null,
-        "status": "UNCONFIRMED_CANDLE_SKIPPED"
-      },
-      {
-        "inst": "C98-USDT",
-        "rank": 100,
-        "reason": "",
-        "side": null,
-        "status": "UNCONFIRMED_CANDLE_SKIPPED"
-      },
-      {
-        "inst": "NIL-USDT",
-        "rank": null,
-        "reason": "NIL-USDT: expected confirmed 5m close unavailable",
-        "side": null,
-        "status": null
-      },
-      {
-        "inst": "KMNO-USDT",
-        "rank": 7,
-        "reason": "RANK_NOT_ALLOWED: current place 7; requires 51..100",
+        "inst": "LAB-USDT",
+        "rank": 79,
+        "reason": "STOCH_KD_SHORT_BLOCKED: K=18.18 < D=19.39; requires K>=D",
         "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "CHIP-USDT",
-        "rank": 29,
-        "reason": "RANK_NOT_ALLOWED: current place 29; requires 51..100",
-        "side": "LONG",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "COTI-USDT",
-        "rank": 99,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=84.40 > D=60.86; requires K<=D",
-        "side": "LONG",
         "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
       }
     ],
@@ -347,7 +284,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-16T11:45:40.115000+00:00",
+    "latest_live_run_utc": "2026-10-16T11:51:16.953000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
