@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-16T20:12:36.249838+00:00",
+  "generated_utc": "2026-10-16T20:17:27.173013+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,13 +172,20 @@
         "side": "SHORT"
       }
     ],
-    "last_live_scan_utc": "2026-10-16T20:10:00+00:00",
-    "last_run_utc": "2026-10-16T20:11:49.584000+00:00",
+    "last_live_scan_utc": "2026-10-16T20:15:00+00:00",
+    "last_run_utc": "2026-10-16T20:16:42.105000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "FIL-USDT",
-        "rank": 67,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=89.94 > D=67.98; requires K<=D",
+        "inst": "BEAM-USDT",
+        "rank": 20,
+        "reason": "RANK_NOT_ALLOWED: current place 20; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "MAGIC-USDT",
+        "rank": 77,
+        "reason": "STOCH_KD_LONG_BLOCKED: K=82.96 > D=76.99; requires K<=D",
         "side": "LONG",
         "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
       }
@@ -271,7 +278,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-16T20:11:49.584000+00:00",
+    "latest_live_run_utc": "2026-10-16T20:16:42.105000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
