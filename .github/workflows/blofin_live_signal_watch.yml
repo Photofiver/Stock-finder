@@ -114,6 +114,10 @@ jobs:
           if [ -d blofin_trade_charts ]; then
             git add -- blofin_trade_charts/
           fi
+          # Archive full 20-level BID/ASK snapshots for accepted/rejected entries.
+          if [ -d blofin_order_books ]; then
+            git add -- blofin_order_books/
+          fi
           if ! git diff --cached --quiet; then
             git commit -m 'Update BloFin signal state'
             git pull --rebase origin main
