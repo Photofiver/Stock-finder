@@ -14,6 +14,8 @@ def signal(side="LONG", rsi=55.0):
         "sma_separation_pct": 0.05,
         "stoch_k": 40 if side == "LONG" else 60,
         "stoch_d": 60 if side == "LONG" else 40,
+        "macd_hist_previous": 0.001 if side == "LONG" else -0.001,
+        "macd_hist": 0.003 if side == "LONG" else -0.003,
         "sr_levels": {"resistance": [], "support": []},
     }
 
@@ -71,7 +73,8 @@ class Rsi75LiveEntryTests(unittest.TestCase):
              "h": 10.1 if i < 20 else 12.1,
              "l": 9.9 if i < 20 else 11.9,
              "close_ms": (i + 1) * 300000,
-             "rsi": 79.03 if i == 20 else 55.0}
+             "rsi": 79.03 if i == 20 else 55.0,
+             "macd_hist": 0.003 if i == 20 else 0.001}
             for i in range(21)
         ]
         bot = MagicMock()
