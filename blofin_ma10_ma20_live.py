@@ -285,6 +285,10 @@ def crossover(bot, inst, expected_close_ms, bars=None):
         side = "LONG"
     elif old_fast >= old_slow and new_fast < new_slow:
         side = "SHORT"
+    # MACD histogram from the current and preceding CLOSED 5m candles.
+    # fetch_signal_bars() decorates candles with standard MACD(12,26,9).
+    macd_hist_previous = bars[-2].get("macd_hist") if side is not None else None
+    macd_hist = bars[-1].get("macd_hist") if side is not None else None
     # Stochastic 14,1,3 at the confirmed signal close; never use live/incomplete bars.
     stoch_k = stoch_d = None
     if side is not None:
@@ -311,6 +315,8 @@ def crossover(bot, inst, expected_close_ms, bars=None):
         "sma_separation_pct": abs(new_fast - new_slow) / closes[-1] * 100.0 if closes[-1] > 0 else None,
         "stoch_k": stoch_k,
         "stoch_d": stoch_d,
+        "macd_hist_previous": macd_hist_previous,
+        "macd_hist": macd_hist,
         "ma10_live_cross_level": ma10_live_cross_level,
         "ma10_stop_nine_closed_sum": sum(closes[-9:]),
         "ma10_stop_offset_pct": 1.0,
@@ -388,6 +394,31 @@ def entry_strength_rejection(signal):
         return f"STOCH_KD_LONG_BLOCKED: K={k:.2f} > D={d:.2f}; requires K<=D"
     if signal.get("side") == "SHORT" and k < d:
         return f"STOCH_KD_SHORT_BLOCKED: K={k:.2f} < D={d:.2f}; requires K>=D"
+    return None
+
+
+def entry_macd_rejection(signal):
+    """Require growing positive MACD histogram for LONG, falling negative for SHORT.
+
+    Uses the two most recent CONFIRMED candles, never live candle data.
+    Missing, invalid or unchanged MACD is rejected before any broker order.
+    """
+    side = signal.get("side")
+    if side not in ("LONG", "SHORT"):
+        return "MACD_INVALID_SIDE"
+    try:
+        previous = float(signal["macd_hist_previous"])
+        current = float(signal["macd_hist"])
+        if not (math.isfinite(previous) and math.isfinite(current)):
+            raise ValueError("non-finite histogram")
+    except (KeyError, ValueError, TypeError, OverflowError) as exc:
+        return f"MACD_HIST_UNAVAILABLE: {exc}"
+    if side == "LONG" and not (current > 0 and current > previous):
+        return (f"MACD_LONG_NOT_RISING_GREEN: previous={previous:.8g}, "
+                f"current={current:.8g}; requires current>0 and current>previous")
+    if side == "SHORT" and not (current < 0 and current < previous):
+        return (f"MACD_SHORT_NOT_FALLING_RED: previous={previous:.8g}, "
+                f"current={current:.8g}; requires current<0 and current<previous")
     return None
 
 
@@ -499,6 +530,10 @@ def open_position(bot, state, signal, rank, instruments):
     strength_rejection = entry_strength_rejection(signal)
     if strength_rejection:
         print(f"SMA CROSS {inst} {side}: entry blocked: {strength_rejection}")
+        return False
+    macd_rejection = entry_macd_rejection(signal)
+    if macd_rejection:
+        print(f"SMA CROSS {inst} {side}: entry blocked: {macd_rejection}")
         return False
     distance_rejection = long_ma10_distance_rejection(signal)
     if distance_rejection:
@@ -1063,6 +1098,18 @@ def run(bot, state, top7, tickers, instruments, expected_close_ms, wait_for_conf
                     })
                     last["status"] = "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
                     print(f"SMA CROSS {sig['inst']} pre-order rejected; try next: {strength_rejection}")
+                    continue
+                macd_rejection = entry_macd_rejection(sig)
+                if macd_rejection:
+                    last["events"].append({
+                        "inst": sig["inst"], "side": sig["side"], "rank": rank,
+                        "macd_hist_previous": sig.get("macd_hist_previous"),
+                        "macd_hist": sig.get("macd_hist"),
+                        "reason": macd_rejection,
+                        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT",
+                    })
+                    last["status"] = "MACD_ENTRY_BLOCKED_TRY_NEXT"
+                    print(f"SMA CROSS {sig['inst']} pre-order rejected; try next: {macd_rejection}")
                     continue
                 distance_rejection = long_ma10_distance_rejection(sig)
                 if distance_rejection:
