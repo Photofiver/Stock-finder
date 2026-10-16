@@ -143,6 +143,7 @@ def build_context(state, workflow_env, strategy, order_book, notes=None,
                 "support/resistance avoidance",
                 "fresh BID/ASK and pre-order price checks",
                 "TOP20 order book directional depth confirmation",
+                "MACD(12,26,9) positive rising histogram for LONG; negative falling for SHORT",
             ],
             "order_book": {
                 "indicator": "TOP20_ORDER_BOOK_DEPTH_IMBALANCE",
