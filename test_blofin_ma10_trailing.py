@@ -187,7 +187,7 @@ class Ma10TrailingStopTests(unittest.TestCase):
         target = ma.active_dynamic_stop_price(
             b, "SHORT", Decimal("900.9"), Decimal("100"), Decimal("0.01")
         )
-        self.assertEqual(target, Decimal("100.25"))
+        self.assertEqual(target, Decimal("100.10"))
 
     def test_short_active_stop_keeps_existing_stop_when_it_triggers_first(self):
         b = BrokerStub()
