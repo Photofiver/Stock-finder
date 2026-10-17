@@ -31,8 +31,10 @@ def capture_event(inst,ts,data,states,rank):
     return original_calc(inst,ts,data,states,rank)
 
 def capture_computed(candidates,outcomes,rule,exitid,days):
-    EVENTS.update(candidates)
-    OUTCOMES.update(outcomes)
+    if not EVENTS:
+        EVENTS.update(candidates)
+    if not OUTCOMES:
+        OUTCOMES.update(outcomes)
     return original_compute(candidates,outcomes,rule,exitid,days)
 
 base.calc_event=capture_event
