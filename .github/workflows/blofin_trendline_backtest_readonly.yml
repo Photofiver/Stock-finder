@@ -1,0 +1,48 @@
+name: Backtest closed-5m trendline bounce and break (READ ONLY)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_trendline_backtest_readonly.py'
+      - '.github/workflows/blofin_trendline_backtest_readonly.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline_backtest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout minimal code and bot state
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+            /.github/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Configure Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install public HTTP dependency
+        run: python -m pip install requests==2.32.3
+      - name: Python syntax check
+        run: python -m py_compile blofin_trendline_backtest_readonly.py
+      - name: Run read-only backtest (no trading credentials)
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u blofin_trendline_backtest_readonly.py
+      - name: Upload research report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trendline-backtest-readonly
+          path: trendline_backtest_readonly_report.json
+          if-no-files-found: ignore
+          retention-days: 7
