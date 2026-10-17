@@ -212,6 +212,26 @@ def main():
                 if chunks:data[inst]=chunks
                 else:errors[inst]="NO_CONTIGUOUS"
             except Exception as exc: errors[inst]=str(exc)
+    # Public endpoint occasionally serves empty pages for valid instruments.
+    # Retry unavailable instruments independently at lower concurrency, so no
+    # original-40 names silently drop out of the comparison.
+    if errors:
+        for attempt in range(6):
+            missing=list(errors)
+            if not missing:break
+            time.sleep(2+attempt)
+            with ThreadPoolExecutor(max_workers=2) as retry_pool:
+                rf={retry_pool.submit(previous.fetch_8days,inst,END,START-150*FIVE):inst for inst in missing}
+                for fut in as_completed(rf):
+                    inst=rf[fut]
+                    try:
+                        chunks=fut.result()
+                        if chunks:
+                            data[inst]=chunks
+                            del errors[inst]
+                    except Exception as exc:
+                        errors[inst]=str(exc)
+            print("RETRY_FETCH="+json.dumps({"attempt":attempt+1,"fetched":len(data),"still_missing":list(errors)}),flush=True)
     print("FETCH_COUNT="+json.dumps({"requested":len(insts),"fetched":len(data),"errors":errors}),flush=True)
     if len(data)<25:
         raise RuntimeError("Too few historical symbols")
