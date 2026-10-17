@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-17T20:53:09.411577+00:00",
+  "generated_utc": "2026-10-17T20:58:29.066154+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,28 +172,56 @@
         "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-17T20:45:00+00:00",
-    "last_run_utc": "2026-10-17T20:48:29.569000+00:00",
+    "last_live_scan_utc": "2026-10-17T20:50:00+00:00",
+    "last_run_utc": "2026-10-17T20:53:48.698000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "GRAM-USDT",
-        "rank": 53,
-        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-0.000852737, current=-0.00076473179; requires current<0 and current<previous",
+        "inst": "A-USDT",
+        "rank": 9,
+        "reason": "RANK_NOT_ALLOWED: current place 9; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "ILV-USDT",
+        "rank": 54,
+        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-0.0038916615, current=-0.0035567213; requires current<0 and current<previous",
         "side": "SHORT",
         "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
       },
       {
-        "inst": "HANA-USDT",
-        "rank": 75,
-        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-6.1243512e-06, current=-5.6318107e-06; requires current<0 and current<previous",
+        "inst": "ETHBTC-USDT",
+        "rank": 64,
+        "reason": "MACD_LONG_NOT_RISING_GREEN: previous=8.7004349e-07, current=2.7127269e-07; requires current>0 and current>previous",
+        "side": "LONG",
+        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "SPACE-USDT",
+        "rank": 74,
+        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-1.3102959e-06, current=-9.1103358e-07; requires current<0 and current<previous",
         "side": "SHORT",
         "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
       },
       {
-        "inst": "LIGHT-USDT",
+        "inst": "FORM-USDT",
+        "rank": null,
+        "reason": "RSI14_SHORT_ABOVE_50: 50.21 > 50",
+        "side": "SHORT",
+        "status": "RSI_ENTRY_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "XAG-USDT",
+        "rank": 98,
+        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-0.0064730394, current=-0.0057005974; requires current<0 and current<previous",
+        "side": "SHORT",
+        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "STBL-USDT",
         "rank": 0,
         "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
-        "side": "SHORT",
+        "side": "LONG",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       }
     ],
@@ -285,7 +313,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-17T20:48:29.569000+00:00",
+    "latest_live_run_utc": "2026-10-17T20:53:48.698000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
