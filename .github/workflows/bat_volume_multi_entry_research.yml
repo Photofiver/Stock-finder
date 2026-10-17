@@ -1,0 +1,39 @@
+name: BAT Repeated Entries Retest (READ ONLY)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - research/bat_volume_multi_entry_readonly.py
+      - .github/workflows/bat_volume_multi_entry_research.yml
+permissions:
+  contents: read
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout research folder
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            /research/
+            /.github/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check syntax
+        run: python -m py_compile research/bat_volume_multi_entry_readonly.py
+      - name: Run batches of ten variants
+        run: python -u research/bat_volume_multi_entry_readonly.py
+      - name: Upload complete results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bat-5m-multi-entry-holdout
+          path: research/bat_volume_multi_entry_results.json
+          if-no-files-found: ignore
+          retention-days: 10
