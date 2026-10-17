@@ -1,0 +1,41 @@
+name: EARLY last-24h session frequency (READ ONLY)
+on:
+  push:
+    paths:
+      - 'blofin_early_last24_frequency_readonly.py'
+      - '.github/workflows/blofin_early_last24_frequency_readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  count:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - name: Verify Python syntax
+        run: python -m py_compile blofin_early_last24_frequency_readonly.py blofin_top200_repeat_setup_research.py
+      - name: Count EARLY signals among TOP200 after closed 5m bars
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u blofin_early_last24_frequency_readonly.py
+      - name: Preserve frequency and entry list
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: early-last24-frequency
+          path: blofin_early_last24_frequency_report.json
+          retention-days: 10
+          if-no-files-found: ignore
