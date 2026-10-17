@@ -1,0 +1,52 @@
+name: Measure sparse LIVE startup (read only)
+on:
+  push:
+    branches: [codex/measure-live-startup]
+    paths: [.github/workflows/measure-sparse-startup.yml]
+permissions:
+  contents: read
+jobs:
+  startup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Record runner start
+        run: echo "RUNNER_READY=$(date -u +%FT%T.%3NZ)"
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Record checkout complete
+        run: echo "CHECKOUT_READY=$(date -u +%FT%T.%3NZ)"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Record dependencies ready
+        run: |
+          echo "DEPENDENCIES_READY=$(date -u +%FT%T.%3NZ)"
+          git count-objects -vH
+      - name: Time public market scan without account access
+        env:
+          LIVE_SIGNAL_MINUTES: '5'
+          LIVE_UNIVERSE_TOP_N: '100'
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: |
+          python -u - <<'PY'
+          import time
+          import blofin_live_signal_watch as watch
+          def blocked(*args, **kwargs):
+              raise RuntimeError("Account access and notifications forbidden in benchmark")
+          watch.bot.private_request = blocked
+          watch.bot.send_ntfy = blocked
+          started = time.perf_counter()
+          top, _, _ = watch.bot.get_universe()
+          print(f"UNIVERSE_SECONDS={time.perf_counter()-started:.3f}", flush=True)
+          started = time.perf_counter()
+          bars = watch.wait_for_confirmed_signal_close(top, watch.expected_signal_close_ms())
+          print(f"PUBLIC_CANDLES_SECONDS={time.perf_counter()-started:.3f} CONFIRMED={len(bars)}", flush=True)
+          PY
