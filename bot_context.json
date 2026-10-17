@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-17T02:17:02.179348+00:00",
+  "generated_utc": "2026-10-17T02:22:27.673845+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,53 +172,46 @@
         "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-17T02:15:00+00:00",
-    "last_run_utc": "2026-10-17T02:16:19.902000+00:00",
+    "last_live_scan_utc": "2026-10-17T02:20:00+00:00",
+    "last_run_utc": "2026-10-17T02:21:48.809000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "ETHFI-USDT",
-        "rank": 28,
-        "reason": "RANK_NOT_ALLOWED: current place 28; requires 51..100",
+        "inst": "UB-USDT",
+        "rank": 42,
+        "reason": "RANK_NOT_ALLOWED: current place 42; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "HANA-USDT",
+        "rank": 44,
+        "reason": "RANK_NOT_ALLOWED: current place 44; requires 51..100",
         "side": "LONG",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "AXL-USDT",
-        "rank": 52,
-        "reason": "STOCH_KD_SHORT_BLOCKED: K=74.00 < D=89.35; requires K>=D",
+        "inst": "NEO-USDT",
+        "rank": 62,
+        "reason": "STOCH_KD_SHORT_BLOCKED: K=80.65 < D=91.40; requires K>=D",
         "side": "SHORT",
         "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
       },
       {
-        "inst": "PUMP-USDT",
+        "inst": "GRIFFAIN-USDT",
         "rank": null,
-        "reason": "LONG_TOO_FAR_ABOVE_MA10: 1.248% > 1.00%",
+        "reason": "ORDER_BOOK_DIRECTION_BLOCKED: GRIFFAIN-USDT LONG: aligned depth 35.44% < 62.00% (20 levels)",
         "side": "LONG",
-        "status": "LONG_MA10_DISTANCE_BLOCKED_TRY_NEXT"
+        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
       },
       {
-        "inst": "CNPY-USDT",
-        "rank": 61,
-        "reason": "STOCH_KD_SHORT_BLOCKED: K=7.69 < D=15.55; requires K>=D",
-        "side": "SHORT",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "PENDLE-USDT",
-        "rank": null,
-        "reason": "NEAR_RESISTANCE",
+        "inst": "ZEREBRO-USDT",
+        "rank": 0,
+        "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
         "side": "LONG",
-        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "CT-USDT",
-        "rank": 96,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=100.00 > D=97.54; requires K<=D",
-        "side": "LONG",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT",
+    "last_scan_status": "RANK_NOT_ALLOWED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 265,
@@ -306,7 +299,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-17T02:16:19.902000+00:00",
+    "latest_live_run_utc": "2026-10-17T02:21:48.809000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
