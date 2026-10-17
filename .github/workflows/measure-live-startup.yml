@@ -1,0 +1,32 @@
+name: Measure LIVE startup (read only)
+on:
+  push:
+    branches: [codex/measure-live-startup]
+    paths: [.github/workflows/measure-live-startup.yml]
+permissions:
+  contents: read
+jobs:
+  startup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        depth: [0, 1]
+    steps:
+      - name: Record runner start
+        run: echo "RUNNER_READY=$(date -u +%FT%T.%3NZ)"
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ matrix.depth }}
+          persist-credentials: false
+      - name: Record checkout complete
+        run: echo "CHECKOUT_READY=$(date -u +%FT%T.%3NZ)"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Record dependencies ready
+        run: |
+          echo "DEPENDENCIES_READY=$(date -u +%FT%T.%3NZ)"
+          git rev-parse --is-shallow-repository
+          git count-objects -vH
