@@ -1,0 +1,48 @@
+name: TOP200 repeating volume setup hunt (READ ONLY)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_top200_repeat_setup_research.py'
+      - '.github/workflows/blofin_top200_repeat_setup_research.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  research:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Sparse root checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install requests
+        run: python -m pip install requests==2.32.3
+      - name: Syntax test
+        run: python -m py_compile blofin_top200_repeat_setup_research.py
+      - name: Run point-in-time TOP200 backtest without trade credentials
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+          PYTHONUNBUFFERED: '1'
+        run: python -u blofin_top200_repeat_setup_research.py
+      - name: Save complete research report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: top200-repeat-setup-readonly
+          path: blofin_top200_repeat_setup_report.json
+          retention-days: 14
+          if-no-files-found: ignore
