@@ -1,0 +1,55 @@
+name: TOP200 Volume 295 Win Loss Indicators READ ONLY
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_top200_wins_vs_losses_readonly.py'
+      - '.github/workflows/blofin_top200_wins_vs_losses_readonly.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install requests==2.32.3
+      - name: Reuse same 390 coin historical candles
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39074940517
+          github-token: ${{ github.token }}
+          pattern: top200-candle-shard-*
+          merge-multiple: true
+          path: shards
+      - name: Verify read-only analysis script
+        run: python -m py_compile blofin_top200_wins_vs_losses_readonly.py
+      - name: Compare causal indicator values for 295 wins and losses
+        env:
+          RESEARCH_ASOF_UK: '2026-10-17'
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u blofin_top200_wins_vs_losses_readonly.py
+      - name: Archive numerical comparison and train/validation/holdout
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blofin-top200-295-trade-win-loss-study
+          path: blofin_top200_wins_vs_losses_analysis.json
+          if-no-files-found: ignore
+          retention-days: 14
