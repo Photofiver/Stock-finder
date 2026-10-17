@@ -1,0 +1,46 @@
+name: Fixed positive volume trend prior 5 days (read-only)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_volume_profit_prior_five_days.py'
+      - '.github/workflows/blofin_volume_profit_prior_five_days.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout root code and state
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install HTTP package
+        run: python -m pip install requests==2.32.3
+      - name: Validate Python syntax
+        run: python -m py_compile blofin_volume_profit_prior_five_days.py blofin_volume_peak_trend_backtest_readonly.py blofin_trendline_backtest_readonly.py
+      - name: Check fixed volume trend against earlier market history
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u blofin_volume_profit_prior_five_days.py
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: volume-fixed-rules-prior-five-days
+          path: volume_profit_prior_five_days_report.json
+          retention-days: 7
+          if-no-files-found: ignore
