@@ -164,15 +164,15 @@ def filter_rules():
         for v in vals:
             add(key+"="+str(v),lambda e,k=key,val=v:e["features"][k]==val)
     numeric={
-      "vol_ratio":[2.5,3,4,5,7,10],
-      "vol_vs_opposite":[1.0,1.5,2,3,4],
+      "vol_ratio":[2.5,3,4,5,7,8,10,12,15,20,30],
+      "vol_vs_opposite":[1.0,1.5,2,3,4,8,12,16,24],
       "body_pct":[.25,.4,.6,.8,1.],
       "body_share":[.35,.5,.7,.85],
       "age":[3,6,12,24,48,96],
       "ma10_slope_pct":[-.1,0,.03,.07,.12,.2],
       "ma20_slope_pct":[-.08,0,.03,.07,.12],
       "ma_gap_pct":[-.3,0,.05,.1,.2,.4],
-      "distance_ma10_pct":[-.3,0,.1,.2,.4,.7],
+      "distance_ma10_pct":[-.3,0,.1,.2,.3,.4,.5,.7],
       "macd_hist_oriented":[-.03,0,.03,.06,.1],
       "obv_slope5":[-.5,-.2,0,.2,.5],
       "prev_body_pct":[.05,.15,.3,.5],
@@ -260,6 +260,47 @@ def main():
         cats[k]={str(v):{q:p for q,p in metrics([e for e in selected if e["features"][k]==v]).items() if q!="days"}
                  for v in (("LONG","SHORT") if k=="side" else (True,False))}
     print("CATEGORIES="+json.dumps(cats,separators=(",",":")),flush=True)
+
+    # Predefined interpretability comparisons: same historical trades, without opening replacement trades.
+    focused={
+        "SHORT":[("side","SHORT")],
+        "LONG":[("side","LONG")],
+        "SHORT_and_vol_le10":[("side","SHORT"),("vol_ratio","<=10")],
+        "SHORT_and_vol_le12":[("side","SHORT"),("vol_ratio","<=12")],
+        "SHORT_and_ma10_distance_le0.3":[("side","SHORT"),("distance_ma10_pct","<=0.3")],
+        "SHORT_and_not_12bar_breakout":[("side","SHORT"),("breakout12",False)],
+        "SHORT_and_macd_falling":[("side","SHORT"),("macd_hist_rising",False)],
+        "vol_le10":[("vol_ratio","<=10")],
+        "vol_le12":[("vol_ratio","<=12")],
+        "vol_le15":[("vol_ratio","<=15")],
+        "vol_le20":[("vol_ratio","<=20")],
+        "near_ma10":[("distance_ma10_pct","<=0.3")],
+        "ma10_and_low_volume":[("distance_ma10_pct","<=0.3"),("vol_ratio","<=12")],
+        "non_breakout_low_volume":[("breakout12",False),("vol_ratio","<=12")],
+        "macd_not_rising":[("macd_hist_rising",False)],
+        "macd_not_rising_low_volume":[("macd_hist_rising",False),("vol_ratio","<=12")],
+        "12_18_uk":[("hour_uk",">=12"),("hour_uk","<18")],
+        "12_18_uk_SHORT":[("hour_uk",">=12"),("hour_uk","<18"),("side","SHORT")],
+        "12_18_uk_lowvol":[("hour_uk",">=12"),("hour_uk","<18"),("vol_ratio","<=12")],
+    }
+    def follows(x,spec):
+        f=x["features"]
+        for key,val in spec:
+            v=f[key]
+            if isinstance(val,str) and val.startswith("<="):
+                if v is None or not v<=float(val[2:]):return False
+            elif isinstance(val,str) and val.startswith(">="):
+                if v is None or not v>=float(val[2:]):return False
+            elif isinstance(val,str) and val.startswith("<"):
+                if v is None or not v<float(val[1:]):return False
+            elif v!=val:return False
+        return True
+    details={}
+    for name,filters in focused.items():
+        details[name]=[{k:v for k,v in metrics([x for x in w if follows(x,filters)]).items() if k!="days"}
+                        for w in windows]
+    print("FOCUSED_FILTER_WINDOWS="+json.dumps(details,separators=(",",":")),flush=True)
+
     print("EXIT_REASONS="+json.dumps(dict(Counter(e["reason"] for e in selected))),flush=True)
     result={"original_window_reproduced":reproducible,"expected_train_valid_holdout":expected,
             "symbols_fetched":len(data),"original_symbols_requested":len(insts),
