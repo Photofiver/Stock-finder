@@ -1,0 +1,60 @@
+name: TOP200 Cross-Period 16-Day Repeating Setup READ ONLY
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_top200_16day_cross_period_readonly.py'
+      - '.github/workflows/blofin_top200_16day_cross_period_readonly.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reuse unseen historical prior-8d BloFin candle artifacts
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39080368861
+          github-token: ${{ github.token }}
+          pattern: frozen-short-prior8-shard-*
+          merge-multiple: true
+          path: prior
+      - name: Reuse the original 8d BloFin candle artifacts
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39074940517
+          github-token: ${{ github.token }}
+          pattern: top200-candle-shard-*
+          merge-multiple: true
+          path: recent
+      - name: Verify read-only script
+        run: python -m py_compile blofin_top200_16day_cross_period_readonly.py blofin_top200_new_volume_reversals_readonly.py
+      - name: Scan same set of new breakout/fade setups across 16 days
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+          PYTHONUNBUFFERED: '1'
+        run: python -u blofin_top200_16day_cross_period_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blofin-top200-cross-period-16day-study
+          path: blofin_top200_16day_cross_period_report.json
+          retention-days: 14
+          if-no-files-found: ignore
