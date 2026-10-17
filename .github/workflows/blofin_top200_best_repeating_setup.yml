@@ -1,0 +1,55 @@
+name: TOP200 Best Repeated Volume Setup (READ ONLY)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_top200_best_repeating_setup.py'
+      - '.github/workflows/blofin_top200_best_repeating_setup.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  calculate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install public HTTP parser package
+        run: python -m pip install requests==2.32.3
+      - name: Download actual completed 390-coin candle history from prior GitHub run
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39074940517
+          github-token: ${{ github.token }}
+          pattern: top200-candle-shard-*
+          merge-multiple: true
+          path: shards
+      - name: Verify syntax
+        run: python -m py_compile blofin_top200_best_repeating_setup.py
+      - name: Find single most profitable REPEATING setup (no retuning on holdout)
+        env:
+          RESEARCH_ASOF_UK: '2026-10-17'
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u blofin_top200_best_repeating_setup.py
+      - name: Upload repeated setup result and all 8 individual daily results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: top200-one-repeat-setup-8day
+          path: blofin_top200_best_repeating_setup_report.json
+          retention-days: 14
+          if-no-files-found: ignore
