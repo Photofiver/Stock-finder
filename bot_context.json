@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-17T09:12:08.456422+00:00",
+  "generated_utc": "2026-10-17T09:17:30.455119+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,74 +172,32 @@
         "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-17T09:10:00+00:00",
-    "last_run_utc": "2026-10-17T09:11:28.412000+00:00",
+    "last_live_scan_utc": "2026-10-17T09:15:00+00:00",
+    "last_run_utc": "2026-10-17T09:16:49.033000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "DNA-USDT",
-        "rank": 6,
-        "reason": "RANK_NOT_ALLOWED: current place 6; requires 51..100",
+        "inst": "AVAAI-USDT",
+        "rank": 21,
+        "reason": "RANK_NOT_ALLOWED: current place 21; requires 51..100",
         "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "FLUID-USDT",
-        "rank": 23,
-        "reason": "RANK_NOT_ALLOWED: current place 23; requires 51..100",
-        "side": "LONG",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "TRADOOR-USDT",
-        "rank": 48,
-        "reason": "RANK_NOT_ALLOWED: current place 48; requires 51..100",
-        "side": "LONG",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "KII-USDT",
-        "rank": 61,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=66.67 > D=64.47; requires K<=D",
-        "side": "LONG",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "OURA-USDT",
-        "rank": 73,
-        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-0.0071198912, current=-0.0067149796; requires current<0 and current<previous",
+        "inst": "XVG-USDT",
+        "rank": 62,
+        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-1.2796456e-08, current=-2.5930738e-10; requires current<0 and current<previous",
         "side": "SHORT",
         "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
       },
       {
-        "inst": "WLFI-USDT",
-        "rank": 77,
-        "reason": "STOCH_KD_SHORT_BLOCKED: K=28.57 < D=31.75; requires K>=D",
-        "side": "SHORT",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "SPACE-USDT",
-        "rank": 81,
-        "reason": "STOCH_KD_SHORT_BLOCKED: K=0.00 < D=7.14; requires K>=D",
-        "side": "SHORT",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "BTC-USDT",
-        "rank": 92,
-        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-4.3781389, current=-2.8088774; requires current<0 and current<previous",
-        "side": "SHORT",
-        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "XNY-USDT",
-        "rank": 96,
-        "reason": "MACD_LONG_NOT_RISING_GREEN: previous=1.3557064e-06, current=1.0798189e-06; requires current>0 and current>previous",
+        "inst": "ETHBTC-USDT",
+        "rank": 75,
+        "reason": "STOCH_KD_LONG_BLOCKED: K=100.00 > D=83.33; requires K<=D",
         "side": "LONG",
-        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
+        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "MACD_ENTRY_BLOCKED_TRY_NEXT",
+    "last_scan_status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 268,
@@ -327,12 +285,12 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-17T09:11:28.412000+00:00",
+    "latest_live_run_utc": "2026-10-17T09:16:49.033000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
     "source_sha256": {
-      ".github/workflows/blofin_live_signal_watch.yml": "09c8c038fbb1e64e804d2cdd0932eed3f16e065a22ea5b886d10055ba1d87f28",
+      ".github/workflows/blofin_live_signal_watch.yml": "8310ba4fb08944cf2f3713860fa37b63187d372cd0dc45df18cdc6ebf32438d2",
       "blofin_live_hourly.py": "55782eb5b2793b119e65e37568976f9f2083f7136986b4a17d3b7a2b5107a546",
       "blofin_live_signal_watch.py": "f327fecf7f4ca05e1bbe2cb14651a1e743a1deaae0ca9b24750230d5c9b60978",
       "blofin_ma10_ma20_live.py": "50a7eda42fc6661678ede791446c12007c20a2cb1724d6c52b73e8faef38750b",
