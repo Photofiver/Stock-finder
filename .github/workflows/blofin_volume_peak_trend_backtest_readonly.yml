@@ -1,0 +1,47 @@
+name: Volume dominance trend backtest (read-only)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_volume_peak_trend_backtest_readonly.py'
+      - '.github/workflows/blofin_volume_peak_trend_backtest_readonly.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout read-only code and state
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install public HTTP dependency
+        run: python -m pip install requests==2.32.3
+      - name: Validate script
+        run: python -m py_compile blofin_volume_peak_trend_backtest_readonly.py blofin_trendline_backtest_readonly.py
+      - name: Run public-data backtest, no LIVE credentials
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u blofin_volume_peak_trend_backtest_readonly.py
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: volume-peak-trend-backtest
+          path: volume_peak_trend_backtest_report.json
+          if-no-files-found: ignore
+          retention-days: 7
