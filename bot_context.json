@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-17T06:07:10.152126+00:00",
+  "generated_utc": "2026-10-17T06:12:33.183734+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,39 +172,46 @@
         "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-17T06:05:00+00:00",
-    "last_run_utc": "2026-10-17T06:06:28.196000+00:00",
+    "last_live_scan_utc": "2026-10-17T06:10:00+00:00",
+    "last_run_utc": "2026-10-17T06:11:50.760000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "AVAAI-USDT",
-        "rank": 13,
-        "reason": "RANK_NOT_ALLOWED: current place 13; requires 51..100",
+        "inst": "Q-USDT",
+        "rank": 2,
+        "reason": "RANK_NOT_ALLOWED: current place 2; requires 51..100",
+        "side": "LONG",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "ARC-USDT",
+        "rank": 22,
+        "reason": "RANK_NOT_ALLOWED: current place 22; requires 51..100",
+        "side": "LONG",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "SENT-USDT",
+        "rank": 27,
+        "reason": "RANK_NOT_ALLOWED: current place 27; requires 51..100",
         "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "OPG-USDT",
-        "rank": 63,
-        "reason": "STOCH_KD_SHORT_BLOCKED: K=30.00 < D=33.33; requires K>=D",
-        "side": "SHORT",
+        "inst": "TRX-USDT",
+        "rank": 81,
+        "reason": "STOCH_KD_LONG_BLOCKED: K=80.43 > D=74.12; requires K<=D",
+        "side": "LONG",
         "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
       },
       {
-        "inst": "BARD-USDT",
-        "rank": 87,
-        "reason": "STOCH_KD_SHORT_BLOCKED: K=11.11 < D=31.91; requires K>=D",
-        "side": "SHORT",
+        "inst": "NEO-USDT",
+        "rank": 97,
+        "reason": "STOCH_KD_LONG_BLOCKED: K=78.57 > D=64.29; requires K<=D",
+        "side": "LONG",
         "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "RIVER-USDT",
-        "rank": 0,
-        "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
-        "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "RANK_NOT_ALLOWED_TRY_NEXT",
+    "last_scan_status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 266,
@@ -292,7 +299,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-17T06:06:28.196000+00:00",
+    "latest_live_run_utc": "2026-10-17T06:11:50.760000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
