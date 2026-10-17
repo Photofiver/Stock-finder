@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-17T11:20:24.387413+00:00",
+  "generated_utc": "2026-10-17T11:25:01.842171+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,60 +172,60 @@
         "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-17T11:15:00+00:00",
-    "last_run_utc": "2026-10-17T11:16:09.004000+00:00",
+    "last_live_scan_utc": "2026-10-17T11:20:00+00:00",
+    "last_run_utc": "2026-10-17T11:21:00.711000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "MINA-USDT",
-        "rank": 11,
-        "reason": "RANK_NOT_ALLOWED: current place 11; requires 51..100",
+        "inst": "HANA-USDT",
+        "rank": 33,
+        "reason": "RANK_NOT_ALLOWED: current place 33; requires 51..100",
         "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "COLLECT-USDT",
-        "rank": 22,
-        "reason": "RANK_NOT_ALLOWED: current place 22; requires 51..100",
-        "side": "SHORT",
+        "inst": "CP-USDT",
+        "rank": 46,
+        "reason": "RANK_NOT_ALLOWED: current place 46; requires 51..100",
+        "side": "LONG",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "FIGHT-USDT",
-        "rank": 25,
-        "reason": "RANK_NOT_ALLOWED: current place 25; requires 51..100",
+        "inst": "SIGN-USDT",
+        "rank": null,
+        "reason": "NEAR_RESISTANCE",
+        "side": "LONG",
+        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "GENIUS-USDT",
+        "rank": 73,
+        "reason": "STOCH_KD_LONG_BLOCKED: K=71.43 > D=66.67; requires K<=D",
+        "side": "LONG",
+        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "GMX-USDT",
+        "rank": 87,
+        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-0.0064182872, current=-0.0055570328; requires current<0 and current<previous",
         "side": "SHORT",
+        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "STRK-USDT",
+        "rank": 0,
+        "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
+        "side": "LONG",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "XNY-USDT",
-        "rank": 90,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=77.50 > D=73.33; requires K<=D",
-        "side": "LONG",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "BTC-USDT",
-        "rank": 92,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=67.69 > D=60.03; requires K<=D",
-        "side": "LONG",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "UMA-USDT",
-        "rank": 97,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=93.33 > D=84.72; requires K<=D",
-        "side": "LONG",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "IOTX-USDT",
-        "rank": 100,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=100.00 > D=85.01; requires K<=D",
-        "side": "LONG",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+        "inst": "ZEREBRO-USDT",
+        "rank": 0,
+        "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT",
+    "last_scan_status": "RANK_NOT_ALLOWED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 268,
@@ -313,7 +313,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-17T11:16:09.004000+00:00",
+    "latest_live_run_utc": "2026-10-17T11:21:00.711000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
