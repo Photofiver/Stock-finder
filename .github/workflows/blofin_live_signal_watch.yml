@@ -21,7 +21,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          # Start with code, current state and append-only order-book logs.
+          # Large scan/chart archives are only needed after LIVE execution.
+          sparse-checkout: |
+            /*
+            !/*/
+            /.github/
+            /blofin_order_books/
+          sparse-checkout-cone-mode: false
 
       - name: Refresh repository state
         shell: bash
@@ -84,9 +92,18 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
+          # Never run audit rotation against a partially downloaded history.
+          # An archive download failure must not prevent saving current state.
+          ARCHIVES_READY=0
+          if git sparse-checkout add /blofin_live_scans/ /blofin_trade_charts/; then
+            ARCHIVES_READY=1
+          else
+            echo 'AUDIT_ERROR: archive restoration failed; skipping audit and preserving LIVE state'
+          fi
+
           # Read-only diagnostics run AFTER LIVE execution, never before placing orders.
           # A diagnostics/API failure must never block saving LIVE state.
-          if [ -f blofin_live_state.json ]; then
+          if [ "$ARCHIVES_READY" -eq 1 ] && [ -f blofin_live_state.json ]; then
             LIVE_SIGNAL_MINUTES=5 python blofin_live_scan_audit.py || echo 'AUDIT_ERROR: scan diagnostics failed; preserving LIVE state'
             for audit_file in blofin_live_scans/live_watch_history_5m_part*.json; do
               if [ -f "$audit_file" ]; then
@@ -112,7 +129,7 @@ jobs:
           fi
           # Preserve indicator-rich entry and exit PNGs so they can be viewed by hour.
           if [ -d blofin_trade_charts ]; then
-            git add -- blofin_trade_charts/
+            git add --sparse --ignore-removal -- blofin_trade_charts/
           fi
           # Archive full 20-level BID/ASK snapshots for accepted/rejected entries.
           if [ -d blofin_order_books ]; then
