@@ -1,0 +1,81 @@
+name: TOP200 Frozen SHORT prior-eight-day validation READ ONLY
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_top200_frozen_short_prior8_readonly.py'
+      - '.github/workflows/blofin_top200_frozen_short_prior8_readonly.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  historical_candles:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install market REST client
+        run: python -m pip install requests==2.32.3
+      - name: Retrieve unknown 1-8 October 2026 candle data for one quarter of coins
+        env:
+          RESEARCH_ASOF_UK: '2026-10-09'
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u blofin_top200_parallel_runner.py fetch ${{ matrix.shard }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frozen-short-prior8-shard-${{ matrix.shard }}
+          path: shard_${{ matrix.shard }}.json.gz
+          retention-days: 3
+          if-no-files-found: error
+
+  frozen_validation:
+    needs: historical_candles
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: frozen-short-prior8-shard-*
+          path: shards
+          merge-multiple: true
+      - name: Freeze strategy and validate on genuinely unseen earlier days
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+          PYTHONUNBUFFERED: '1'
+        run: python -u blofin_top200_frozen_short_prior8_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frozen-short-prior8-validation-report
+          path: blofin_top200_frozen_short_prior8_report.json
+          retention-days: 14
+          if-no-files-found: ignore
