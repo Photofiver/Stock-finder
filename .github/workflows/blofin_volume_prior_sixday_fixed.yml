@@ -1,0 +1,45 @@
+name: Fixed profitable volume setup - older 6d (READ ONLY)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_volume_prior_sixday_fixed.py'
+      - '.github/workflows/blofin_volume_prior_sixday_fixed.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  historical_validation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install read-only public market data package
+        run: python -m pip install requests==2.32.3
+      - name: Syntax check
+        run: python -m py_compile blofin_volume_prior_sixday_fixed.py blofin_volume_hold_until_reversal_readonly.py blofin_volume_meaningful_profit_8day.py
+      - name: Check two FIXED setups against older disjoint data
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u blofin_volume_prior_sixday_fixed.py
+      - name: Keep report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: volume-fixed-prior-6d-check
+          path: volume_prior_six_day_fixed_report.json
+          retention-days: 7
+          if-no-files-found: ignore
