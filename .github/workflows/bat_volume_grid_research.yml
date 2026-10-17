@@ -1,0 +1,42 @@
+name: BAT Volume 280 Research (READ ONLY)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - research/bat_volume_grid_readonly.py
+      - .github/workflows/bat_volume_grid_research.yml
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout research code only
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            /research/
+            /.github/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check Python syntax
+        run: python -m py_compile research/bat_volume_grid_readonly.py
+      - name: Backtest 280 parameter combinations on official BAT 5m archives
+        run: python -u research/bat_volume_grid_readonly.py
+      - name: Upload full comparison
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bat-volume-grid-280-readonly
+          path: research/bat_volume_grid_result.json
+          if-no-files-found: ignore
+          retention-days: 10
