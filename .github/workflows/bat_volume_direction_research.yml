@@ -1,0 +1,42 @@
+name: BAT Volume Direction Research (READ ONLY)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - research/bat_volume_direction_readonly.py
+      - .github/workflows/bat_volume_direction_research.yml
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout only research scripts
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            /research/
+            /.github/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate syntax
+        run: python -m py_compile research/bat_volume_direction_readonly.py
+      - name: Run LONG-only and SHORT-only optimization
+        run: python -u research/bat_volume_direction_readonly.py
+      - name: Upload research JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bat-volume-direction-280-readonly
+          path: research/bat_volume_direction_result.json
+          if-no-files-found: ignore
+          retention-days: 10
