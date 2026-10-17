@@ -18,6 +18,8 @@ jobs:
           sparse-checkout: |
             /*
             !/*/
+            /.github/
+            /blofin_order_books/
           sparse-checkout-cone-mode: false
           persist-credentials: false
       - name: Record checkout complete
@@ -49,4 +51,26 @@ jobs:
           started = time.perf_counter()
           bars = watch.wait_for_confirmed_signal_close(top, watch.expected_signal_close_ms())
           print(f"PUBLIC_CANDLES_SECONDS={time.perf_counter()-started:.3f} CONFIRMED={len(bars)}", flush=True)
+          import threading
+          import requests
+          local = threading.local()
+          def pooled_get(*args, **kwargs):
+              if not hasattr(local, "session"):
+                  local.session = requests.Session()
+              return local.session.get(*args, **kwargs)
+          watch.bot.requests.get = pooled_get
+          started = time.perf_counter()
+          bars = watch.wait_for_confirmed_signal_close(top, watch.expected_signal_close_ms())
+          print(f"POOLED_CANDLES_SECONDS={time.perf_counter()-started:.3f} CONFIRMED={len(bars)}", flush=True)
+          PY
+      - name: Restore archives after critical path and verify no tracked deletions
+        run: |
+          git sparse-checkout add /blofin_live_scans/ /blofin_trade_charts/
+          test -z "$(git ls-files --deleted)"
+          test -z "$(git status --porcelain)"
+          python - <<'PY'
+          import blofin_live_scan_audit as audit
+          p = audit.choose_history_file(5)
+          print(f"AUDIT_CURRENT_PART={p}")
+          print(f"AUDIT_EXISTING_SCANS={len(audit.load_history().get('scans', []))}")
           PY
