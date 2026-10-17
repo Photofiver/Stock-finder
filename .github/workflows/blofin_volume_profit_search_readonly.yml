@@ -1,0 +1,46 @@
+name: Volume strategy net profit search (read-only)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_volume_profit_search_readonly.py'
+      - '.github/workflows/blofin_volume_profit_search_readonly.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  research:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Sparse checkout only code and state
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependency
+        run: python -m pip install requests==2.32.3
+      - name: Syntax validation
+        run: python -m py_compile blofin_volume_profit_search_readonly.py blofin_volume_peak_trend_backtest_readonly.py blofin_trendline_backtest_readonly.py
+      - name: Execute strict out-of-sample search, no trade API keys
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u blofin_volume_profit_search_readonly.py
+      - name: Publish result artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: volume-profit-search-readonly
+          path: volume_profit_search_readonly_report.json
+          retention-days: 7
+          if-no-files-found: ignore
