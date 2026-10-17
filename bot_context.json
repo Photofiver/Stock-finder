@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-17T20:07:12.378248+00:00",
+  "generated_utc": "2026-10-17T20:12:49.133601+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,42 +172,56 @@
         "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-17T20:00:00+00:00",
-    "last_run_utc": "2026-10-17T20:02:29.704000+00:00",
+    "last_live_scan_utc": "2026-10-17T20:05:00+00:00",
+    "last_run_utc": "2026-10-17T20:07:52.397000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "ARC-USDT",
-        "rank": 5,
-        "reason": "RANK_NOT_ALLOWED: current place 5; requires 51..100",
-        "side": "LONG",
+        "inst": "AT-USDT",
+        "rank": 44,
+        "reason": "RANK_NOT_ALLOWED: current place 44; requires 51..100",
+        "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "TAKE-USDT",
-        "rank": 16,
-        "reason": "RANK_NOT_ALLOWED: current place 16; requires 51..100",
-        "side": "LONG",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "ETHFI-USDT",
-        "rank": 88,
-        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-0.00014426632, current=-5.7476066e-05; requires current<0 and current<previous",
+        "inst": "AKT-USDT",
+        "rank": 51,
+        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-0.00055059025, current=-0.00050525633; requires current<0 and current<previous",
         "side": "SHORT",
         "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
       },
       {
-        "inst": "BASED-USDT",
+        "inst": "LAB-USDT",
+        "rank": 65,
+        "reason": "STOCH_KD_LONG_BLOCKED: K=84.62 > D=61.54; requires K<=D",
+        "side": "LONG",
+        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "ETH-USDT",
+        "rank": 90,
+        "reason": "MACD_LONG_NOT_RISING_GREEN: previous=0.076186913, current=0.059931897; requires current>0 and current>previous",
+        "side": "LONG",
+        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "ETHFI-USDT",
+        "rank": 92,
+        "reason": "STOCH_KD_LONG_BLOCKED: K=95.24 > D=93.06; requires K<=D",
+        "side": "LONG",
+        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "COPPER-USDT",
+        "rank": 96,
+        "reason": "MACD_LONG_NOT_RISING_GREEN: previous=0.00019977877, current=0.00012852181; requires current>0 and current>previous",
+        "side": "LONG",
+        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "BAT-USDT",
         "rank": 0,
         "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
         "side": "LONG",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "FOLKS-USDT",
-        "rank": 0,
-        "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
-        "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       }
     ],
@@ -299,7 +313,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-17T20:02:29.704000+00:00",
+    "latest_live_run_utc": "2026-10-17T20:07:52.397000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
