@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-17T06:17:11.864189+00:00",
+  "generated_utc": "2026-10-17T06:25:45.651153+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -11,23 +11,10 @@
   ],
   "last_known_state": {
     "bankroll_start_usdt": "13.825381808195",
-    "current_bankroll_estimated_usdt": "13.112707453194998",
-    "fees_usdt": -7.06937367882,
-    "gross_realized_pnl_usdt": -7.525938442414251,
+    "current_bankroll_estimated_usdt": "13.064196473194998",
+    "fees_usdt": -7.08498465882,
+    "gross_realized_pnl_usdt": -7.558838442414251,
     "last_12_trades": [
-      {
-        "closed_utc": "2026-10-16T04:16:50.795000+00:00",
-        "exit_reason": "TIME EXIT: 10 minutes since position opened",
-        "gross_pnl_usdt": -0.0039,
-        "inst": "ZIL-USDT",
-        "net_pnl_usdt": -0.01963182,
-        "opened_utc": "2026-10-16T04:06:50.019000+00:00",
-        "order_book_confirmed": null,
-        "order_book_directional_pct": null,
-        "rank": 85,
-        "result": "LOSS",
-        "side": "LONG"
-      },
       {
         "closed_utc": "2026-10-16T04:41:43.397000+00:00",
         "exit_reason": "TIME EXIT: 10 minutes since position opened",
@@ -170,52 +157,58 @@
         "rank": 78,
         "result": "LOSS",
         "side": "LONG"
+      },
+      {
+        "closed_utc": "2026-10-17T06:25:00.612000+00:00",
+        "exit_reason": "external close",
+        "gross_pnl_usdt": -0.0329,
+        "inst": "TRB-USDT",
+        "net_pnl_usdt": -0.04851098,
+        "opened_utc": "2026-10-17T06:21:40.560000+00:00",
+        "order_book_confirmed": true,
+        "order_book_directional_pct": 83.87907132455358,
+        "rank": 52,
+        "result": "LOSS",
+        "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-17T06:15:00+00:00",
-    "last_run_utc": "2026-10-17T06:16:31.199000+00:00",
+    "last_live_scan_utc": "2026-10-17T06:20:00+00:00",
+    "last_run_utc": "2026-10-17T06:21:43.153000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "PHAROS-USDT",
-        "rank": 13,
-        "reason": "RANK_NOT_ALLOWED: current place 13; requires 51..100",
-        "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "ARX-USDT",
-        "rank": 21,
-        "reason": "RANK_NOT_ALLOWED: current place 21; requires 51..100",
+        "inst": "APEX-USDT",
+        "rank": 22,
+        "reason": "RANK_NOT_ALLOWED: current place 22; requires 51..100",
         "side": "LONG",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "CYBER-USDT",
-        "rank": 42,
-        "reason": "RANK_NOT_ALLOWED: current place 42; requires 51..100",
-        "side": "LONG",
+        "inst": "CATI-USDT",
+        "rank": 30,
+        "reason": "RANK_NOT_ALLOWED: current place 30; requires 51..100",
+        "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "BTCDOM-USDT",
-        "rank": null,
-        "reason": "ORDER_BOOK_DIRECTION_BLOCKED: BTCDOM-USDT SHORT: aligned depth 9.26% < 62.00% (20 levels)",
+        "inst": "TAKE-USDT",
+        "rank": 33,
+        "reason": "RANK_NOT_ALLOWED: current place 33; requires 51..100",
         "side": "SHORT",
-        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "PRE_ORDER_REJECTED_TRY_NEXT",
+    "last_scan_status": "OPENED",
     "lifetime_counters": {
       "flat": 0,
-      "losses": 266,
-      "total": 458,
+      "losses": 267,
+      "total": 459,
       "unverified": 4,
       "wins": 188
     },
-    "net_realized_pnl_usdt": -14.595312121234256,
+    "net_realized_pnl_usdt": -14.643823101234256,
     "open_positions": [],
     "risk_stop_triggered": false,
-    "trade_history_records": 452
+    "trade_history_records": 453
   },
   "live_strategy": {
     "additional_entry_filters": [
@@ -292,7 +285,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-17T06:16:31.199000+00:00",
+    "latest_live_run_utc": "2026-10-17T06:21:43.153000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
