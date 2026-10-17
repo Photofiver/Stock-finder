@@ -198,6 +198,10 @@ def main():
         inst=t.get("inst")
         if 51<=rank<=100 and START<=ts<END and inst and inst not in insts:
             insts.append(inst)
+    # Reproduce the EXACT original 2026-10-17 study universe (40/46).
+    # These six lacked any OHLCV in the original workflow, even if retry works now.
+    originally_missing={"COTI-USDT","AKT-USDT","MNT-USDT","BASED-USDT","RAY-USDT","TRB-USDT"}
+    insts=[inst for inst in insts if inst not in originally_missing]
     data={};errors={}
     with ThreadPoolExecutor(max_workers=5) as pool:
         futures={pool.submit(previous.fetch_8days,inst,END,START-150*FIVE):inst for inst in insts}
@@ -263,6 +267,10 @@ def main():
 
     # Predefined interpretability comparisons: same historical trades, without opening replacement trades.
     focused={
+        "ma10_slope_nonpositive":[("ma10_slope_pct","<=0")],
+        "obv_slope5_le0.5":[("obv_slope5","<=0.5")],
+        "ma_gap_nonpositive":[("ma_gap_pct","<=0")],
+        "ma20_slope_le0.03":[("ma20_slope_pct","<=0.03")],
         "SHORT":[("side","SHORT")],
         "LONG":[("side","LONG")],
         "SHORT_and_vol_le10":[("side","SHORT"),("vol_ratio","<=10")],
@@ -300,6 +308,10 @@ def main():
         details[name]=[{k:v for k,v in metrics([x for x in w if follows(x,filters)]).items() if k!="days"}
                         for w in windows]
     print("FOCUSED_FILTER_WINDOWS="+json.dumps(details,separators=(",",":")),flush=True)
+    day_details={name:metrics([x for x in selected if follows(x,filters)])["days"]
+                 for name,filters in focused.items() if name in (
+                 "ma10_slope_nonpositive","obv_slope5_le0.5","ma_gap_nonpositive","12_18_uk","SHORT")}
+    print("FOCUSED_DAYS="+json.dumps(day_details,separators=(",",":")),flush=True)
 
     print("EXIT_REASONS="+json.dumps(dict(Counter(e["reason"] for e in selected))),flush=True)
     result={"original_window_reproduced":reproducible,"expected_train_valid_holdout":expected,
