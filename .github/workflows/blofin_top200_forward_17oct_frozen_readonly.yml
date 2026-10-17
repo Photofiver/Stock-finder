@@ -1,0 +1,53 @@
+name: TOP200 Five FROZEN Strategies Oct17 Forward READ ONLY
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_top200_forward_17oct_frozen_readonly.py'
+      - '.github/workflows/blofin_top200_forward_17oct_frozen_readonly.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Load newest full market history for forward day
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39080781226
+          github-token: ${{ github.token }}
+          pattern: top200-forward-17oct-shard-*
+          merge-multiple: true
+          path: shards
+      - name: Validate code
+        run: python -m py_compile blofin_top200_forward_17oct_frozen_readonly.py
+      - name: Evaluate five PRE-FROZEN strategies Oct17 no fitting
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+          PYTHONUNBUFFERED: '1'
+        run: python -u blofin_top200_forward_17oct_frozen_readonly.py
+      - name: Archive true next-day validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blofin-top200-forward-oct17-five-strategies
+          path: blofin_top200_forward_17oct_frozen_report.json
+          retention-days: 14
+          if-no-files-found: ignore
