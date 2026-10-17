@@ -240,24 +240,24 @@ def main():
     for inst, segments in candles.items():
         records = []
         for bars in segments:
-            seen = {}
             for close_ms, strategy, side, i in signals(bars):
-                if close_ms < start_ms or close_ms >= end_ms:
+                if not(start_ms <= close_ms < end_ms):
                     continue
                 res = outcome(bars, i, side)
                 if res:
-                    entry = {"inst": inst, "at_ms": close_ms, "type":strategy,
-                             "side":side, **res}
-                    all_signals.append(entry)
-                # For actual-trade comparison, lookup the last closed bar by timestamp.
-                if close_ms >= start_ms-FIVE and close_ms < end_ms:
-                    support = None
-                    lows = [x["l"] for x in bars]
-                    pivots = [k for k in range(2, i-1)
-                              if k+2 <= i and all(lows[k] < lows[k+d] for d in (-2,-1,1,2))]
-                    support = rise_support(bars,i,pivots)
-                    seen[close_ms] = (bars[i],support)
-            records.extend(seen.items())
+                    all_signals.append({"inst": inst, "at_ms": close_ms,
+                                        "type":strategy, "side":side, **res})
+            # Every confirmed candle is available for comparison to actual
+            # entries, including candles without a fresh trendline signal.
+            lows = [x["l"] for x in bars]
+            pivots = []
+            for i in range(35, len(bars)):
+                k = i - PIVOT_CONFIRM_BARS
+                if k >= 2 and all(lows[k] < lows[k+d] for d in (-2,-1,1,2)):
+                    pivots.append(k)
+                close_ms = bars[i]["ts"] + FIVE
+                if start_ms-FIVE <= close_ms < end_ms:
+                    records.append((close_ms, (bars[i], rise_support(bars,i,pivots))))
         map_by_inst[inst]=dict(records)
 
     all_signals.sort(key=lambda z:(z["at_ms"],z["inst"],z["type"]))
