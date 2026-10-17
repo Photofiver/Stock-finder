@@ -1,0 +1,80 @@
+name: EARLY last24 full TOP200 sharded (READ ONLY)
+
+on:
+  push:
+    paths:
+      - 'blofin_early_last24_shards_readonly.py'
+      - '.github/workflows/blofin_early_last24_shards_readonly.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  candles:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - run: python -m py_compile blofin_early_last24_shards_readonly.py
+      - name: Fetch public history for quarter universe
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u blofin_early_last24_shards_readonly.py fetch ${{ matrix.shard }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: early-candle-shard-${{ matrix.shard }}
+          path: early_shard_${{ matrix.shard }}.json.gz
+          retention-days: 5
+
+  evaluate:
+    needs: candles
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: early-candle-shard-*
+          merge-multiple: true
+          path: shards
+      - name: Merge all 390 histories and count historical EARLY TOP200
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u blofin_early_last24_shards_readonly.py analyze
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: early-complete-20261017
+          path: blofin_early_complete_top200_20261017.json
+          retention-days: 10
+          if-no-files-found: ignore
