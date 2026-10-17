@@ -1,0 +1,44 @@
+name: PULLBACK winners diagnostic READ ONLY
+
+on:
+  push:
+    paths:
+      - 'research_pullback_winners_diagnostic_readonly.py'
+      - '.github/workflows/pullback_winners_diagnostic_readonly.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install public data dependency
+        run: python -m pip install requests==2.32.3
+      - name: Static syntax check
+        run: python -m py_compile research_pullback_winners_diagnostic_readonly.py blofin_volume_hold_until_reversal_readonly.py blofin_volume_meaningful_profit_8day.py blofin_volume_peak_trend_backtest_readonly.py
+      - name: Research historical PULLBACK only - no broker credentials
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u research_pullback_winners_diagnostic_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pullback-winners-diagnostic-report
+          path: pullback_winners_diagnostic_report.json
+          retention-days: 7
+          if-no-files-found: ignore
