@@ -1,0 +1,26 @@
+name: One-off AIA 0010 Outcome READ ONLY
+
+on:
+  push:
+    paths:
+      - 'research_aia_0010_outcome_readonly.py'
+      - '.github/workflows/research_aia_0010_outcome_readonly.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - name: Verify AIA 00:10 UK LONG exit status on public 5m candles
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u research_aia_0010_outcome_readonly.py
