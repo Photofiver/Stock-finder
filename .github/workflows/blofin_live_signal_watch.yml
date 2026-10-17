@@ -35,33 +35,10 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Align prepared scheduler to 5m candle close
-        if: github.event_name == 'schedule'
-        shell: bash
-        run: |
-          set -euo pipefail
-          MIN=$(date -u +%M)
-          SEC=$(date -u +%S)
-          MIN=$((10#$MIN))
-          SEC=$((10#$SEC))
-          REM=$((MIN % 5))
-          WAIT=0
-
-          # Scheduled at :03/:08/... to prepare checkout and Python before close.
-          # Run at the next 5m boundary +2s when ready early. If GitHub
-          # starts late, run immediately and keep candle/quote freshness gates.
-          if [ "$REM" -eq 3 ] || [ "$REM" -eq 4 ]; then
-            WAIT=$(((5 - REM) * 60 - SEC + 2))
-          elif [ "$REM" -eq 0 ] && [ "$SEC" -lt 2 ]; then
-            WAIT=$((2 - SEC))
-          fi
-
-          if [ "$WAIT" -gt 0 ]; then
-            echo "Waiting ${WAIT}s for 5m candle close"
-            sleep "$WAIT"
-          else
-            echo "Scheduled run started after boundary; checking immediately"
-          fi
+      - name: Wait for BloFin-confirmed 5m candle (public WebSocket)
+        # No secrets or trading orders in this step; WebSocket confirmation
+        # only wakes the existing scanner, which rechecks candles via REST.
+        run: python blofin_ws_close_trigger.py
 
       - name: Scan 5m LIVE signal and execute AUTO after revalidation
         env:
