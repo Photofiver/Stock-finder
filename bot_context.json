@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-17T05:17:29.665056+00:00",
+  "generated_utc": "2026-10-17T05:22:44.613162+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,39 +172,74 @@
         "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-17T05:15:00+00:00",
-    "last_run_utc": "2026-10-17T05:16:50.424000+00:00",
+    "last_live_scan_utc": "2026-10-17T05:20:00+00:00",
+    "last_run_utc": "2026-10-17T05:22:05.119000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "AZTEC-USDT",
-        "rank": 42,
-        "reason": "RANK_NOT_ALLOWED: current place 42; requires 51..100",
+        "inst": "BEAM-USDT",
+        "rank": 12,
+        "reason": "RANK_NOT_ALLOWED: current place 12; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "ARX-USDT",
+        "rank": 19,
+        "reason": "RANK_NOT_ALLOWED: current place 19; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "GWEI-USDT",
+        "rank": 31,
+        "reason": "RANK_NOT_ALLOWED: current place 31; requires 51..100",
         "side": "LONG",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "FLOW-USDT",
-        "rank": 52,
-        "reason": "MACD_LONG_NOT_RISING_GREEN: previous=-1.4048658e-06, current=-1.3800297e-06; requires current>0 and current>previous",
-        "side": "LONG",
-        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
+        "inst": "ACU-USDT",
+        "rank": 37,
+        "reason": "RANK_NOT_ALLOWED: current place 37; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "ARKM-USDT",
+        "inst": "CNPY-USDT",
+        "rank": 44,
+        "reason": "RANK_NOT_ALLOWED: current place 44; requires 51..100",
+        "side": "LONG",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "PORTAL-USDT",
         "rank": 83,
-        "reason": "MACD_LONG_NOT_RISING_GREEN: previous=-7.875534e-06, current=-1.5953186e-05; requires current>0 and current>previous",
-        "side": "LONG",
-        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "HEMI-USDT",
-        "rank": 85,
-        "reason": "STOCH_KD_LONG_BLOCKED: K=96.00 > D=90.67; requires K<=D",
+        "reason": "STOCH_KD_LONG_BLOCKED: K=100.00 > D=87.50; requires K<=D",
         "side": "LONG",
         "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "NIL-USDT",
+        "rank": 0,
+        "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "RIVER-USDT",
+        "rank": 0,
+        "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
+        "side": "LONG",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "STRK-USDT",
+        "rank": 0,
+        "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT",
+    "last_scan_status": "RANK_NOT_ALLOWED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 266,
@@ -292,7 +327,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-17T05:16:50.424000+00:00",
+    "latest_live_run_utc": "2026-10-17T05:22:05.119000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
