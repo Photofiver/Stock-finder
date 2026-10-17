@@ -1,0 +1,52 @@
+name: TOP200 Volume Exhaustion and Reversal Research READ ONLY
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_top200_new_volume_reversals_readonly.py'
+      - '.github/workflows/blofin_top200_new_volume_reversals_readonly.yml'
+
+permissions:
+  contents: read
+  actions: read
+jobs:
+  research:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reuse real BloFin 5m histories from full 390 market dataset
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39074940517
+          github-token: ${{ github.token }}
+          pattern: top200-candle-shard-*
+          merge-multiple: true
+          path: shards
+      - name: Validate standalone read-only Python script
+        run: python -m py_compile blofin_top200_new_volume_reversals_readonly.py
+      - name: Simulate causally one repeated setup in each UK day window
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+          PYTHONUNBUFFERED: '1'
+        run: python -u blofin_top200_new_volume_reversals_readonly.py
+      - name: Upload all selected candidate results including untouched days
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: top200-new-volume-reversals-test
+          path: blofin_top200_new_volume_reversals_report.json
+          if-no-files-found: ignore
+          retention-days: 14
