@@ -1,0 +1,47 @@
+name: No SL No TP volume trend backtest (READ ONLY)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_volume_no_sl_no_tp_readonly.py'
+      - '.github/workflows/blofin_volume_no_sl_no_tp_readonly.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  research:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout root scripts and read-only historical state
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Prepare Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install public data dependency
+        run: python -m pip install requests==2.32.3
+      - name: Validate script syntax
+        run: python -m py_compile blofin_volume_no_sl_no_tp_readonly.py blofin_volume_meaningful_profit_8day.py blofin_volume_peak_trend_backtest_readonly.py
+      - name: Run no-stops backtest with public market data ONLY
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u blofin_volume_no_sl_no_tp_readonly.py
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: volume-no-sl-no-tp-14day
+          path: volume_no_sl_no_tp_report.json
+          retention-days: 7
+          if-no-files-found: ignore
