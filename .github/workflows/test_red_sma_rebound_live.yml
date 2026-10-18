@@ -8,6 +8,7 @@ on:
       - 'blofin_fast_scan_events_writer.py'
       - 'test_blofin_fast_scan_events_writer.py'
       - 'bot_context_builder.py'
+      - 'test_red_sma_context_builder.py'
       - 'blofin_live_scan_audit.py'
       - '.github/workflows/test_red_sma_rebound_live.yml'
   workflow_dispatch:
@@ -30,6 +31,11 @@ jobs:
             /blofin_fast_scan_events_writer.py
             /test_blofin_fast_scan_events_writer.py
             /bot_context_builder.py
+            /test_red_sma_context_builder.py
+            /blofin_order_book.py
+            /blofin_ma10_ma20_live.py
+            /blofin_support_resistance.py
+            /.github/workflows/blofin_live_signal_watch.yml
             /blofin_live_scan_audit.py
             /blofin_live_hourly.py
             /blofin_live_signal_watch.py
@@ -53,4 +59,4 @@ jobs:
         run: |
           python -m py_compile blofin_red_sma_rebound_live.py blofin_live_hourly.py blofin_live_signal_watch.py bot_context_builder.py blofin_live_scan_audit.py blofin_fast_scan_events_writer.py test_red_sma_rebound_live.py
           python -c 'import blofin_live_signal_watch as w; import blofin_red_sma_rebound_live as r; assert w.bot.ENTRY_STRATEGY == "RED_SMA_REBOUND"; assert w.bot.TOP_N == 200; assert w.bot.NEAREST_VOLUME is False; assert w.bot.MAX_NOTIONAL_USDT == 25; print("LIVE_IMPORT_SAFE_TO_ENABLE", r.STRATEGY, w.bot.TOP_N)'
-          python -m unittest -v test_red_sma_rebound_live.py test_blofin_fast_scan_events_writer.py
+          python -m unittest -v test_red_sma_rebound_live.py test_blofin_fast_scan_events_writer.py test_red_sma_context_builder.py
