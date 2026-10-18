@@ -8,8 +8,8 @@ approximation of the research's candle-to-candle rolling 24h gain ranking.
 
 Cost model used in RESEARCH was 0.22% round trip; LIVE execution uses
 exchange fees and actual market spreads and is not guaranteed to match.
-Never open >20 USDT notional; require >=25 USDT FREE before opening,
-1x isolated, existing 10%-of-bankroll hard stop, one account position total.
+Never open >20 USDT notional; target starting capital 25 USDT with a
+0.50 USDT per-order available buffer, 1x isolated, existing 10% hard stop, one position.
 Native broker TP+SL protects between scans; time exit checked at each 5m
 scheduled run (can be delayed by GitHub Actions).
 Old positions are NEVER modified to the new TP/SL.
@@ -21,7 +21,9 @@ from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 STRATEGY = "RED_02_06_THEN_RED_04_08_SMA10_MINUS2_LONG_V1"
 HOLD_POLICY = "HOLD_60M"
 NOTIONAL_USDT = Decimal("20")
-MIN_FREE_USDT = Decimal("25")
+MIN_FREE_USDT = Decimal("20.50")
+MIN_TRADE_NOTIONAL_USDT = Decimal("10")
+TARGET_INITIAL_CAPITAL_USDT = Decimal("25")
 TP_PCT = Decimal("0.015")
 SL_PCT = Decimal("0.01")
 HOLD_MS = 60 * 60 * 1000
@@ -108,14 +110,15 @@ def open_long(bot, state, signal, rank, instruments):
     # Do not silently replace a smaller real balance with an invented balance.
     available = bot.get_available_usdt()
     bankroll = bot.current_live_bankroll(state)
-    if available < MIN_FREE_USDT or bankroll < NOTIONAL_USDT:
+    if available < MIN_FREE_USDT or bankroll < MIN_TRADE_NOTIONAL_USDT:
         state["red_sma_last_block"] = {
             "reason": "INSUFFICIENT_CAPITAL",
             "required_available_usdt": str(MIN_FREE_USDT),
+            "target_initial_capital_usdt": str(TARGET_INITIAL_CAPITAL_USDT),
             "available_usdt": bot.clean_decimal(available),
             "bankroll_usdt": bot.clean_decimal(bankroll),
         }
-        print(f"{STRATEGY}: need >=25 free USDT and >=20 bankroll; "
+        print(f"{STRATEGY}: target starting capital 25; need >=20.50 available and >=10 bankroll; "
               f"available={available} bankroll={bankroll}")
         return False
     if bot.MAX_NOTIONAL_USDT < NOTIONAL_USDT:
@@ -127,8 +130,13 @@ def open_long(bot, state, signal, rank, instruments):
     quote = bot.checked_preorder_quote(
         inst, "LONG", signal["close"], enforce_adverse_gap=True,
     )
+    # Nominal target 20 USDT. Reduce safely when existing bankroll is lower;
+    # do not borrow or reset past loss limits to force a 20 USDT trade.
+    effective_cap = min(NOTIONAL_USDT, bankroll, available - Decimal("0.50"))
+    if effective_cap < MIN_TRADE_NOTIONAL_USDT:
+        return False
     sized = bot.size_for_notional(bot.d(quote["expected_fill"]),
-                                  instruments[inst], NOTIONAL_USDT)
+                                  instruments[inst], effective_cap)
     if not sized:
         print(f"{STRATEGY}: {inst} contract min/step incompatible with 20 USDT")
         return False
@@ -187,7 +195,7 @@ def open_long(bot, state, signal, rank, instruments):
         "code_commit": bot.CODE_COMMIT,
         "risk_profile": "ONE_POSITION_1X_TP15_SL1_TIME60",
         "protection_status": "BROKER_TPSL_PENDING",
-        "allocation_label": "25 USDT capital, 20 USDT 1x fixed notional",
+        "allocation_label": f"25 USDT reference capital; 20 USDT 1x target, actual notional <= {effective_cap}",
     }
     bot.get_tracked_positions(state)[inst] = pos
     state["red_sma_order_attempt"]["status"] = "ACCEPTED_BROKER"
