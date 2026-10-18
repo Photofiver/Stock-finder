@@ -3,8 +3,8 @@
 LONG: qualified GREEN after qualified RED, green volume > prior red.
 SHORT: qualified RED after qualified GREEN, red volume > prior green.
 Qualified means each candle volume <= its own prior 20-bar mean.
-Exit on qualified opposite candle volume > most recent qualified
-same-side volume, order placed at next 5m opening scan.
+Exit on any CLOSED opposite-color candle volume > the OPENING signal
+candle volume, WITHOUT a volume-average filter; next 5m scan.
 
 No BTC/price/DI/3-4x filters, no broker TP or SL for NEW positions.
 Existing legacy red-volume LONG positions retain their original exit.
@@ -109,22 +109,35 @@ def entry_signal(bot, bars, expected_close_ms):
 
 
 def exit_transition(pos, bars, expected_close_ms):
-    """Volume-only exit for LONG and SHORT, newest qualified same-side volume.
-    Closed green > last qualified red closes SHORT; vice versa LONG.
+    """Close on first COMPLETED opposite-colour 5m candle with volume
+    STRICTLY GREATER than the volume of the candle that OPENED the trade.
+
+    New strategies: MA20 is an ENTRY filter ONLY. EXIT does not consult MA20,
+    does not update reference volume while a trade is open, and does not
+    depend on later same-side candles. Works for existing tracked shorts/longs
+    created under the same strategy, using their saved signal snapshot.
     """
-    ts=int(expected_close_ms)-FIVE
-    rows=_by_ts(bars,int(expected_close_ms))
-    current=rows.get(ts)
-    same=float(pos.get("last_same_volume") or pos.get("signal_volume") or 0)
-    if not current or not _qualified(rows,ts):
-        return False,same
-    o,c,v=current[0],current[3],current[4]
-    side=str(pos.get("side") or "")
-    if (side=="LONG" and c>o) or (side=="SHORT" and c<o):
-        return False,v
-    if ((side=="LONG" and c<o) or (side=="SHORT" and c>o)) and v>same:
-        return True,same
-    return False,same
+    ts = int(expected_close_ms) - FIVE
+    rows = _by_ts(bars, int(expected_close_ms))
+    current = rows.get(ts)
+    try:
+        opening_volume = float(
+            pos.get("signal_volume")
+            or (pos.get("signal_snapshot") or {}).get("signal_volume")
+            or 0
+        )
+    except (ValueError, TypeError):
+        opening_volume = 0
+    if current is None or not math.isfinite(opening_volume) or opening_volume <= 0:
+        # Fail closed on missing entry candle's volume: never invent a baseline.
+        return False, opening_volume
+    side = str(pos.get("side") or "")
+    o, c, v = current[0], current[3], current[4]
+    if side == "LONG" and c < o and v > opening_volume:
+        return True, opening_volume
+    if side == "SHORT" and c > o and v > opening_volume:
+        return True, opening_volume
+    return False, opening_volume
 
 
 def legacy_exit_transition(pos, bars, expected_close_ms):
@@ -270,7 +283,7 @@ def _open_one(bot, state, sig, instruments):
     bot.notify(
         f"OPEN {side} {inst} | rank {sig['rank']}/200 | vol ratio {sig['volume_ratio'] or 0:.2f}x "
         f"| 1x isolated, notional {pos['notional_usdt']} USDT | NO TP/SL "
-        "| exit: opposite qualified 5m volume > last qualified same colour.",
+        "| EXIT: opposite CLOSED 5m volume > ENTRY candle volume; MA20 not used.",
         "BloFin LIVE both sides volume flip",
         attachment_path=pos.get("entry_chart"),
     )
@@ -337,7 +350,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                 bot._run_for_tracked_position(
                     state,inst,bot.close_tracked_position,
                     ("LEGACY VOLUME: GREEN vol > last RED" if legacy else
-                     "VOLUME FLIP: opposite colour vol > last same colour"))
+                     "VOLUME EXIT: opposite candle vol > opening signal candle vol"))
                 if inst in bot.get_tracked_positions(state):
                     bot.get_tracked_positions(state)[inst]["exit_pending"]=True
                 scan["exits"].append(inst)
