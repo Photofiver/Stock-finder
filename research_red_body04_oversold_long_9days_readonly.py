@@ -332,6 +332,85 @@ def main():
                 "serial_validation":serial(grab("validation")),
                 "serial_holdout":serial(grab("holdout"))}
         output.append(record)
+    # Lock the previously selected positive in both train and validation
+    # candidate (ranked prior to opening any holdout). Count one 20 USDT
+    # global position across ALL days without resetting at phase boundaries.
+    chosen_filters=("BODY_0P4_0P8","DIST10_LE_MINUS2")
+    chosen_ids=set()
+    for part in ("train","validation","holdout"):
+        chosen_ids.update(feature_set[chosen_filters[0]][part] & feature_set[chosen_filters[1]][part])
+    chosen_signals=sorted((cand[i] for i in chosen_ids),
+                          key=lambda e:(e["entry"],e["rank"],e["inst"]))
+    selected_trades=[]
+    busy=START
+    for ev in chosen_signals:
+        if ev["entry"]>=busy:
+            selected_trades.append(ev)
+            busy=ev["exit"]
+    day_output={}
+    coin_summary=defaultdict(lambda:{"entries":0,"net_pct_sum":0.0,"tp":0,"sl":0,"time":0})
+    dates=sorted(set(datetime.fromtimestamp(k/1000,UK).date().isoformat()
+                     for k in range(START,END,FIVE)))
+    byday=defaultdict(list)
+    for ev in selected_trades:
+        byday[ev["day"]].append(ev)
+        c=coin_summary[ev["inst"]]
+        c["entries"]+=1
+        c["net_pct_sum"]+=ev["ret"]
+        c[ev["reason"].lower()]+=1
+    for day in dates:
+        candidates=byday[day]
+        m=metric(candidates)
+        day_output[day]={**m,
+           "net_usdt":round(sum(ev["ret"] for ev in candidates)*NOTIONAL/100,4),
+           "pct_of_25usdt_capital":round(sum(ev["ret"] for ev in candidates)*NOTIONAL/25,4),
+           "date_uk":day}
+    total_net=sum(ev["ret"] for ev in selected_trades)
+    running=25.0;peak=25.0;maxdd=0.0
+    for ev in selected_trades:
+        running+=ev["ret"]*NOTIONAL/100
+        peak=max(peak,running)
+        maxdd=max(maxdd,peak-running)
+    selected_full={
+        "setup":"LONG after CLOSED 5m RED candle body >=0.4% and <0.8% (inclusive lower), with signal candle CLOSE >=2% BELOW SMA10 (SMA10 includes the just-closed signal candle). Confirmed next 5m OPEN entry. TP+1.5% SL-1% 60min max, conservative SL-first.",
+        "selection_procedure":"Selected before holdout from 204 profitable raw-signal combinations on first 7 UK days; this candidate additionally had serial profit positive in both train and validation.",
+        "signals_total":len(chosen_signals),
+        "global_nonoverlap_trade_count":len(selected_trades),
+        "global_result":metric(selected_trades),
+        "global_net_USDT":round(total_net*NOTIONAL/100,4),
+        "net_pct_initial_25usdt":round(total_net*NOTIONAL/25,4),
+        "max_closed_trade_drawdown_usdt":round(maxdd,4),
+        "max_closed_trade_drawdown_pct_initial_capital":round(maxdd/25*100,4),
+        "positive_days":sum(1 for d in day_output.values() if d["net_usdt"]>0),
+        "negative_days":sum(1 for d in day_output.values() if d["net_usdt"]<0),
+        "zero_entry_days":sum(1 for d in day_output.values() if d["n"]==0),
+        "days_at_least_3pct_of_25usdt":sum(1 for d in day_output.values() if d["pct_of_25usdt_capital"]>=3),
+        "daily":day_output,
+        "net_after_higher_roundtrip_costs":{
+           str(cost):round(sum(ev["ret"]-(cost-COST) for ev in selected_trades)*NOTIONAL/100,4)
+           for cost in (.22,.32,.42,.62)
+        },
+        "top_five_coins_by_net_usdt":[
+            {"coin":inst,"entries":x["entries"],"tp":x["tp"],"sl":x["sl"],
+             "net_usdt":round(x["net_pct_sum"]*.2,4)}
+            for inst,x in sorted(coin_summary.items(),
+                                key=lambda t:t[1]["net_pct_sum"],reverse=True)[:5]],
+        "worst_five_coins_by_net_usdt":[
+            {"coin":inst,"entries":x["entries"],"tp":x["tp"],"sl":x["sl"],
+             "net_usdt":round(x["net_pct_sum"]*.2,4)}
+            for inst,x in sorted(coin_summary.items(),
+                                key=lambda t:t[1]["net_pct_sum"])[:5]],
+        "phase_counts":{
+           part:metric([ev for ev in selected_trades if ev["part"]==part])
+           for part in ("train","validation","holdout")
+        },
+        "note":"Daily trades allocated by entry day even when 60m trade closes shortly after midnight. Pnl computed from actual historical confirmed OHLC 5m, not proof of fills, funding, liquidations, orderbook depth, exchange spread or future performance. Drawdown measured on closed-trade equity only, not intrabar.",
+        "all_global_positions":[
+           {"coin":e["inst"],"entry_uk":when(e["entry"]),
+            "exit_uk":when(e["exit"]),"side":"LONG","rank":e["rank"],
+            "reason":e["reason"],"net_pct":round(e["ret"],5)}
+           for e in selected_trades]
+    }
     # Also assess explicit complementary hypothesis (strong move reversal).
     report={
       "period_uk":[when(START),when(END)],
@@ -346,12 +425,14 @@ def main():
        for p,inds in per.items()},
       "rules_tested":len(filters)+len(filters)*(len(filters)-1)//2,
       "rules_positive_train_and_validation":len(best),
-      "candidate_list":output
+      "candidate_list":output,
+      "locked_candidate_serial_complete":selected_full
     }
     Path("blofin_red_body04_oversold_reversal_research.json").write_text(json.dumps(report,indent=2),encoding="utf-8")
     print("FINAL_COUNT="+json.dumps({k:v for k,v in report.items() if k not in ("candidate_list","unfiltered")},separators=(",",":")),flush=True)
     for p in ["train","validation","holdout"]:
         print("BASELINE_"+p.upper()+"="+json.dumps(report["unfiltered"][p],separators=(",",":")),flush=True)
     print("WINNING_RULES="+json.dumps(output,separators=(",",":")),flush=True)
+    print("LOCKED_CANDIDATE_DAILY="+json.dumps({k:v for k,v in selected_full.items() if k!="all_global_positions"},separators=(",",":")),flush=True)
 
 if __name__=="__main__":main()
