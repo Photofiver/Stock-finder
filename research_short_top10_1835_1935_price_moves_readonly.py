@@ -19,14 +19,14 @@ START=int(datetime.fromisoformat(DAY+"T18:35:00").replace(tzinfo=UK).timestamp()
 END=int(datetime.fromisoformat(DAY+"T19:35:00").replace(tzinfo=UK).timestamp()*1000)
 def get(inst):
     rows,pages=api.candles(inst,END+FIVE,START-FIVE)
-    a=rows.get(START);z=rows.get(END)
-    if not a or not z:return {"coin":inst,"error":"Missing exact candle open"}
-    # SHORT from first open to last open, 60 minutes, ideal mid-price fills
+    a=rows.get(START);z=rows.get(END-FIVE)
+    if not a or not z:return {"coin":inst,"error":"Missing confirmed 5m close"}
+    # SHORT from first open to last close, 60 minutes, ideal mid-price fills
     # avoid incorrect approximation using reciprocal (correct short PnL is
     # (entry_price-exit_price)/entry_price)
-    short_gross=100*(a[0]-z[0])/a[0]
+    short_gross=100*(a[0]-z[3])/a[0]
     long_gross=-short_gross
-    return {"coin":inst,"start_open":a[0],"end_open":z[0],
+    return {"coin":inst,"start_open":a[0],"end_close":z[3],
        "hourly_price_change_pct":round(long_gross,6),
        "hypothetical_short_gross_pct":round(short_gross,6),
        "hypothetical_short_net_fee_0p12_pct":round(short_gross-0.12,6),
@@ -43,7 +43,7 @@ def main():
     rows=[out[x] for x in COINS]
     if any("error" in x for x in rows):raise RuntimeError("Some candles unavailable: "+json.dumps(rows))
     summary={"range_uk":[DAY+" 18:35",DAY+" 19:35"],"fixed_top10_from_19_39_uk":COINS,
-         "method":"Assume SHORT at exact open of 18:35 5m candle and close at exact open of 19:35 5m candle; these are not actual bot entries.",
+         "method":"Assume SHORT at exact open of 18:35 5m candle and close at exact close of 19:30 5m candle (19:35 time); these are not actual bot entries.",
          "fees_roundtrip_pct":0.12,
          "profit_after_fees":[x for x in rows if x["short_outcome_after_fee"]=="PROFIT"],
          "loss_after_fees":[x for x in rows if x["short_outcome_after_fee"]=="LOSS"],
