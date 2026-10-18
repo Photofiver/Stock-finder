@@ -1,0 +1,51 @@
+name: EARLY before AIA 2310-0010 research READ ONLY
+
+on:
+  push:
+    paths:
+      - 'research_early_hour_before_aia_readonly.py'
+      - '.github/workflows/research_early_hour_before_aia_readonly.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - name: Reuse cached real 390-coin candles from hourly test
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39080889854
+          github-token: ${{ github.token }}
+          pattern: early-hour-shard-*
+          merge-multiple: true
+          path: shards
+      - name: Count entry signals and executable sequential trades from prior hour
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u research_early_hour_before_aia_readonly.py
+      - name: Store result for audit
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: early-before-aia-last-hour
+          path: blofin_early_hour_before_aia_report.json
+          retention-days: 7
+          if-no-files-found: ignore
