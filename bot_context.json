@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-18T00:56:17.652792+00:00",
+  "generated_utc": "2026-10-18T01:02:21.712887+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,53 +172,60 @@
         "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-18T00:50:00+00:00",
-    "last_run_utc": "2026-10-18T00:51:30.711000+00:00",
+    "last_live_scan_utc": "2026-10-18T00:55:00+00:00",
+    "last_run_utc": "2026-10-18T00:56:49.514000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "PROM-USDT",
-        "rank": 16,
-        "reason": "RANK_NOT_ALLOWED: current place 16; requires 51..100",
+        "inst": "DOS-USDT",
+        "rank": 48,
+        "reason": "RANK_NOT_ALLOWED: current place 48; requires 51..100",
         "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "CAP-USDT",
-        "rank": 19,
-        "reason": "RANK_NOT_ALLOWED: current place 19; requires 51..100",
-        "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "GRAM-USDT",
-        "rank": 29,
-        "reason": "RANK_NOT_ALLOWED: current place 29; requires 51..100",
-        "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "XPT-USDT",
-        "rank": 46,
-        "reason": "RANK_NOT_ALLOWED: current place 46; requires 51..100",
-        "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "TRX-USDT",
+        "inst": "CHILLGUY-USDT",
         "rank": 62,
-        "reason": "STOCH_KD_SHORT_BLOCKED: K=61.29 < D=77.42; requires K>=D",
+        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-1.0058055e-05, current=-9.2631159e-06; requires current<0 and current<previous",
         "side": "SHORT",
+        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "1000LUNC-USDT",
+        "rank": 66,
+        "reason": "STOCH_KD_LONG_BLOCKED: K=77.14 > D=54.29; requires K<=D",
+        "side": "LONG",
         "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
       },
       {
-        "inst": "LIGHT-USDT",
-        "rank": null,
-        "reason": "NEAR_SUPPORT",
+        "inst": "TRX-USDT",
+        "rank": 67,
+        "reason": "MACD_LONG_NOT_RISING_GREEN: previous=1.1681551e-05, current=4.4071774e-06; requires current>0 and current>previous",
+        "side": "LONG",
+        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "TAC-USDT",
+        "rank": 81,
+        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=3.4195837e-08, current=1.0584709e-07; requires current<0 and current<previous",
         "side": "SHORT",
-        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
+        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "MANA-USDT",
+        "rank": 92,
+        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-1.6613274e-05, current=-9.5347686e-06; requires current<0 and current<previous",
+        "side": "SHORT",
+        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "HNT-USDT",
+        "rank": 99,
+        "reason": "STOCH_KD_SHORT_BLOCKED: K=2.78 < D=10.04; requires K>=D",
+        "side": "SHORT",
+        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "SR_ENTRY_BLOCKED_TRY_NEXT",
+    "last_scan_status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 268,
@@ -306,7 +313,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-18T00:51:30.711000+00:00",
+    "latest_live_run_utc": "2026-10-18T00:56:49.514000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
