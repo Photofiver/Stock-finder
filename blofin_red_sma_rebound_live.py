@@ -110,7 +110,7 @@ def open_long(bot, state, signal, rank, instruments):
     # Do not silently replace a smaller real balance with an invented balance.
     available = bot.get_available_usdt()
     bankroll = bot.current_live_bankroll(state)
-    if available < MIN_FREE_USDT or bankroll < MIN_TRADE_NOTIONAL_USDT:
+    if available < MIN_FREE_USDT or bankroll < NOTIONAL_USDT:
         state["red_sma_last_block"] = {
             "reason": "INSUFFICIENT_CAPITAL",
             "required_available_usdt": str(MIN_FREE_USDT),
@@ -118,7 +118,7 @@ def open_long(bot, state, signal, rank, instruments):
             "available_usdt": bot.clean_decimal(available),
             "bankroll_usdt": bot.clean_decimal(bankroll),
         }
-        print(f"{STRATEGY}: target starting capital 25; need >=20.50 available and >=10 bankroll; "
+        print(f"{STRATEGY}: target starting capital 25; need >=20.50 available and >=20 bankroll; "
               f"available={available} bankroll={bankroll}")
         return False
     if bot.MAX_NOTIONAL_USDT < NOTIONAL_USDT:
@@ -130,8 +130,8 @@ def open_long(bot, state, signal, rank, instruments):
     quote = bot.checked_preorder_quote(
         inst, "LONG", signal["close"], enforce_adverse_gap=True,
     )
-    # Nominal target 20 USDT. Reduce safely when existing bankroll is lower;
-    # do not borrow or reset past loss limits to force a 20 USDT trade.
+    # Nominal target 20 USDT; do not borrow or reset prior drawdown
+    # limits to claim the 25 USDT bankroll used by the backtest.
     effective_cap = min(NOTIONAL_USDT, bankroll, available - Decimal("0.50"))
     if effective_cap < MIN_TRADE_NOTIONAL_USDT:
         return False
