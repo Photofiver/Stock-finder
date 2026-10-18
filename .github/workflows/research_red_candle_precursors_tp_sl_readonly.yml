@@ -1,0 +1,74 @@
+name: Find what precedes red SMA10 reversal LONG TP (READ ONLY)
+
+on:
+  push:
+    paths:
+      - 'research_red_candle_precursors_tp_sl_readonly.py'
+      - '.github/workflows/research_red_candle_precursors_tp_sl_readonly.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Load 390 BloFin 8-day history
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39074940517
+          github-token: ${{ github.token }}
+          pattern: top200-candle-shard-*
+          merge-multiple: true
+          path: history
+      - name: Load 390 BloFin next 24h history
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39080889854
+          github-token: ${{ github.token }}
+          pattern: early-hour-shard-*
+          merge-multiple: true
+          path: older
+      - name: Load 390 BloFin 02:55 UK extension
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39088649866
+          github-token: ${{ github.token }}
+          pattern: rsi12-refresh-*
+          merge-multiple: true
+          path: recent
+      - name: Load 390 BloFin 04:30 UK extension
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39094370484
+          github-token: ${{ github.token }}
+          pattern: 48h-candle-final-*
+          merge-multiple: true
+          path: fresh
+      - name: Compare red candle previous 1 to 6 bars TP vs SL before trading, test holdout
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u research_red_candle_precursors_tp_sl_readonly.py
+      - name: Full 9day candle-filter report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: red-sma10-prior-6candles-TP-vs-SL
+          path: research_red_candle_prior_6bars_tp_vs_sl.json
+          retention-days: 7
+          if-no-files-found: ignore
