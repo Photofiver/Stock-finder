@@ -1,0 +1,39 @@
+name: Compare 3 winner vs 7 loser TOP10 pre-entry features (READ ONLY)
+on:
+  push:
+    paths:
+      - 'research_short_top10_3w7l_exante_comparison_readonly.py'
+      - '.github/workflows/research_short_top10_3w7l_exante_comparison_readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            research_short_top10_3w7l_exante_comparison_readonly.py
+            short37_extra_indicators_readonly.py
+            short60_volume_mean10_24hour_readonly.py
+            blofin_top200_repeat_setup_research.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - name: Compare historical 18:30 indicators of three winners and seven losers
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u research_short_top10_3w7l_exante_comparison_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: top10-hour-three-win-seven-loss-prior-indicators
+          path: research_short_top10_3wins_7losses_exante_comparison.json
+          retention-days: 14
+          if-no-files-found: ignore
