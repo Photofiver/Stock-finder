@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-18T05:32:55.621137+00:00",
+  "generated_utc": "2026-10-18T09:52:58.236220+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,8 +172,10 @@
         "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-18T05:25:00+00:00",
-    "last_run_utc": "2026-10-18T05:28:43.397000+00:00",
+    "last_live_scan_utc": "2026-10-18T09:50:00+00:00",
+    "last_run_utc": "2026-10-18T09:51:00.596000+00:00",
+    "last_scan_confirmed_count": 200,
+    "last_scan_matched_count": 0,
     "last_scan_rejections": [
       {
         "inst": "HUMA-USDT",
@@ -260,7 +262,7 @@
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "RANK_NOT_ALLOWED_TRY_NEXT",
+    "last_scan_status": "NO_MATCH",
     "lifetime_counters": {
       "flat": 0,
       "losses": 268,
@@ -274,55 +276,34 @@
     "trade_history_records": 454
   },
   "live_strategy": {
-    "additional_entry_filters": [
-      "MA10/MA20 CROSS at confirmed close",
-      "long distance from live SMA10 max 1%",
-      "support/resistance avoidance",
-      "fresh BID/ASK and pre-order price checks",
-      "TOP20 order book directional depth confirmation",
-      "MACD(12,26,9) positive rising histogram for LONG; negative falling for SHORT"
-    ],
     "allowed_directions": [
-      "LONG",
-      "SHORT"
+      "LONG"
     ],
     "candle_minutes": 5,
     "drawdown_stop_pct": 10.0,
-    "executable_exit_poll_seconds": 1.0,
-    "leverage": "1x",
-    "max_bankroll_allocation_usdt": 25.0,
-    "max_hold_minutes": 10.0,
-    "order_book": {
-      "indicator": "TOP20_ORDER_BOOK_DEPTH_IMBALANCE",
-      "levels_per_side": 20,
-      "min_directional_share_pct": 62.0,
-      "missing_or_stale_data": "BLOCK_ENTRY",
-      "note": "Resting depth does not establish future price direction.",
-      "raw_snapshots": "blofin_order_books/YYYY-MM-DD.jsonl",
-      "required_for_entry": true
-    },
-    "rank_max": 100,
-    "rank_min": 51,
-    "rank_scope": "ONLY CURRENT RANKS 51-100",
-    "rsi_long_max": 75.0,
-    "rsi_long_min": 50.0,
-    "rsi_short_max": 50.0,
-    "rsi_short_min": 0.0,
-    "stochastic": {
-      "long_rule": "K <= D",
-      "periods": [
-        14,
-        1,
-        3
-      ],
-      "short_rule": "K >= D"
-    },
-    "stop_loss_initial_cap_pct": 0.25,
-    "stop_reference": "SMA10 ratchet, plus executable BID/ASK polling and broker TP/SL",
+    "enabled_by_workflow": true,
+    "entry": "Following 5-minute candle after full close confirmation",
+    "leverage": "1x isolated",
+    "max_bankroll_usdt": 25.0,
+    "max_hold_minutes": 60.0,
+    "max_trade_notional_usdt": 20.0,
+    "minimum_signal_close_below_sma10_pct": 2.0,
+    "preorder_guards": "One account position; fresh BID/ASK; max spread and gap; hard drawdown stop",
+    "previous_red_body_pct": [
+      0.2,
+      0.6
+    ],
+    "rank_scope": "TOP200 BloFin ticker 24h price gainers at each scan",
+    "reference_initial_capital_usdt": 25.0,
+    "signal_red_body_pct": [
+      0.4,
+      0.8
+    ],
+    "stop_loss_pct": 1.0,
+    "stop_reference": "Native exchange TP and SL measured from actual fill",
     "strategy_family": "RED_SMA_REBOUND",
-    "take_profit_pct": 1.0,
-    "type": "SMA10_SMA20_CROSS",
-    "workflow_enabled": false
+    "take_profit_pct": 1.5,
+    "type": "TWO_RED_CANDLES_OVERSOLD_SMA10_REBOUND"
   },
   "persistent_analysis_notes": [
     {
@@ -348,25 +329,28 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-18T05:28:43.397000+00:00",
-    "main_strategy_file": "blofin_ma10_ma20_live.py",
+    "latest_live_run_utc": "2026-10-18T09:51:00.596000+00:00",
+    "main_strategy_file": "blofin_red_sma_rebound_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
     "source_sha256": {
-      ".github/workflows/blofin_live_signal_watch.yml": "6961c372a789128621019cdb778740880f084f7731dd6d5eba17cca11416706f",
+      ".github/workflows/blofin_live_signal_watch.yml": "4578ab2812108140918b67f2938c7d901391faeace895c80e6450d8288081d5a",
+      "blofin_fast_scan_events_writer.py": "ada7e432a5003fc8e316794516256815e771f8f7441e566f7b4386c7b5b4651c",
       "blofin_live_hourly.py": "362a739fd865d46d4ec310b8cb326ce2c9d26a42ca6d09a68e2ed981e36f7ee0",
       "blofin_live_signal_watch.py": "f7dab7cbea4fb94a0e03faa7543e173770b46306e61530bfa070cda55c609a75",
       "blofin_ma10_ma20_live.py": "50a7eda42fc6661678ede791446c12007c20a2cb1724d6c52b73e8faef38750b",
-      "blofin_order_book.py": "605157d7bfaff4c9fcac4757df3036f64347944a1520fb5cda826bb7840c029b"
+      "blofin_order_book.py": "605157d7bfaff4c9fcac4757df3036f64347944a1520fb5cda826bb7840c029b",
+      "blofin_red_sma_rebound_live.py": "f87b549ea25fca219ad6e5f26ede512419419e9e1fe975c2a5d3f47ae03c2d3a"
     },
     "workflow": ".github/workflows/blofin_live_signal_watch.yml"
   },
   "schema_version": 1,
   "source_files": {
     "detailed_order_books": "blofin_order_books/",
+    "fast_scan_audits": "blofin_fast_scan_events/",
     "full_trade_history": "blofin_live_state.json",
     "generated_trade_charts": "blofin_trade_charts/",
     "scan_audits": "blofin_live_scans/",
-    "tests": "test_blofin_ma_no_adx.py, test_blofin_ma_rsi75.py, test_blofin_order_book.py"
+    "tests": "test_red_sma_rebound_live.py, test_blofin_fast_scan_events_writer.py"
   }
 }
