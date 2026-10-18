@@ -1,0 +1,45 @@
+name: Replay SHORT on last saved JSON segments (READ ONLY)
+on:
+  push:
+    paths:
+      - '.github/workflows/research_saved_json_short20_latestonly_readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          persist-credentials: false
+          sparse-checkout: |
+            research_saved_json_short20_replay_readonly.py
+            blofin_live_scans/live_watch_history_5m_part0020.json
+            blofin_live_scans/live_watch_history_5m_part0021.json
+            blofin_live_scans/live_watch_history_5m_part0022.json
+            blofin_live_scans/live_watch_history_5m_part0023.json
+            blofin_live_scans/live_watch_history_5m_part0024.json
+            blofin_live_scans/live_watch_history_5m_part0025.json
+            blofin_live_scans/live_watch_history_5m_part0026.json
+            blofin_live_scans/live_watch_history_5m_part0027.json
+            blofin_live_scans/live_watch_history_5m_part0028.json
+            blofin_live_scans/live_watch_history_5m_part0029.json
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Replay saved JSON last ten archive shards only
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u research_saved_json_short20_replay_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chosen-short-strategy-last10-json-shards
+          path: research_saved_json_short20_replay_results.json
+          retention-days: 7
+          if-no-files-found: ignore
