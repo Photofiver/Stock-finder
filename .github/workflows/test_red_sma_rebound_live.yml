@@ -21,16 +21,23 @@ jobs:
           fetch-depth: 1
           filter: blob:none
           sparse-checkout: |
-            /blofin_red_sma_rebound_live.py
-            /test_red_sma_rebound_live.py
+            /*
           sparse-checkout-cone-mode: false
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Validate Python syntax and all no-network mock broker tests
+      - name: Install only import dependency
+        run: python -m pip install requests==2.32.3
+      - name: Validate LIVE entry dispatcher and all no-network mocked broker tests
         env:
           BLOFIN_LIVE_ENABLED: 'false'
+          LIVE_RED_SMA_REBOUND: 'true'
+          LIVE_UNIVERSE_TOP_N: '200'
+          LIVE_SIGNAL_MINUTES: '5'
+          LIVE_MAX_BANKROLL_USDT: '25.00'
+          LIVE_ENTRY_STRATEGY: 'RED_SMA_REBOUND'
         run: |
-          python -m py_compile blofin_red_sma_rebound_live.py test_red_sma_rebound_live.py
+          python -m py_compile blofin_red_sma_rebound_live.py blofin_live_hourly.py blofin_live_signal_watch.py test_red_sma_rebound_live.py
+          python -c 'import blofin_live_signal_watch as w; import blofin_red_sma_rebound_live as r; assert w.bot.ENTRY_STRATEGY == "RED_SMA_REBOUND"; assert w.bot.TOP_N == 200; assert w.bot.NEAREST_VOLUME is False; assert w.bot.MAX_NOTIONAL_USDT == 25; print("LIVE_IMPORT_SAFE_TO_ENABLE", r.STRATEGY, w.bot.TOP_N)'
           python -m unittest -v test_red_sma_rebound_live.py
