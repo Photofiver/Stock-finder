@@ -12,7 +12,7 @@ import blofin_live_hourly as bot
 SIGNAL_STATE_FILE = os.getenv("SIGNAL_STATE_FILE", "blofin_signal_state.json")
 CANDLE_CONFIRM_ATTEMPTS = 3
 CANDLE_CONFIRM_DELAY_SEC = 1
-CANDLE_CONFIRM_WORKERS = 8
+CANDLE_CONFIRM_WORKERS = max(1, min(20, int(os.getenv("LIVE_CANDLE_CONFIRM_WORKERS", "8"))))
 BROKER_ID = os.getenv("BLOFIN_BROKER_ID", "dd3511977f23cc87").strip()
 UK_TZ = ZoneInfo("Europe/London")
 LEARNING_FILE = os.getenv("LIVE_LEARNING_FILE", "blofin_learning_12h.json")
@@ -577,6 +577,9 @@ def main():
         raise RuntimeError("BloFin TOP7 is empty")
 
     expected_close_ms = expected_signal_close_ms()
+    if (bot.ENTRY_STRATEGY == "RED_SMA_REBOUND"
+            and os.getenv("LIVE_RED_SMA_REBOUND", "").strip().lower() != "true"):
+        raise RuntimeError("RED_SMA_REBOUND live strategy requested but explicitly disabled; fail closed")
     if os.getenv("LIVE_RED_SMA_REBOUND", "").strip().lower() == "true":
         # The validated red-candle strategy is separate from the legacy SMA
         # cross; do not mix old entry filters or mutate old position TP/SL.
