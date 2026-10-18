@@ -5,6 +5,8 @@ on:
     paths:
       - 'blofin_red_sma_rebound_live.py'
       - 'test_red_sma_rebound_live.py'
+      - 'blofin_fast_scan_events_writer.py'
+      - 'test_blofin_fast_scan_events_writer.py'
       - '.github/workflows/test_red_sma_rebound_live.yml'
   workflow_dispatch:
 
@@ -23,6 +25,8 @@ jobs:
           sparse-checkout: |
             /blofin_red_sma_rebound_live.py
             /test_red_sma_rebound_live.py
+            /blofin_fast_scan_events_writer.py
+            /test_blofin_fast_scan_events_writer.py
             /blofin_live_hourly.py
             /blofin_live_signal_watch.py
             /blofin_nearest_volume.py
@@ -45,4 +49,4 @@ jobs:
         run: |
           python -m py_compile blofin_red_sma_rebound_live.py blofin_live_hourly.py blofin_live_signal_watch.py test_red_sma_rebound_live.py
           python -c 'import blofin_live_signal_watch as w; import blofin_red_sma_rebound_live as r; assert w.bot.ENTRY_STRATEGY == "RED_SMA_REBOUND"; assert w.bot.TOP_N == 200; assert w.bot.NEAREST_VOLUME is False; assert w.bot.MAX_NOTIONAL_USDT == 25; print("LIVE_IMPORT_SAFE_TO_ENABLE", r.STRATEGY, w.bot.TOP_N)'
-          python -m unittest -v test_red_sma_rebound_live.py
+          python -m unittest -v test_red_sma_rebound_live.py test_blofin_fast_scan_events_writer.py
