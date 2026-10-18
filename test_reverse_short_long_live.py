@@ -15,7 +15,8 @@ def row(ts, o=100.0, h=100.2, l=99.8, c=100.0, volume=100.0):
 def good_bars():
     bars=[row(T-(200-i)*F) for i in range(200)]
     # last candle close=T: RED after immediate GREEN
-    bars[-31]["c"]=99.8  # 150m earlier: the signal close must be >= this\n    bars[-2]=row(T-2*F,100.0,100.15,99.9,100.10,20.0)
+    bars[-31]["c"]=99.8  # 150m earlier: the signal close must be >= this
+    bars[-2]=row(T-2*F,100.0,100.15,99.9,100.10,20.0)
     bars[-1]=row(T-F,100.1,100.2,99.8,99.99,70.0)
     return bars
 
@@ -84,14 +85,6 @@ class EntryRules(unittest.TestCase):
                               self.btc if btc is None else btc,T)
     def test_exact_long_setup(self):
         s=self.signal()
-        if s is None:
-            a=v._by_ts(self.bars,T)
-            bb=v._by_ts(self.btc,T)
-            cur=a.get(T-F);prev=a.get(T-2*F);old=a.get(T-31*F)
-            print("OFFLINE_ENTRY_DEBUG",{"T":T,"cur":cur,"previous":prev,
-                "past150":old,"mean":v._previous10_mean(a,T-F),
-                "last15":v._completed_coin15_pct(a,T-F),
-                "btc":bb.get(T-F),"btc_old":bb.get(T-4*F)},flush=True)
         self.assertEqual(s["side"],"LONG")
         self.assertEqual(s["signal_red_volume"],70.)
         self.assertEqual(s["volume_ratio"],3.5)
