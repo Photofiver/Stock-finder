@@ -1,0 +1,31 @@
+name: Reverse SHORT to LONG strategy offline tests (NO ORDERS)
+on:
+  push:
+    paths:
+      - 'blofin_reverse_short_long_live.py'
+      - 'test_reverse_short_long_live.py'
+      - '.github/workflows/test_reverse_short_long_live.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            blofin_reverse_short_long_live.py
+            test_reverse_short_long_live.py
+            blofin_trade_charts.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run offline entry-exit and broker mock tests
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -m unittest -v test_reverse_short_long_live
