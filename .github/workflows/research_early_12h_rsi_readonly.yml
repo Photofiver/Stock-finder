@@ -12,40 +12,7 @@ permissions:
   actions: read
 
 jobs:
-  refresh:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 18
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1, 2, 3]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          filter: blob:none
-          sparse-checkout: |
-            /*
-            !/*/
-          sparse-checkout-cone-mode: false
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: python -m pip install requests==2.32.3
-      - name: Refresh public BloFin closed 5m OHLCV to 02:55 UK for one quarter
-        env:
-          BLOFIN_LIVE_ENABLED: 'false'
-        run: python -u research_early_12h_rsi_readonly.py fetch ${{ matrix.shard }}
-      - name: Upload refreshed market history only
-        uses: actions/upload-artifact@v4
-        with:
-          name: rsi12-refresh-${{ matrix.shard }}
-          path: rsi12_shard_${{ matrix.shard }}.json.gz
-          retention-days: 5
-
   compare:
-    needs: refresh
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -70,9 +37,19 @@ jobs:
           pattern: early-hour-shard-*
           merge-multiple: true
           path: old_shards
-      - name: Download newly refreshed market history from this test
+      - name: Use full eight-day 390-coin archive to cover the earliest TOP200 price lookback
         uses: actions/download-artifact@v4
         with:
+          run-id: 39074940517
+          github-token: ${{ github.token }}
+          pattern: top200-candle-shard-*
+          merge-multiple: true
+          path: historical_shards
+      - name: Reuse recently refreshed 390-coin candles (02:55 UK cutoff)
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39088649866
+          github-token: ${{ github.token }}
           pattern: rsi12-refresh-*
           merge-multiple: true
           path: fresh_shards
