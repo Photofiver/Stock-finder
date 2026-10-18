@@ -1,0 +1,73 @@
+name: TEST SHORT 60pct over 24 hours (READ ONLY)
+on:
+  push:
+    paths:
+      - 'short60_volume_mean10_24hour_readonly.py'
+      - '.github/workflows/short60_volume_mean10_24h_readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  get_public_market_data:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            short60_volume_mean10_24hour_readonly.py
+            blofin_top200_repeat_setup_research.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install public market data requests
+        run: python -m pip install requests==2.32.3
+      - name: Obtain 48h public candle snapshots for 24h validation
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u short60_volume_mean10_24hour_readonly.py fetch ${{ matrix.shard }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: short60-24h-market-shard-${{ matrix.shard }}
+          path: short60_24h_shard_${{ matrix.shard }}.json.gz
+          retention-days: 7
+  compare_frozen_rules:
+    needs: get_public_market_data
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            short60_volume_mean10_24hour_readonly.py
+            blofin_top200_repeat_setup_research.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: short60-24h-market-shard-*
+          merge-multiple: true
+          path: shards
+      - name: Count SHORT wins and losses per hour with and without 60pct filter
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u short60_volume_mean10_24hour_readonly.py analyse
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: short60-mean10-24hour-20261018
+          path: short60_volume_mean10_24hour_report_20261018.json
+          retention-days: 7
+          if-no-files-found: ignore
