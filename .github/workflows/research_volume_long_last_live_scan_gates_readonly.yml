@@ -1,0 +1,43 @@
+name: Explain why LIVE volume LONG has no entry READ ONLY
+on:
+  push:
+    paths:
+      - 'research_volume_long_last_live_scan_gates_readonly.py'
+      - '.github/workflows/research_volume_long_last_live_scan_gates_readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            research_volume_long_last_live_scan_gates_readonly.py
+            blofin_reverse_short_long_live.py
+            blofin_live_hourly.py
+            blofin_live_state.json
+            blofin_selection_rank.py
+            blofin_nearest_volume.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - name: Count actual rejection gates in last frozen 200 coin LIVE scan
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+          LIVE_SIGNAL_MINUTES: '5'
+          LIVE_UNIVERSE_TOP_N: '200'
+        run: python -u research_volume_long_last_live_scan_gates_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: why-volume-long-no-entry-report
+          path: live_volume_long_last_scan_gate_audit.json
+          retention-days: 7
+          if-no-files-found: ignore
