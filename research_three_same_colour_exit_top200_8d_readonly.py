@@ -21,7 +21,7 @@ START=archive.START
 END=archive.END
 UK=ZoneInfo("Europe/London")
 COST=test.FEES
-MODES=("CURRENT","AFTER_3_TOTAL","AFTER_3_CONSECUTIVE","FIRST_OF_BOTH")
+MODES=("CURRENT","AFTER_3_TOTAL","AFTER_3_CONSECUTIVE","FIRST_OF_BOTH","FIRST_OF_BOTH_CONSECUTIVE")
 
 def stamp(ts):
     return datetime.fromtimestamp(ts/1000,UK).strftime("%Y-%m-%d %H:%M")
