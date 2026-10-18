@@ -82,14 +82,15 @@ jobs:
           LIVE_UNIVERSE_TOP_N: '200'
           LIVE_ENTRY_TOP_N: '100'
           LIVE_MA_CROSS: 'false'
-          LIVE_RED_SMA_REBOUND: 'true'
+          LIVE_RED_SMA_REBOUND: 'false'
+          LIVE_VOLUME_REVERSE_LONG: 'true'
           LIVE_CANDLE_CONFIRM_WORKERS: '16'
           LIVE_SIGNAL_MAX_AGE_MS: '180000'
           LIVE_MAX_BANKROLL_USDT: '25.00'
           LIVE_MAX_DRAWDOWN_PCT: '0.10'
           BLOFIN_MAX_ENTRY_SPREAD_PCT: '0.10'
           BLOFIN_MAX_ADVERSE_ENTRY_GAP_PCT: '0.10'
-          LIVE_ENTRY_STRATEGY: 'RED_SMA_REBOUND'
+          LIVE_ENTRY_STRATEGY: 'VOLUME_REVERSE_LONG'
         run: python blofin_live_signal_watch.py
 
       - name: Save signal and LIVE state
