@@ -1,0 +1,74 @@
+name: TEST volume mean10 4-shard complete (READ ONLY)
+on:
+  push:
+    paths:
+      - 'volume_rule_mean10_hour_20261018_shards_readonly.py'
+      - '.github/workflows/volume_rule_mean10_hour_20261018_sharded.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  candles:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            volume_rule_mean10_hour_20261018_readonly.py
+            volume_rule_mean10_hour_20261018_shards_readonly.py
+            blofin_top200_repeat_setup_research.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - name: Read closed public BloFin candles, bounded shard
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u volume_rule_mean10_hour_20261018_shards_readonly.py fetch ${{ matrix.shard }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mean10-hour-shard-${{ matrix.shard }}
+          path: mean10_shard_${{ matrix.shard }}.json.gz
+          retention-days: 4
+  evaluate:
+    needs: candles
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            volume_rule_mean10_hour_20261018_readonly.py
+            volume_rule_mean10_hour_20261018_shards_readonly.py
+            blofin_top200_repeat_setup_research.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mean10-hour-shard-*
+          merge-multiple: true
+          path: shards
+      - name: Reconstruct historical TOP200 and compare mean10 outcomes
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u volume_rule_mean10_hour_20261018_shards_readonly.py analyse
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mean10-hour-full-report-20261018
+          path: volume_rule_mean10_hour_20261018_report.json
+          retention-days: 7
+          if-no-files-found: ignore
