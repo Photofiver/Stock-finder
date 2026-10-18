@@ -1,0 +1,37 @@
+name: TEST volume reversal vs mean10 (READ ONLY)
+on:
+  push:
+    paths:
+      - 'volume_rule_mean10_hour_20261018_readonly.py'
+      - '.github/workflows/volume_rule_mean10_hour_20261018_readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            volume_rule_mean10_hour_20261018_readonly.py
+            blofin_top200_repeat_setup_research.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - name: Fetch only public BloFin candles and compare completed last-hour positions
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u volume_rule_mean10_hour_20261018_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: volume-rule-mean10-hour-20261018
+          path: volume_rule_mean10_hour_20261018_report.json
+          retention-days: 7
+          if-no-files-found: ignore
