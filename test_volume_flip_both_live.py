@@ -1,0 +1,140 @@
+"""Offline no-credentials regression tests for live 5m volume-flip LONG AND SHORT."""
+import unittest
+from decimal import Decimal
+from unittest.mock import patch
+import blofin_volume_flip_both_live as live
+import test_reverse_short_long_live as prior
+
+F=live.FIVE
+T=prior.T
+
+def candle(ts,o=100.0,c=100.0,volume=100):
+    return {"ts":ts,"o":o,"h":max(o,c)+0.2,"l":min(o,c)-0.2,"c":c,"v":volume}
+
+def bars(side):
+    candles=[candle(T-(50-i)*F) for i in range(50)]
+    if side=="LONG":
+        candles[-2]=candle(T-2*F,o=100.1,c=99.9,volume=60)
+        candles[-1]=candle(T-F,o=100.0,c=100.1,volume=80)
+    else:
+        candles[-2]=candle(T-2*F,o=100.0,c=100.1,volume=60)
+        candles[-1]=candle(T-F,o=100.1,c=100.0,volume=80)
+    return candles
+
+class FakeBot(prior.FakeBot):
+    def __init__(self):
+        super().__init__()
+        self.now=T+1000
+    def bar_close_ms(self,b):
+        return int(b["ts"])+F
+
+class Setups(unittest.TestCase):
+    def setUp(self):
+        self.bot=FakeBot()
+    def test_long_signal_red_then_bigger_green(self):
+        s=live.entry_signal(self.bot,bars("LONG"),T)
+        self.assertEqual(s["side"],"LONG")
+        self.assertEqual(s["signal_volume"],80)
+        self.assertLess(s["volume_ratio"],3) # intentionally no old 3-4x rule
+    def test_short_signal_green_then_bigger_red(self):
+        s=live.entry_signal(self.bot,bars("SHORT"),T)
+        self.assertEqual(s["side"],"SHORT")
+        self.assertEqual(s["signal_volume"],80)
+    def test_block_if_volume_above_mean10(self):
+        b=bars("LONG");b[-1]["v"]=120
+        self.assertIsNone(live.entry_signal(self.bot,b,T))
+        b=bars("SHORT");b[-2]["v"]=110
+        self.assertIsNone(live.entry_signal(self.bot,b,T))
+    def test_block_if_not_bigger_volume(self):
+        for side in ("LONG","SHORT"):
+            b=bars(side);b[-1]["v"]=60
+            self.assertIsNone(live.entry_signal(self.bot,b,T))
+    def test_block_same_colour_and_unclosed(self):
+        b=bars("LONG")
+        b[-2]=candle(T-2*F,o=100,c=100.1,volume=60)
+        self.assertIsNone(live.entry_signal(self.bot,b,T))
+        self.assertIsNone(live.entry_signal(self.bot,bars("LONG")[:-1],T))
+        self.assertIsNone(live.entry_signal(self.bot,bars("LONG"),T+F))
+    def test_close_long_on_bigger_qualified_red(self):
+        pos={"side":"LONG","last_same_volume":60}
+        b=bars("SHORT")
+        self.assertEqual(live.exit_transition(pos,b,T),(True,60))
+    def test_close_short_on_bigger_qualified_green(self):
+        pos={"side":"SHORT","last_same_volume":60}
+        b=bars("LONG")
+        self.assertEqual(live.exit_transition(pos,b,T),(True,60))
+    def test_no_close_on_equal_or_over_mean10(self):
+        pos={"side":"LONG","last_same_volume":80}
+        b=bars("SHORT");self.assertEqual(live.exit_transition(pos,b,T),(False,80))
+        b[-1]["v"]=120;self.assertEqual(live.exit_transition(pos,b,T),(False,80))
+    def test_update_most_recent_qualifying_same_side(self):
+        for side in ("LONG","SHORT"):
+            pos={"side":side,"last_same_volume":80}
+            b=bars(side)
+            self.assertEqual(live.exit_transition(pos,b,T),(False,80))
+            b[-1]["v"]=60
+            self.assertEqual(live.exit_transition(pos,b,T),(False,60))
+    def test_legacy_exit_preserved(self):
+        old={"side":"LONG","last_red_volume":60}
+        b=bars("LONG")
+        self.assertEqual(live.legacy_exit_transition(old,b,T),(True,60))
+    def test_no_future_candles(self):
+        b=bars("SHORT")
+        b.append(candle(T,o=1,c=5,volume=10000))
+        self.assertEqual(live.entry_signal(self.bot,b,T),
+                         live.entry_signal(self.bot,b[:-1],T))
+
+class Broker(unittest.TestCase):
+    def setUp(self):
+        self.bot=FakeBot()
+        self.state={"positions":{}}
+        self.instruments={"ABC-USDT":{"contractValue":"1"},
+                          "XYZ-USDT":{"contractValue":"1"}}
+    def signal(self,coin,side):
+        s=live.entry_signal(self.bot,bars(side),T)
+        s.update(inst=coin,rank=1)
+        return s
+    @patch("blofin_trade_charts.capture_chart",side_effect=RuntimeError("no rendering in offline tests"))
+    def test_buy_long_sell_short_each_one_per_coin_no_tpsl(self,chart):
+        self.assertTrue(live._open_one(self.bot,self.state,self.signal("ABC-USDT","LONG"),self.instruments))
+        self.assertTrue(live._open_one(self.bot,self.state,self.signal("XYZ-USDT","SHORT"),self.instruments))
+        self.assertEqual(self.state["positions"]["ABC-USDT"]["side"],"LONG")
+        self.assertEqual(self.state["positions"]["XYZ-USDT"]["side"],"SHORT")
+        self.assertEqual(self.bot.posted[0][2]["side"],"buy")
+        self.assertEqual(self.bot.posted[1][2]["side"],"sell")
+        self.assertEqual(len(self.bot.posted),2)
+        self.assertTrue(all(x[1]=="/api/v1/trade/order" for x in self.bot.posted))
+        self.assertTrue(all(p["tp"]=="" and p["sl"]=="" for p in self.state["positions"].values()))
+        self.assertFalse(live._open_one(self.bot,self.state,self.signal("ABC-USDT","LONG"),self.instruments))
+        self.assertLessEqual(sum(Decimal(p["notional_usdt"]) for p in self.state["positions"].values()),Decimal("25"))
+    @patch("blofin_trade_charts.capture_chart",side_effect=RuntimeError("no rendering in offline tests"))
+    def test_paused_does_not_open_new_but_closes_old_short(self,chart):
+        self.assertTrue(live._open_one(self.bot,self.state,self.signal("XYZ-USDT","SHORT"),self.instruments))
+        self.state["positions"]["XYZ-USDT"]["last_same_volume"]=60
+        self.state["positions"]["XYZ-USDT"]["last_checked_signal_close_ms"]=T
+        b=bars("LONG")
+        b.append(candle(T,o=100,c=100.1,volume=80))
+        # A qualified green at next completed boundary; state exit must happen
+        def confirm(insts,close):
+            return {"XYZ-USDT":b,"ABC-USDT":bars("SHORT")+[candle(T)],
+                    "BTC-USDT":bars("LONG")+[candle(T)]}
+        self.bot.now=T+F+1000
+        rank=["ABC-USDT"]+[f"COIN{i}-USDT" for i in range(199)]
+        with patch.dict("os.environ",{"LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES":"true"}):
+            live.run(self.bot,self.state,rank,{},self.instruments,T+F,confirm)
+        # fake broker support will mark the close; no additional orders
+        self.assertFalse(any(a[2].get("instId")=="ABC-USDT" for a in self.bot.posted))
+    def test_old_strategy_position_unmodified_during_paused_scan(self):
+        self.state["positions"]["LEGACY-USDT"]={"inst":"LEGACY-USDT","side":"LONG",
+            "strategy":"RED_SMA_REBOUND","hold_policy":"HOLD_60M",
+            "tp":"105","sl":"99","notional_usdt":"5"}
+        self.bot.account["LEGACY-USDT"]=True
+        rank=["ABC-USDT"]+[f"COIN{i}-USDT" for i in range(199)]
+        def confirm(ids,ms):return {"LEGACY-USDT":bars("LONG")}
+        with patch.dict("os.environ",{"LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES":"true"}):
+            live.run(self.bot,self.state,rank,{},self.instruments,T,confirm)
+        self.assertEqual(self.state["positions"]["LEGACY-USDT"]["tp"],"105")
+        self.assertEqual(self.state["positions"]["LEGACY-USDT"]["sl"],"99")
+
+if __name__=="__main__":
+    unittest.main()
