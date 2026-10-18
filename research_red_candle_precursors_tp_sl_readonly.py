@@ -371,6 +371,37 @@ def main():
         for x in strong_differences[:25]],separators=(",",":")),flush=True)
     print("PREVIOUS_THREE_COLOR_SEQUENCES="+json.dumps(seq3,separators=(",",":")),flush=True)
     print("PREVIOUS_FOUR_COLOR_SEQUENCES="+json.dumps(seq4,separators=(",",":")),flush=True)
+    # Exact last 24h of the archived, fully confirmed 5m market candles.
+    # A single 20USDT global trade position, no overlapping entries.
+    locked="P1_RED_BODY_0P2_0P6"
+    window_start=base.tstamp("2026-10-17","04:30")
+    window_end=END
+    single_tag=with_feature[locked]
+    in_window=sorted([e for e in single_tag
+        if window_start<=e["entry"]<window_end and e["exit"]<=window_end],
+        key=lambda e:(e["entry"],e["rank"],e["inst"]))
+    executed=serial(single_tag,window_start,window_end)
+    def compact(e):
+        return {"coin":e["inst"],"time_uk":e["entry_uk"],
+             "exit_time_uk":base.when(e["exit"]),"rank_at_signal":e["rank"],
+             "prev_red_body_pct":e["prev_candle_body_pct"],
+             "signal_red_body_pct":e["signal_red_pct"],
+             "result":e["reason"],"net_pct":round(e["ret"],4),
+             "net_usdt":round(e["ret"]*.2,5)}
+    lastday_report={
+        "start_uk":base.when(window_start),"end_uk":base.when(window_end),
+        "note":"TP/SL 60min results available only for signal entries no later than 03:30 UK on Oct 18, despite 24h ranking window ending 04:30.",
+        "coin_universe":len(raw),"rankings":"top200 rolling 24h by 5m closed-candle gain",
+        "entry_definition":"Earlier candle RED 0.2-0.6pct, next candle RED 0.4-0.8pct and closes at least 2pct below SMA10; LONG following 5m open, TP+1.5%, SL-1%, cap60min, 0.22pct roundtrip costs.",
+        "all_signals_independent_even_when_overlap":summary(in_window),
+        "single_position_nonoverlap":summary(executed),
+        "every_signal":list(map(compact,in_window)),
+        "possible_executed_trades":list(map(compact,executed))
+    }
+    print("LAST_24H_PRECURSOR="+json.dumps(lastday_report,separators=(",",":")),flush=True)
+    report["last_24h_locked_precursor"]=lastday_report
+    Path("research_red_candle_prior_6bars_tp_vs_sl.json").write_text(
+        json.dumps(report,indent=2,ensure_ascii=False),encoding="utf-8")
     print("FINAL_PRIOR_CANDLE_AUDIT="+json.dumps({
         "signals":len(allrows),"excluded_coins":excluded,"period":base.when(START)+" to "+base.when(END),
         "TP":sum(e["reason"]=="TP" for e in allrows),"SL":sum(e["reason"]=="SL" for e in allrows),
