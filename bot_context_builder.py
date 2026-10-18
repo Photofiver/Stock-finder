@@ -17,6 +17,8 @@ SOURCE_FILES = (
     "blofin_ma10_ma20_live.py",
     "blofin_live_hourly.py",
     "blofin_live_signal_watch.py",
+    "blofin_red_sma_rebound_live.py",
+    "blofin_fast_scan_events_writer.py",
     "blofin_order_book.py",
     ".github/workflows/blofin_live_signal_watch.yml",
 )
@@ -232,6 +234,40 @@ def update_context():
         notes=previous.get("persistent_analysis_notes", []),
         source_hashes=file_hashes(),
     )
+    # Keep the compact memory aligned with the actually enabled LIVE
+    # strategy. Previous SMA-only descriptions must not be reused for
+    # the new two-red-candle scan.
+    if output["live_strategy"]["strategy_family"] == "RED_SMA_REBOUND":
+        import blofin_red_sma_rebound_live as red
+        recent = state.get("red_sma_last_scan") or {}
+        output["provenance"]["main_strategy_file"] = "blofin_red_sma_rebound_live.py"
+        output["live_strategy"] = {
+            "type": "TWO_RED_CANDLES_OVERSOLD_SMA10_REBOUND",
+            "strategy_family": "RED_SMA_REBOUND",
+            "enabled_by_workflow": True,
+            "candle_minutes": 5,
+            "rank_scope": "TOP200 BloFin ticker 24h price gainers at each scan",
+            "allowed_directions": ["LONG"],
+            "previous_red_body_pct": [red.PREVIOUS_BODY_MIN, red.PREVIOUS_BODY_MAX_INCLUSIVE],
+            "signal_red_body_pct": [red.SIGNAL_BODY_MIN, red.SIGNAL_BODY_MAX_EXCLUSIVE],
+            "minimum_signal_close_below_sma10_pct": red.SMA10_MIN_BELOW_PCT,
+            "entry": "Following 5-minute candle after full close confirmation",
+            "take_profit_pct": float(red.TP_PCT) * 100.0,
+            "stop_loss_pct": float(red.SL_PCT) * 100.0,
+            "stop_reference": "Native exchange TP and SL measured from actual fill",
+            "max_hold_minutes": red.HOLD_MS / 60000,
+            "max_trade_notional_usdt": float(red.NOTIONAL_USDT),
+            "reference_initial_capital_usdt": float(red.TARGET_INITIAL_CAPITAL_USDT),
+            "max_bankroll_usdt": float(workflow_env["LIVE_MAX_BANKROLL_USDT"]),
+            "leverage": "1x isolated",
+            "drawdown_stop_pct": 10.0,
+            "preorder_guards": "One account position; fresh BID/ASK; max spread and gap; hard drawdown stop",
+        }
+        output["last_known_state"]["last_scan_status"] = recent.get("status")
+        output["last_known_state"]["last_scan_confirmed_count"] = recent.get("scanned_confirmed")
+        output["last_known_state"]["last_scan_matched_count"] = recent.get("matched")
+        output["source_files"]["fast_scan_audits"] = "blofin_fast_scan_events/"
+        output["source_files"]["tests"] = "test_red_sma_rebound_live.py, test_blofin_fast_scan_events_writer.py"
     temp = CONTEXT_FILE.with_suffix(".json.tmp")
     temp.write_text(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
                     encoding="utf-8")
