@@ -229,8 +229,9 @@ def update_context():
         previous = json.loads(CONTEXT_FILE.read_text(encoding="utf-8"))
         if not isinstance(previous, dict):
             raise ValueError("Invalid previous bot_context.json")
+    workflow_env = live_env_from_workflow()
     output = build_context(
-        state, live_env_from_workflow(), strategy, order_book,
+        state, workflow_env, strategy, order_book,
         notes=previous.get("persistent_analysis_notes", []),
         source_hashes=file_hashes(),
     )
