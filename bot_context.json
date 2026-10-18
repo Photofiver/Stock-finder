@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-18T00:50:47.422181+00:00",
+  "generated_utc": "2026-10-18T00:56:17.652792+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,74 +172,53 @@
         "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-18T00:45:00+00:00",
-    "last_run_utc": "2026-10-18T00:45:55.500000+00:00",
+    "last_live_scan_utc": "2026-10-18T00:50:00+00:00",
+    "last_run_utc": "2026-10-18T00:51:30.711000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "AIA-USDT",
-        "rank": 9,
-        "reason": "RANK_NOT_ALLOWED: current place 9; requires 51..100",
+        "inst": "PROM-USDT",
+        "rank": 16,
+        "reason": "RANK_NOT_ALLOWED: current place 16; requires 51..100",
         "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "AXL-USDT",
-        "rank": 15,
-        "reason": "RANK_NOT_ALLOWED: current place 15; requires 51..100",
-        "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "HUMA-USDT",
+        "inst": "CAP-USDT",
         "rank": 19,
         "reason": "RANK_NOT_ALLOWED: current place 19; requires 51..100",
         "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "TAKE-USDT",
-        "rank": 23,
-        "reason": "RANK_NOT_ALLOWED: current place 23; requires 51..100",
+        "inst": "GRAM-USDT",
+        "rank": 29,
+        "reason": "RANK_NOT_ALLOWED: current place 29; requires 51..100",
         "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "KMNO-USDT",
+        "inst": "XPT-USDT",
+        "rank": 46,
+        "reason": "RANK_NOT_ALLOWED: current place 46; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "TRX-USDT",
+        "rank": 62,
+        "reason": "STOCH_KD_SHORT_BLOCKED: K=61.29 < D=77.42; requires K>=D",
+        "side": "SHORT",
+        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "LIGHT-USDT",
         "rank": null,
-        "reason": "ORDER_BOOK_DIRECTION_BLOCKED: KMNO-USDT SHORT: aligned depth 60.59% < 62.00% (20 levels)",
+        "reason": "NEAR_SUPPORT",
         "side": "SHORT",
-        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
-      },
-      {
-        "inst": "ILV-USDT",
-        "rank": null,
-        "reason": "ORDER_BOOK_DIRECTION_BLOCKED: ILV-USDT SHORT: aligned depth 50.05% < 62.00% (20 levels)",
-        "side": "SHORT",
-        "status": "PRE_ORDER_REJECTED_TRY_NEXT"
-      },
-      {
-        "inst": "FOLKS-USDT",
-        "rank": 0,
-        "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
-        "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "ICNT-USDT",
-        "rank": 0,
-        "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
-        "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "STBL-USDT",
-        "rank": 0,
-        "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
-        "side": "SHORT",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "RANK_NOT_ALLOWED_TRY_NEXT",
+    "last_scan_status": "SR_ENTRY_BLOCKED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 268,
@@ -327,7 +306,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-18T00:45:55.500000+00:00",
+    "latest_live_run_utc": "2026-10-18T00:51:30.711000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
