@@ -136,7 +136,11 @@ def open_long(bot, state, signal, rank, instruments):
     # The live candle setup was validated without orderbook imbalance gating;
     # only spread, freshness, position/size/capital and broker protection gate.
     tick = bot.d(instruments[inst].get("tickSize") or "0")
-    _ = broker_targets(bot, quote["expected_fill"], tick)
+    try:
+        _ = broker_targets(bot, quote["expected_fill"], tick)
+    except (TypeError, ValueError, ArithmeticError) as exc:
+        print(f"{STRATEGY}: {inst} invalid TP/SL tick or reference price: {exc}")
+        return False
 
     bot.set_one_x(inst)
     client_id = ("livered" + uuid.uuid4().hex)[:32]
