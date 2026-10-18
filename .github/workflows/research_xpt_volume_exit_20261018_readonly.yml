@@ -1,0 +1,30 @@
+name: XPT SHORT 21h41 exit volume audit READ ONLY
+on:
+  push:
+    paths:
+      - 'research_xpt_volume_exit_20261018_utc_readonly.py'
+      - '.github/workflows/research_xpt_volume_exit_20261018_readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            research_xpt_volume_exit_20261018_utc_readonly.py
+            blofin_top200_repeat_setup_research.py
+            blofin_volume_flip_both_live.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - name: Inspect public XPT completed bars from 21h40 to 22h UK
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u research_xpt_volume_exit_20261018_utc_readonly.py
