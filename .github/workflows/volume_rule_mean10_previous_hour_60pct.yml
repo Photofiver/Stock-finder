@@ -1,0 +1,43 @@
+name: Mean10 previous hour 60pct volume test (READ ONLY)
+on:
+  push:
+    paths:
+      - 'volume_rule_mean10_previous_hour_60pct_readonly.py'
+      - '.github/workflows/volume_rule_mean10_previous_hour_60pct.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            volume_rule_mean10_previous_hour_60pct_readonly.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 39146799601
+          github-token: ${{ github.token }}
+          pattern: mean10-hour-shard-*
+          merge-multiple: true
+          path: shards
+      - name: Compare last-hour candidate win and loss with 60 percent entry volume increase
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u volume_rule_mean10_previous_hour_60pct_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mean10-previous-hour-60pct-results
+          path: volume_rule_mean10_previous_hour_60pct_result.json
+          retention-days: 7
+          if-no-files-found: ignore
