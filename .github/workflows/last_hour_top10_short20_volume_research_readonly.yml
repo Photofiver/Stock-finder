@@ -1,0 +1,39 @@
+name: Test chosen SHORT on last hour TOP10 READ ONLY
+on:
+  push:
+    paths:
+      - 'last_hour_top10_short20_volume_research_readonly.py'
+      - '.github/workflows/last_hour_top10_short20_volume_research_readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            last_hour_top10_short20_volume_research_readonly.py
+            blofin_top200_repeat_setup_research.py
+            blofin_fast_scan_events/red_sma_5m_20261018.jsonl
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - name: Test last-hour top10 using only public OHLCV and saved rankings
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+          PYTHONUNBUFFERED: '1'
+        run: python -u last_hour_top10_short20_volume_research_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: latest-1h-top10-shorts-from-blofin-public-candles
+          path: last_hour_top10_short20_volume_research.json
+          retention-days: 7
+          if-no-files-found: ignore
