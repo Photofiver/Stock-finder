@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-18T02:18:08.224517+00:00",
+  "generated_utc": "2026-10-18T02:23:36.000289+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,53 +172,67 @@
         "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-18T02:10:00+00:00",
-    "last_run_utc": "2026-10-18T02:12:59.132000+00:00",
+    "last_live_scan_utc": "2026-10-18T02:15:00+00:00",
+    "last_run_utc": "2026-10-18T02:18:38.915000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "A-USDT",
-        "rank": 7,
-        "reason": "RANK_NOT_ALLOWED: current place 7; requires 51..100",
+        "inst": "4STOCK-USDT",
+        "rank": 3,
+        "reason": "RANK_NOT_ALLOWED: current place 3; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "TAKE-USDT",
+        "rank": 18,
+        "reason": "RANK_NOT_ALLOWED: current place 18; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "BTCDOM-USDT",
+        "rank": 27,
+        "reason": "RANK_NOT_ALLOWED: current place 27; requires 51..100",
         "side": "LONG",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "RSR-USDT",
-        "rank": 9,
-        "reason": "RANK_NOT_ALLOWED: current place 9; requires 51..100",
+        "inst": "COPPER-USDT",
+        "rank": 47,
+        "reason": "RANK_NOT_ALLOWED: current place 47; requires 51..100",
         "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "BANANA-USDT",
-        "rank": 66,
-        "reason": "STOCH_KD_SHORT_BLOCKED: K=0.00 < D=14.49; requires K>=D",
-        "side": "SHORT",
-        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "ILV-USDT",
+        "inst": "DOGE-USDT",
         "rank": null,
         "reason": "NEAR_SUPPORT",
         "side": "SHORT",
         "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
       },
       {
-        "inst": "BARD-USDT",
-        "rank": 94,
-        "reason": "STOCH_KD_SHORT_BLOCKED: K=0.00 < D=3.33; requires K>=D",
+        "inst": "OPENAI-USDT",
+        "rank": 81,
+        "reason": "STOCH_KD_SHORT_BLOCKED: K=17.71 < D=22.43; requires K>=D",
         "side": "SHORT",
         "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
       },
       {
-        "inst": "CRV-USDT",
-        "rank": 96,
-        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-0.00010019707, current=-9.7518367e-05; requires current<0 and current<previous",
+        "inst": "POL-USDT",
+        "rank": null,
+        "reason": "NEAR_SUPPORT",
         "side": "SHORT",
-        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
+        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
       },
       {
-        "inst": "STRK-USDT",
+        "inst": "LTC-USDT",
+        "rank": null,
+        "reason": "NEAR_SUPPORT",
+        "side": "SHORT",
+        "status": "SR_ENTRY_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "RIVER-USDT",
         "rank": 0,
         "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
         "side": "SHORT",
@@ -313,7 +327,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-18T02:12:59.132000+00:00",
+    "latest_live_run_utc": "2026-10-18T02:18:38.915000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
