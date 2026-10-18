@@ -333,6 +333,9 @@ def main():
         return {k:v for k,v in result.items() if k!="trades"}
     print("STRATEGY_COMPARE_EARLY="+json.dumps(short(a),separators=(",",":")),flush=True)
     print("STRATEGY_COMPARE_FLIP24="+json.dumps(short(b),separators=(",",":")),flush=True)
+    print("RISK_TAIL_FLIP24_BEST_5="+json.dumps(sorted(b["trades"],key=lambda x:x["net_usdt"],reverse=True)[:5],separators=(",",":")),flush=True)
+    print("RISK_TAIL_FLIP24_WORST_5="+json.dumps(sorted(b["trades"],key=lambda x:x["net_usdt"])[:5],separators=(",",":")),flush=True)
+    print("RISK_TAIL_EARLY_BEST_5="+json.dumps(sorted(a["trades"],key=lambda x:x["net_usdt"],reverse=True)[:5],separators=(",",":")),flush=True)
     print("FINAL_VERDICT="+json.dumps({
         "better_total_profit":"FLIP24" if b["net_usdt"]>a["net_usdt"] else "EARLY",
         "better_profitable_days":"FLIP24" if b["positive_days"]>a["positive_days"] else "EARLY",
