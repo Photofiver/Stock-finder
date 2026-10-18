@@ -68,6 +68,7 @@ class FakeBot:
     def notify(self,*a,**kw):self.notify_messages.append(a)
     def sync_all_tracked_positions(self,state):pass
     def evaluate_all_tracked_exit_signals(self,state,expected_close_ms):pass
+    def close_tracked_position(self,state,reason):return True
     def _run_for_tracked_position(self,state,inst,func,*args):
         pos=state["positions"][inst]
         self.closed.append(inst)
@@ -118,7 +119,7 @@ class EntryRules(unittest.TestCase):
     def test_missing_previous_or_stale(self):
         self.assertIsNone(self.signal(bars=self.bars[-30:]))
         self.assertIsNone(v.entry_signal(self.bot,self.bars,self.btc,T+F))
-        a=good_bars();a.pop(-30)
+        a=good_bars();a.pop(-31)
         self.assertIsNone(self.signal(a))
     def test_exit_green_gt_last_qualifying_red(self):
         pos={"last_red_volume":70}
