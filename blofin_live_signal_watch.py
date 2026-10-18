@@ -577,6 +577,17 @@ def main():
         raise RuntimeError("BloFin TOP7 is empty")
 
     expected_close_ms = expected_signal_close_ms()
+    if bot.ENTRY_STRATEGY == "VOLUME_FLIP_BOTH":
+        if os.getenv("LIVE_VOLUME_FLIP_BOTH", "").strip().lower() != "true":
+            raise RuntimeError("VOLUME_FLIP_BOTH strategy not explicitly enabled; fail closed")
+        import blofin_volume_flip_both_live as volume_flip
+        volume_flip.run(
+            bot, state, top7, tickers, instruments, expected_close_ms,
+            wait_for_confirmed_signal_close,
+        )
+        return
+    if os.getenv("LIVE_VOLUME_FLIP_BOTH", "").strip().lower() == "true":
+        raise RuntimeError("LIVE_VOLUME_FLIP_BOTH flag set for nonmatching entry strategy; fail closed")
     if (bot.ENTRY_STRATEGY == "VOLUME_REVERSE_LONG"
             and os.getenv("LIVE_VOLUME_REVERSE_LONG", "").strip().lower() != "true"):
         raise RuntimeError("VOLUME_REVERSE_LONG requested but not explicitly enabled; fail closed")
