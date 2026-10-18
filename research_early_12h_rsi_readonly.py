@@ -101,6 +101,30 @@ def count():
         for inst,rows in x["rows"].items():
             if inst in allbars:raise RuntimeError("Duplicate old market")
             allbars[inst]={int(t):tuple(v) for t,v in rows.items()}
+    # Extend the earlier archive with the separately verified eight-day
+    # 390-coin dataset, so even the first historical ranking has the full
+    # preceding 24h price baseline. Keep the more recent bars as authority
+    # for overlapping timestamps.
+    historical_missing={}
+    earliest_required=START-580*FIVE  # 48h price/RSI/volume warmup
+    for shard in range(N):
+        p=Path("historical_shards")/f"shard_{shard}.json.gz"
+        with gzip.open(p,"rt",encoding="utf-8") as f:old=json.load(f)
+        if old["asof_uk"]!="2026-10-17":
+            raise RuntimeError("Wrong eight-day history archive")
+        historical_missing.update(old.get("errors",{}))
+        for inst,candles in old["candle_rows"].items():
+            if inst not in allbars:raise RuntimeError("Unrecognized 8-day instrument")
+            dest=allbars[inst]
+            for t,b in candles.items():
+                ts=int(t)
+                if earliest_required<=ts<END and ts not in dest:
+                    dest[ts]=tuple(b)
+    if historical_missing:
+        raise RuntimeError("Incomplete historical archive "+str(historical_missing))
+    print("HISTORICAL_WARMUP="+json.dumps({"eligible":len(allbars),
+      "earliest_uk":formatted(earliest_required),
+      "first_comparison_uk":formatted(START)}),flush=True)
     freshfail={}
     for shard in range(N):
         p=Path("fresh_shards")/f"rsi12_shard_{shard}.json.gz"
