@@ -728,6 +728,17 @@ def record_current_scan(history, cache):
     state = bot.load_state()
     diagnostic = state.get("last_diagnostic") or {}
     signal_close_ms = int(state.get("last_scan_close_ms") or 0)
+    red_scan = state.get("red_sma_last_scan") or {}
+    if (isinstance(red_scan, dict)
+            and str(red_scan.get("strategy") or "").startswith(
+                "RED_02_06_THEN_RED_04_08_SMA10_MINUS2_LONG_")
+            and int(red_scan.get("signal_close_ms") or 0) == signal_close_ms):
+        # The new RED-SMA strategy deliberately has no legacy indicator
+        # diagnostic. Re-using the last SMA diagnostic under this timestamp
+        # would fabricate historical signals. Its real-time scan is preserved
+        # separately in blofin_fast_scan_events/*.jsonl instead.
+        print(f"AUDIT_RED_SMA_SEPARATE_FAST_EVENT scan={signal_close_ms}")
+        return False
     if not signal_close_ms:
         print("AUDIT_NO_SIGNAL_CLOSE")
         return False
