@@ -577,6 +577,18 @@ def main():
         raise RuntimeError("BloFin TOP7 is empty")
 
     expected_close_ms = expected_signal_close_ms()
+    if (bot.ENTRY_STRATEGY == "VOLUME_REVERSE_LONG"
+            and os.getenv("LIVE_VOLUME_REVERSE_LONG", "").strip().lower() != "true"):
+        raise RuntimeError("VOLUME_REVERSE_LONG requested but not explicitly enabled; fail closed")
+    if os.getenv("LIVE_VOLUME_REVERSE_LONG", "").strip().lower() == "true":
+        if bot.ENTRY_STRATEGY != "VOLUME_REVERSE_LONG":
+            raise RuntimeError("LIVE_VOLUME_REVERSE_LONG flag requires matching strategy; fail closed")
+        import blofin_reverse_short_long_live as volume_long
+        volume_long.run(
+            bot, state, top7, tickers, instruments, expected_close_ms,
+            wait_for_confirmed_signal_close,
+        )
+        return
     if (bot.ENTRY_STRATEGY == "RED_SMA_REBOUND"
             and os.getenv("LIVE_RED_SMA_REBOUND", "").strip().lower() != "true"):
         raise RuntimeError("RED_SMA_REBOUND live strategy requested but explicitly disabled; fail closed")
