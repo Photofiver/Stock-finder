@@ -1,0 +1,69 @@
+name: TOP200 Four-Green SHORT Signal Frequency (17d READ ONLY)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_top200_exhaust_short_17d_frequency_readonly.py'
+      - '.github/workflows/blofin_top200_exhaust_short_17d_frequency_readonly.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  count:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prior October 1 through 8 actual 5m candles
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39080368861
+          github-token: ${{ github.token }}
+          pattern: frozen-short-prior8-shard-*
+          merge-multiple: true
+          path: prior
+      - name: October 9 through 16 actual 5m candles
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39074940517
+          github-token: ${{ github.token }}
+          pattern: top200-candle-shard-*
+          merge-multiple: true
+          path: recent
+      - name: October 17 actual 5m candles
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39080781226
+          github-token: ${{ github.token }}
+          pattern: top200-forward-17oct-shard-*
+          merge-multiple: true
+          path: forward
+      - name: Syntax check read-only counter
+        run: python -m py_compile blofin_top200_exhaust_short_17d_frequency_readonly.py blofin_top200_new_volume_reversals_readonly.py
+      - name: Count every qualifying signal in TOP200 throughout 17 days
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+          PYTHONUNBUFFERED: '1'
+        run: python -u blofin_top200_exhaust_short_17d_frequency_readonly.py
+      - name: Save daily and aggregate setup frequency
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: top200-four-green-short-signal-count-17d
+          path: blofin_top200_exhaust_short_17d_frequency_report.json
+          if-no-files-found: ignore
+          retention-days: 14
