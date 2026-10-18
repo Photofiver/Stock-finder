@@ -240,7 +240,7 @@ def main():
             ma10=statistics.mean([bars[t-j*STEP][3] for j in range(10)])
             if (sig[3]/ma10-1)*100>-2:continue
             # Only *prior* candle features
-            prev=all_previous_features(bars,t,rank,rsi[inst])
+            prev=all_previous_features(bars,t,rsi[inst])
             result=base.calc_outcome(bars,enter)
             if result is None:continue
             reason,ret,exit_time=result
