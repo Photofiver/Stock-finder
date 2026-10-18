@@ -241,7 +241,7 @@ def simulate(market, candidates,start,end,portfolio=False):
                 # as available = bankroll - committed with buffer.
                 remaining=min(25.0,bankroll)-committed
                 free=max(0.0,bankroll-committed)
-                spendable=min(remaining,free-CAP_BUFFER_USDT)
+                spendable=min(remaining,free-CAP_BUFFER)
                 if spendable<MIN_NOTIONAL:
                     no_budget+=1
                     continue
