@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-18T03:03:15.229182+00:00",
+  "generated_utc": "2026-10-18T03:08:51.909575+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,67 +172,60 @@
         "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-18T02:55:00+00:00",
-    "last_run_utc": "2026-10-18T02:58:19.541000+00:00",
+    "last_live_scan_utc": "2026-10-18T03:00:00+00:00",
+    "last_run_utc": "2026-10-18T03:03:51.779000+00:00",
     "last_scan_rejections": [
       {
-        "inst": "A-USDT",
-        "rank": 9,
-        "reason": "RANK_NOT_ALLOWED: current place 9; requires 51..100",
+        "inst": "SPX-USDT",
+        "rank": 15,
+        "reason": "RANK_NOT_ALLOWED: current place 15; requires 51..100",
         "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
-        "inst": "OURA-USDT",
-        "rank": 39,
-        "reason": "RANK_NOT_ALLOWED: current place 39; requires 51..100",
+        "inst": "BTCDOM-USDT",
+        "rank": 29,
+        "reason": "RANK_NOT_ALLOWED: current place 29; requires 51..100",
         "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "BASED-USDT",
+        "rank": 30,
+        "reason": "RANK_NOT_ALLOWED: current place 30; requires 51..100",
+        "side": "SHORT",
+        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "LIT-USDT",
+        "rank": 45,
+        "reason": "RANK_NOT_ALLOWED: current place 45; requires 51..100",
+        "side": "LONG",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
       },
       {
         "inst": "WLFI-USDT",
-        "rank": 42,
-        "reason": "RANK_NOT_ALLOWED: current place 42; requires 51..100",
-        "side": "LONG",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "COPPER-USDT",
-        "rank": 50,
-        "reason": "RANK_NOT_ALLOWED: current place 50; requires 51..100",
-        "side": "LONG",
-        "status": "RANK_NOT_ALLOWED_TRY_NEXT"
-      },
-      {
-        "inst": "ANTHROPIC-USDT",
-        "rank": 61,
-        "reason": "MACD_LONG_NOT_RISING_GREEN: previous=-0.10110539, current=-0.0275422; requires current>0 and current>previous",
-        "side": "LONG",
-        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "GRASS-USDT",
-        "rank": 77,
-        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-0.00051534809, current=-0.00048429351; requires current<0 and current<previous",
-        "side": "SHORT",
-        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "BCH-USDT",
-        "rank": 85,
-        "reason": "MACD_SHORT_NOT_FALLING_RED: previous=-0.16947601, current=-0.1656404; requires current<0 and current<previous",
-        "side": "SHORT",
-        "status": "MACD_ENTRY_BLOCKED_TRY_NEXT"
-      },
-      {
-        "inst": "BAT-USDT",
-        "rank": 0,
-        "reason": "RANK_NOT_ALLOWED: current place 0; requires 51..100",
+        "rank": 48,
+        "reason": "RANK_NOT_ALLOWED: current place 48; requires 51..100",
         "side": "SHORT",
         "status": "RANK_NOT_ALLOWED_TRY_NEXT"
+      },
+      {
+        "inst": "SOL-USDT",
+        "rank": 64,
+        "reason": "STOCH_KD_LONG_BLOCKED: K=96.83 > D=64.47; requires K<=D",
+        "side": "LONG",
+        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
+      },
+      {
+        "inst": "LTC-USDT",
+        "rank": 91,
+        "reason": "STOCH_KD_LONG_BLOCKED: K=92.31 > D=69.98; requires K<=D",
+        "side": "LONG",
+        "status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT"
       }
     ],
-    "last_scan_status": "RANK_NOT_ALLOWED_TRY_NEXT",
+    "last_scan_status": "ENTRY_STRENGTH_BLOCKED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
       "losses": 268,
@@ -320,7 +313,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-18T02:58:19.541000+00:00",
+    "latest_live_run_utc": "2026-10-18T03:03:51.779000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
