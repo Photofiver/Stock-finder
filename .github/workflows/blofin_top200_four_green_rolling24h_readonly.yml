@@ -1,0 +1,88 @@
+name: TOP200 Four Green Exact Rolling 24h Count (READ ONLY)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'blofin_top200_four_green_rolling24h_readonly.py'
+      - '.github/workflows/blofin_top200_four_green_rolling24h_readonly.yml'
+
+permissions:
+  contents: read
+  actions: read
+jobs:
+  fresh_5m:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Public REST client
+        run: python -m pip install requests==2.32.3
+      - name: Collect 18 October 00:00-01:20 UK completed candles
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u blofin_top200_four_green_rolling24h_readonly.py fetch ${{ matrix.shard }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rolling24-market-shard-${{ matrix.shard }}
+          path: rolling24_shard_${{ matrix.shard }}.json.gz
+          retention-days: 2
+          if-no-files-found: error
+
+  analyze:
+    needs: fresh_5m
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Yesterday and prior 5m data from BloFin
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39080781226
+          github-token: ${{ github.token }}
+          pattern: top200-forward-17oct-shard-*
+          merge-multiple: true
+          path: historical
+      - name: Newly closed 5m bars until rolling cutoff
+        uses: actions/download-artifact@v4
+        with:
+          pattern: rolling24-market-shard-*
+          merge-multiple: true
+          path: fresh
+      - name: Count exact 24h raw signals without LIVE trades
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u blofin_top200_four_green_rolling24h_readonly.py analyze
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: top200-four-green-rolling24h-count-result
+          path: blofin_top200_four_green_exact_rolling24h.json
+          retention-days: 14
+          if-no-files-found: ignore
