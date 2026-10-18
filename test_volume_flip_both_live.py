@@ -56,11 +56,11 @@ class Setups(unittest.TestCase):
         self.assertIsNone(live.entry_signal(self.bot,bars("LONG")[:-1],T))
         self.assertIsNone(live.entry_signal(self.bot,bars("LONG"),T+F))
     def test_close_long_on_bigger_qualified_red(self):
-        pos={"side":"LONG","last_same_volume":60}
+        pos={"side":"LONG","signal_volume":60}
         b=bars("SHORT")
         self.assertEqual(live.exit_transition(pos,b,T),(True,60))
     def test_close_short_on_bigger_qualified_green(self):
-        pos={"side":"SHORT","last_same_volume":60}
+        pos={"side":"SHORT","signal_volume":60}
         b=bars("LONG")
         self.assertEqual(live.exit_transition(pos,b,T),(True,60))
     def test_green_143_passes_MA20_but_would_fail_MA10(self):
@@ -74,7 +74,7 @@ class Setups(unittest.TestCase):
         self.assertLess(live._previous10_mean(own,T-F),143)
         self.assertGreaterEqual(live._previous20_mean(own,T-F),143)
         self.assertEqual(live.entry_signal(self.bot,b,T)["side"],"LONG")
-        self.assertEqual(live.exit_transition({"side":"SHORT","last_same_volume":110},b,T),(True,110))
+        self.assertEqual(live.exit_transition({"side":"SHORT","signal_volume":110},b,T),(True,110))
 
     def test_MA20_rejects_candle_that_MA10_would_allow(self):
         b=bars("LONG")
@@ -86,12 +86,12 @@ class Setups(unittest.TestCase):
         self.assertGreaterEqual(live._previous10_mean(own,T-F),170)
         self.assertLess(live._previous20_mean(own,T-F),170)
         self.assertIsNone(live.entry_signal(self.bot,b,T))
-        self.assertEqual(live.exit_transition({"side":"SHORT","last_same_volume":100},b,T),(False,100))
+        self.assertEqual(live.exit_transition({"side":"SHORT","signal_volume":100},b,T),(True,100))
 
     def test_MA20_requires_full_previous_20_closed_candles(self):
         b=bars("SHORT")[-20:]
         self.assertIsNone(live.entry_signal(self.bot,b,T))
-        self.assertEqual(live.exit_transition({"side":"LONG","last_same_volume":50},b,T),(False,50))
+        self.assertEqual(live.exit_transition({"side":"LONG","signal_volume":50},b,T),(True,50))
         self.assertIsNotNone(live.entry_signal(self.bot,bars("SHORT"),T))
 
     def test_legacy_MA10_unchanged_on_existing_positions(self):
@@ -102,17 +102,42 @@ class Setups(unittest.TestCase):
         old={"side":"LONG","last_red_volume":60}
         self.assertEqual(live.legacy_exit_transition(old,b,T),(False,60))
 
-    def test_no_close_on_equal_or_over_mean20(self):
-        pos={"side":"LONG","last_same_volume":80}
+    def test_exit_has_no_MA20_filter_but_requires_bigger_volume(self):
+        pos={"side":"LONG","signal_volume":80}
         b=bars("SHORT");self.assertEqual(live.exit_transition(pos,b,T),(False,80))
-        b[-1]["v"]=120;self.assertEqual(live.exit_transition(pos,b,T),(False,80))
-    def test_update_most_recent_qualifying_same_side(self):
+        b[-1]["v"]=120;self.assertEqual(live.exit_transition(pos,b,T),(True,80))
+    def test_reference_stays_at_ENTRY_volume_even_after_new_same_side_candles(self):
         for side in ("LONG","SHORT"):
-            pos={"side":side,"last_same_volume":80}
+            pos={"side":side,"signal_volume":80}
             b=bars(side)
             self.assertEqual(live.exit_transition(pos,b,T),(False,80))
             b[-1]["v"]=60
-            self.assertEqual(live.exit_transition(pos,b,T),(False,60))
+            self.assertEqual(live.exit_transition(pos,b,T),(False,80))
+    def test_XPT_short_closes_at_green143_above_entry_red116_even_above_MA20(self):
+        b=bars("LONG")
+        b[-1]["v"]=143
+        pos={"side":"SHORT","signal_snapshot":{"signal_volume":116},"last_same_volume":110}
+        own=live._by_ts(b,T)
+        self.assertGreater(b[-1]["v"],live._previous20_mean(own,T-F))
+        self.assertEqual(live.exit_transition(pos,b,T),(True,116))
+
+    def test_opposite_colour_green_equal_to_entry_volume_does_not_close(self):
+        b=bars("LONG")
+        b[-1]["v"]=116
+        self.assertEqual(live.exit_transition({"side":"SHORT","signal_volume":116},b,T),(False,116))
+        b[-1]["v"]=117
+        self.assertEqual(live.exit_transition({"side":"SHORT","signal_volume":116},b,T),(True,116))
+
+    def test_missing_entry_volume_must_not_close_trade(self):
+        self.assertEqual(live.exit_transition({"side":"SHORT"},bars("LONG"),T),(False,0))
+        self.assertEqual(live.exit_transition({"side":"LONG","last_same_volume":12},bars("SHORT"),T),(False,0))
+
+    def test_entry_uses_MA20_but_exit_ignores_MA20_for_LONG(self):
+        b=bars("SHORT")
+        b[-1]["v"]=180
+        self.assertIsNone(live.entry_signal(self.bot,b,T))
+        self.assertEqual(live.exit_transition({"side":"LONG","signal_volume":80},b,T),(True,80))
+
     def test_legacy_exit_preserved(self):
         old={"side":"LONG","last_red_volume":60}
         b=bars("LONG")
