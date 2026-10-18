@@ -577,6 +577,15 @@ def main():
         raise RuntimeError("BloFin TOP7 is empty")
 
     expected_close_ms = expected_signal_close_ms()
+    if os.getenv("LIVE_RED_SMA_REBOUND", "").strip().lower() == "true":
+        # The validated red-candle strategy is separate from the legacy SMA
+        # cross; do not mix old entry filters or mutate old position TP/SL.
+        import blofin_red_sma_rebound_live as red_rebound
+        red_rebound.run(
+            bot, state, top7, tickers, instruments, expected_close_ms,
+            wait_for_confirmed_signal_close,
+        )
+        return
     if os.getenv("LIVE_MA_CROSS", "").strip().lower() == "true":
         import blofin_ma10_ma20_live as ma_cross
         ma_cross.run(
