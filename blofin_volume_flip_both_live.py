@@ -2,7 +2,7 @@
 
 LONG: qualified GREEN after qualified RED, green volume > prior red.
 SHORT: qualified RED after qualified GREEN, red volume > prior green.
-Qualified means each candle volume <= its own prior 10-bar mean.
+Qualified means each candle volume <= its own prior 20-bar mean.
 Exit on qualified opposite candle volume > most recent qualified
 same-side volume, order placed at next 5m opening scan.
 
@@ -55,6 +55,12 @@ def _previous10_mean(series, ts):
     return sum(x[4] for x in previous) / 10.0 if all(x is not None for x in previous) else None
 
 
+def _previous20_mean(series, ts):
+    """Average volume of the 20 FULLY CLOSED 5m candles before ts."""
+    previous = [series.get(ts - i*FIVE) for i in range(1, 21)]
+    return sum(x[4] for x in previous) / 20.0 if all(x is not None for x in previous) else None
+
+
 def _completed_coin15_pct(series, ts):
     """Must be a FULLY COMPLETED 15m block, never the running 15m candle."""
     block = 3 * FIVE
@@ -68,13 +74,13 @@ def _completed_coin15_pct(series, ts):
 
 def _qualified(rows, ts):
     candle = rows.get(ts)
-    mean = _previous10_mean(rows, ts)
+    mean = _previous20_mean(rows, ts)
     return candle is not None and mean is not None and mean > 0 and candle[4] <= mean
 
 
 def entry_signal(bot, bars, expected_close_ms):
     """Two immediately consecutive fully closed opposite-colour 5m candles.
-    Both must pass own previous-ten-bars volume mean (not future bars).
+    Both must pass own previous-20-closed-bars volume mean (not future bars).
     """
     if bot.SIGNAL_MINUTES != 5:
         return None
@@ -96,8 +102,8 @@ def entry_signal(bot, bars, expected_close_ms):
         "close":now[3],"signal_volume":now[4],
         "previous_opposite_volume":prev[4],
         "volume_ratio":now[4]/prev[4] if prev[4] else None,
-        "signal_mean10_prev":_previous10_mean(rows,ts),
-        "previous_mean10_prev":_previous10_mean(rows,ts-FIVE),
+        "signal_mean20_prev":_previous20_mean(rows,ts),
+        "previous_mean20_prev":_previous20_mean(rows,ts-FIVE),
         "signal_candle_ts":ts,
     }
 
