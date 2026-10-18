@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-18T04:55:20.353195+00:00",
+  "generated_utc": "2026-10-18T05:05:54.973712+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -172,8 +172,8 @@
         "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-18T04:45:00+00:00",
-    "last_run_utc": "2026-10-18T04:50:09.721000+00:00",
+    "last_live_scan_utc": "2026-10-18T05:00:00+00:00",
+    "last_run_utc": "2026-10-18T05:01:01.850000+00:00",
     "last_scan_rejections": [
       {
         "inst": "HUMA-USDT",
@@ -290,7 +290,7 @@
     "drawdown_stop_pct": 10.0,
     "executable_exit_poll_seconds": 1.0,
     "leverage": "1x",
-    "max_bankroll_allocation_usdt": 20.0,
+    "max_bankroll_allocation_usdt": 25.0,
     "max_hold_minutes": 10.0,
     "order_book": {
       "indicator": "TOP20_ORDER_BOOK_DEPTH_IMBALANCE",
@@ -319,10 +319,10 @@
     },
     "stop_loss_initial_cap_pct": 0.25,
     "stop_reference": "SMA10 ratchet, plus executable BID/ASK polling and broker TP/SL",
-    "strategy_family": "NEAREST_VOLUME",
+    "strategy_family": "RED_SMA_REBOUND",
     "take_profit_pct": 1.0,
     "type": "SMA10_SMA20_CROSS",
-    "workflow_enabled": true
+    "workflow_enabled": false
   },
   "persistent_analysis_notes": [
     {
@@ -348,14 +348,14 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-18T04:50:09.721000+00:00",
+    "latest_live_run_utc": "2026-10-18T05:01:01.850000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
     "source_sha256": {
-      ".github/workflows/blofin_live_signal_watch.yml": "8310ba4fb08944cf2f3713860fa37b63187d372cd0dc45df18cdc6ebf32438d2",
-      "blofin_live_hourly.py": "55782eb5b2793b119e65e37568976f9f2083f7136986b4a17d3b7a2b5107a546",
-      "blofin_live_signal_watch.py": "f327fecf7f4ca05e1bbe2cb14651a1e743a1deaae0ca9b24750230d5c9b60978",
+      ".github/workflows/blofin_live_signal_watch.yml": "a9412f3b38b867f2134c30e9428953e37daeaf65c0243e431cd58a3cf8a4369b",
+      "blofin_live_hourly.py": "362a739fd865d46d4ec310b8cb326ce2c9d26a42ca6d09a68e2ed981e36f7ee0",
+      "blofin_live_signal_watch.py": "f7dab7cbea4fb94a0e03faa7543e173770b46306e61530bfa070cda55c609a75",
       "blofin_ma10_ma20_live.py": "50a7eda42fc6661678ede791446c12007c20a2cb1724d6c52b73e8faef38750b",
       "blofin_order_book.py": "605157d7bfaff4c9fcac4757df3036f64347944a1520fb5cda826bb7840c029b"
     },
