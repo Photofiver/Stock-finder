@@ -46,23 +46,31 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          # No credentials, order calls, or auto-trade execution in this workflow.
-          python blofin_live_scan_audit.py || echo 'AUDIT_WARN: historical scan audit failed'
-          for f in blofin_live_scans/live_watch_history_5m_part*.json; do
-            if [ -f "$f" ]; then git add -- "$f"; fi
-          done
-          python bot_context_builder.py || echo 'AUDIT_WARN: bot context cache build failed'
-          if [ -f bot_context.json ]; then git add -- bot_context.json; fi
-          if ! git diff --cached --quiet; then
-            git commit -m 'Update BloFin post-scan audit and context asynchronously'
-            for attempt in 1 2 3; do
-              if git pull --rebase origin main && git push origin HEAD:main; then
-                echo 'POSTSCAN_AUDIT_SAVED'
-                exit 0
-              fi
-              echo "AUDIT_PUSH_RETRY $attempt/3"
-              sleep 5
+          # No LIVE credentials and no order submission. Historical archives
+          # may take several minutes to checkout; ALWAYS reload the newest
+          # remote trading state before producing an audit commit.
+          for attempt in 1 2 3; do
+            git fetch origin main --depth=1
+            git reset --hard origin/main
+            python blofin_live_scan_audit.py || echo 'AUDIT_WARN: retrospective audit failed'
+            for f in blofin_live_scans/live_watch_history_5m_part*.json; do
+              if [ -f "$f" ]; then git add -- "$f"; fi
             done
-            echo 'AUDIT_ERROR: audit commit not pushed; live trading remains independent'
-            exit 1
-          fi
+            python bot_context_builder.py || echo 'AUDIT_WARN: bot context cache build failed'
+            if [ -f bot_context.json ]; then git add -- bot_context.json; fi
+            if git diff --cached --quiet; then
+              echo 'POSTSCAN_AUDIT_NO_CHANGES'
+              exit 0
+            fi
+            git commit -m 'Update BloFin asynchronous audit and context'
+            if git push origin HEAD:main; then
+              echo 'POSTSCAN_AUDIT_SAVED'
+              exit 0
+            fi
+            # A concurrent LIVE scan pushed first. Discard the stale audit
+            # commit and RECOMPUTE against newer data; never rebase JSON merges.
+            echo "POSTSCAN_AUDIT_REMOTE_CHANGED_RECOMPUTING $attempt/3"
+            sleep 2
+          done
+          echo 'POSTSCAN_AUDIT_SAVE_FAILED: LIVE runner unaffected'
+          exit 1
