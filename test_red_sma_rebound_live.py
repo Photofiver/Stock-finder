@@ -128,6 +128,10 @@ class Entry(unittest.TestCase):
         self.bot.free=Decimal("24.99")
         self.assertTrue(target.open_long(self.bot,self.state,self.sig,1,self.meta))
         self.assertEqual(len(self.bot.posts),2)
+    def test_preexisting_bankroll_below_20_blocks_without_reset(self):
+        self.bot.bankroll=Decimal("13.04")
+        self.assertFalse(target.open_long(self.bot,self.state,self.sig,1,self.meta))
+        self.assertFalse(self.bot.posts)
     def test_hard_drawdown_stop_blocks(self):
         self.bot.risk=True
         self.assertFalse(target.open_long(self.bot,self.state,self.sig,1,self.meta))
