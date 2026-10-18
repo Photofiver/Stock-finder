@@ -24,11 +24,12 @@ FEES=.12
 SLIP=.10
 CAP=25.0
 BUFFER=.50
-STRATS=("CURRENT","AFTER_3_TOTAL","FIRST_OF_BOTH","AFTER_3_CONSECUTIVE","AFTER_3_ADDITIONAL")
+STRATS=("CURRENT","AFTER_3_TOTAL","FIRST_OF_BOTH","AFTER_3_CONSECUTIVE","FIRST_OF_BOTH_CONSECUTIVE","AFTER_3_ADDITIONAL")
 LABELS={
 "CURRENT":"volume-only (opposite candle > entry volume)",
 "AFTER_3_TOTAL":"3 same-colour bars incl entry (not necessarily consecutive)",
 "FIRST_OF_BOTH":"whichever first: 3 total same-colour bars or opposite larger volume",
+"FIRST_OF_BOTH_CONSECUTIVE":"whichever first: 3 CONSECUTIVE same-colour bars incl ENTRY or opposing vol > ENTRY vol",
 "AFTER_3_CONSECUTIVE":"3 consecutive same-colour bars incl entry",
 "AFTER_3_ADDITIONAL":"3 NEW same-colour bars after entry (4 incl entry)",
 }
@@ -48,6 +49,7 @@ def indicator(pos,bar,mode):
     if mode=="AFTER_3_TOTAL":return count3
     if mode=="FIRST_OF_BOTH":return count3 or opposite
     if mode=="AFTER_3_CONSECUTIVE":return pos["streak"]>=3
+    if mode=="FIRST_OF_BOTH_CONSECUTIVE":return pos["streak"]>=3 or opposite
     if mode=="AFTER_3_ADDITIONAL":return pos["additional_count"]>=3
     raise ValueError(mode)
 
