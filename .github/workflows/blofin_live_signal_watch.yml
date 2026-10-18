@@ -29,6 +29,7 @@ jobs:
             !/*/
             /.github/
             /blofin_order_books/
+            /blofin_fast_scan_events/
           sparse-checkout-cone-mode: false
 
       - name: Refresh repository state
@@ -105,6 +106,12 @@ jobs:
           fi
           if [ -f blofin_live_state.json ]; then
             git add blofin_live_state.json
+            # Store a small chronological scan log; expensive charts and
+            # historical analysis remain in a separate audit workflow.
+            python blofin_fast_scan_events_writer.py || echo 'FAST_SCAN_LOG_WARN'
+            if [ -d blofin_fast_scan_events ]; then
+              git add -- blofin_fast_scan_events/
+            fi
           fi
           if [ -f blofin_live_technical_events.json ]; then
             git add blofin_live_technical_events.json
