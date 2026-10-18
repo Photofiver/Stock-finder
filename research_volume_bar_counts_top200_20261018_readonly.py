@@ -135,7 +135,7 @@ def main():
     market,errors,total=frozen.load()
     if len(market)<300 or len(errors)>10:raise RuntimeError("Insufficient archived coverage")
     rankings,coverage=frozen.rankings(market)
-    if len(rankings)!=288:raise RuntimeError(f"Expected 288 TOP200 ranks; got {len(rankings)}")
+    if len(rankings)!=289:raise RuntimeError(f"Expected 289 TOP200 ranks including warmup; got {len(rankings)}")
     report={"period_UK":f"{timestamp(START)} to {timestamp(END)}",
             "timeframe_minutes":5,"universe_archive_symbols":total,
             "market_symbols_with_data":len(market),
