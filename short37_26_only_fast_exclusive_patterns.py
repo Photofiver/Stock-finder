@@ -66,6 +66,8 @@ def main():
      "tree_experiments":decision["searched_models"],
      "warning":"Every rule fitted specifically to outcomes of these 63 known trades; 0/26 historical losses is not a guarantee for future trades. Three-clause search is bounded, one-/two-clause enumerations are exhaustive on available OHLCV features/thresholds. No unobserved order-book data available, no LIVE changes, no comparison with other trades/days."
     }
-    print("STRICT37_26_FINAL="+json.dumps(report,ensure_ascii=False,separators=(",",":")),flush=True)
-    Path("strict37_26_only_final_report.json").write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+    def json_number(x):
+        return x.item() if hasattr(x,"item") else str(x)
+    print("STRICT37_26_FINAL="+json.dumps(report,ensure_ascii=False,separators=(",",":"),default=json_number),flush=True)
+    Path("strict37_26_only_final_report.json").write_text(json.dumps(report,ensure_ascii=False,indent=2,default=json_number)+"\n",encoding="utf-8")
 if __name__=="__main__":main()
