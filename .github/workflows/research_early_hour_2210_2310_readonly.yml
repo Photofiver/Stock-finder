@@ -1,0 +1,49 @@
+name: EARLY 2210-2310 UK read-only analysis
+
+on:
+  push:
+    paths:
+      - 'research_early_hour_2210_2310_readonly.py'
+      - '.github/workflows/research_early_hour_2210_2310_readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  count:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - name: Use complete 390-coin public OHLCV historical archive
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39080889854
+          github-token: ${{ github.token }}
+          pattern: early-hour-shard-*
+          merge-multiple: true
+          path: shards
+      - name: Count EARLY signals and feasible positions in requested hour
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u research_early_hour_2210_2310_readonly.py
+      - name: Store results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: early-2210-2310-uk-result
+          path: blofin_early_hour_2210_2310_report.json
+          retention-days: 7
+          if-no-files-found: ignore
