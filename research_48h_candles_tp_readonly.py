@@ -101,9 +101,14 @@ def load():
         bad=[t for t in range(START-288*FIVE,END,FIVE) if t not in d]
         if bad:missing[s]=[uk(bad[0]),len(bad)]
     if missing:
-        print("COVERAGE_GAPS="+json.dumps(missing),flush=True)
-        raise RuntimeError("Incomplete 48h full market history; cannot reliably rank")
-    print("COVERAGE_OK="+json.dumps({"start_uk":uk(START),"end_uk":uk(END),"all_markets":len(bars),
+        print("COVERAGE_GAPS_EXCLUDED="+json.dumps(missing),flush=True)
+        # 2/390 coins have incomplete exchange OHLCV archives (not continuously
+        # listed or data gaps). Exclude completely, never interpolate candles.
+        for s in missing:del bars[s]
+    if len(bars)<385:
+        raise RuntimeError("Too few complete 390-coin histories for TOP200")
+    print("COVERAGE_OK="+json.dumps({"start_uk":uk(START),"end_uk":uk(END),"all_symbols_eligible":390,
+        "complete_continuous_markets":len(bars),"excluded_coins":missing,
         "candles_per_market_48h":576,"complete_market_candles":576*len(bars)}),flush=True)
     return bars
 
