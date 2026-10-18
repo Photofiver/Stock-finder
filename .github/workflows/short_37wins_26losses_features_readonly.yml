@@ -1,0 +1,47 @@
+name: Diagnose 37 SHORT winners vs 26 losses (READ ONLY)
+on:
+  push:
+    paths:
+      - 'short_37wins_26losses_features_readonly.py'
+      - '.github/workflows/short_37wins_26losses_features_readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  analyse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            short_37wins_26losses_features_readonly.py
+            short60_subset_3to4x_winloss_explanation.py
+            short60_volume_mean10_24hour_readonly.py
+            blofin_top200_repeat_setup_research.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 39148408029
+          github-token: ${{ github.token }}
+          pattern: short60-24h-market-shard-*
+          merge-multiple: true
+          path: shards
+      - name: Compare entry features of 37 wins and 26 losses
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u short_37wins_26losses_features_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: short-37-win-26-loss-explanation
+          path: short_37wins_26losses_features.json
+          retention-days: 7
+          if-no-files-found: ignore
