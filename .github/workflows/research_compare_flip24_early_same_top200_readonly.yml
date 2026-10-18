@@ -1,0 +1,53 @@
+name: Compare EARLY vs 24h FLIP on same TOP200 8d (READ ONLY)
+
+on:
+  push:
+    paths:
+      - 'research_compare_flip24_early_same_top200_readonly.py'
+      - '.github/workflows/research_compare_flip24_early_same_top200_readonly.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/*/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - name: Load existing complete 390-coin 8-day historical candles
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39074940517
+          github-token: ${{ github.token }}
+          pattern: top200-candle-shard-*
+          merge-multiple: true
+          path: shards
+      - name: Verify syntax
+        run: python -m py_compile research_compare_flip24_early_same_top200_readonly.py
+      - name: Fair historical comparison, fees slippage estimated funding, daily equity and drawdown
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u research_compare_flip24_early_same_top200_readonly.py
+      - name: Preserve full results and trade audits
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: same-top200-early-versus-flip24-eight-days
+          path: blofin_early_vs_flip24_same_top200_8d.json
+          retention-days: 10
+          if-no-files-found: ignore
