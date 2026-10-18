@@ -40,7 +40,7 @@ class Setups(unittest.TestCase):
         s=live.entry_signal(self.bot,bars("SHORT"),T)
         self.assertEqual(s["side"],"SHORT")
         self.assertEqual(s["signal_volume"],80)
-    def test_block_if_volume_above_mean10(self):
+    def test_block_if_volume_above_mean20(self):
         b=bars("LONG");b[-1]["v"]=120
         self.assertIsNone(live.entry_signal(self.bot,b,T))
         b=bars("SHORT");b[-2]["v"]=110
@@ -63,7 +63,46 @@ class Setups(unittest.TestCase):
         pos={"side":"SHORT","last_same_volume":60}
         b=bars("LONG")
         self.assertEqual(live.exit_transition(pos,b,T),(True,60))
-    def test_no_close_on_equal_or_over_mean10(self):
+    def test_green_143_passes_MA20_but_would_fail_MA10(self):
+        """XPT-like case: last red 110, current green 143, MA10 ~101, MA20 ~151."""
+        b=bars("LONG")
+        for candle20 in b[-21:-11]:
+            candle20["v"]=200
+        b[-2]["v"]=110
+        b[-1]["v"]=143
+        own=live._by_ts(b,T)
+        self.assertLess(live._previous10_mean(own,T-F),143)
+        self.assertGreaterEqual(live._previous20_mean(own,T-F),143)
+        self.assertEqual(live.entry_signal(self.bot,b,T)["side"],"LONG")
+        self.assertEqual(live.exit_transition({"side":"SHORT","last_same_volume":110},b,T),(True,110))
+
+    def test_MA20_rejects_candle_that_MA10_would_allow(self):
+        b=bars("LONG")
+        for recent in b[-11:-1]:
+            recent["v"]=200
+        b[-2]["v"]=100
+        b[-1]["v"]=170
+        own=live._by_ts(b,T)
+        self.assertGreaterEqual(live._previous10_mean(own,T-F),170)
+        self.assertLess(live._previous20_mean(own,T-F),170)
+        self.assertIsNone(live.entry_signal(self.bot,b,T))
+        self.assertEqual(live.exit_transition({"side":"SHORT","last_same_volume":100},b,T),(False,100))
+
+    def test_MA20_requires_full_previous_20_closed_candles(self):
+        b=bars("SHORT")[-20:]
+        self.assertIsNone(live.entry_signal(self.bot,b,T))
+        self.assertEqual(live.exit_transition({"side":"LONG","last_same_volume":50},b,T),(False,50))
+        self.assertIsNotNone(live.entry_signal(self.bot,bars("SHORT"),T))
+
+    def test_legacy_MA10_unchanged_on_existing_positions(self):
+        b=bars("LONG")
+        for candle20 in b[-21:-11]:
+            candle20["v"]=200
+        b[-1]["v"]=143
+        old={"side":"LONG","last_red_volume":60}
+        self.assertEqual(live.legacy_exit_transition(old,b,T),(False,60))
+
+    def test_no_close_on_equal_or_over_mean20(self):
         pos={"side":"LONG","last_same_volume":80}
         b=bars("SHORT");self.assertEqual(live.exit_transition(pos,b,T),(False,80))
         b[-1]["v"]=120;self.assertEqual(live.exit_transition(pos,b,T),(False,80))
