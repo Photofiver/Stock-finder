@@ -17,6 +17,7 @@ This module never clears the broker's existing TPSL. Safety interlocks
 block uncertain orders; 1x isolated and bankroll limits remain in force.
 """
 import math
+import os
 import uuid
 from decimal import Decimal
 
@@ -334,7 +335,9 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                 bot.notify(f"CRITICAL {inst}: exit uncertain: {exc}",
                            "BloFin LIVE volume exit safety")
     # Do not trade until any uncertain broker order or closure is reconciled.
-    if scan["status"] in ("BLOCK_UNTRACKED_ACCOUNT_POSITIONS","BLOCK_UNCERTAIN_ORDERS"):
+    if os.getenv("LIVE_VOLUME_REVERSE_LONG_PAUSE_ENTRIES", "true").strip().lower() == "true":
+        scan["status"]="PAUSED_NEW_ENTRIES_KEEP_EXISTING_EXITS"
+    elif scan["status"] in ("BLOCK_UNTRACKED_ACCOUNT_POSITIONS","BLOCK_UNCERTAIN_ORDERS"):
         pass
     elif any(p.get("exit_pending") for p in bot.get_tracked_positions(state).values()):
         scan["status"]="WAIT_FOR_EXIT_RECONCILIATION"
