@@ -1,0 +1,65 @@
+name: BloFin LIVE post-scan audit (separate from LIVE runner)
+
+on:
+  workflow_run:
+    workflows: ["BloFin LIVE signal watch"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: blofin-postscan-audit-only
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          sparse-checkout: |
+            /*
+            !/*/
+            /.github/
+            /blofin_live_scans/
+            /blofin_trade_charts/
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Slow historical scan audit and context cache OFF the LIVE critical path
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+          LIVE_SIGNAL_MINUTES: '5'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # No credentials, order calls, or auto-trade execution in this workflow.
+          python blofin_live_scan_audit.py || echo 'AUDIT_WARN: historical scan audit failed'
+          for f in blofin_live_scans/live_watch_history_5m_part*.json; do
+            if [ -f "$f" ]; then git add -- "$f"; fi
+          done
+          python bot_context_builder.py || echo 'AUDIT_WARN: bot context cache build failed'
+          if [ -f bot_context.json ]; then git add -- bot_context.json; fi
+          if ! git diff --cached --quiet; then
+            git commit -m 'Update BloFin post-scan audit and context asynchronously'
+            for attempt in 1 2 3; do
+              if git pull --rebase origin main && git push origin HEAD:main; then
+                echo 'POSTSCAN_AUDIT_SAVED'
+                exit 0
+              fi
+              echo "AUDIT_PUSH_RETRY $attempt/3"
+              sleep 5
+            done
+            echo 'AUDIT_ERROR: audit commit not pushed; live trading remains independent'
+            exit 1
+          fi
