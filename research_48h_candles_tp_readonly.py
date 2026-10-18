@@ -328,6 +328,15 @@ def study():
       "definition":"Net winner = TP 1.28%, SL -1.22%, otherwise actual 60min outcome less 0.22%. Every candle signal counted even if hypothetical trades overlap; serial simulation prevents global overlap. A result from a 48h sample cannot establish predictive reliability. Causal 24h gain rank among currently listed symbols, no historic delistings. Funding omitted.",
     }
     Path("blofin_48h_candle_tp_patterns.json").write_text(json.dumps(report,ensure_ascii=False,indent=2))
+    print("ALL_CANDLE_PATTERN_COUNTS="+json.dumps([{
+      "pattern":v["pattern"],"side":v["side"],
+      "count":v["two_day_all_signals"]["signals"],
+      "tp":v["two_day_all_signals"]["tp"],
+      "sl":v["two_day_all_signals"]["sl"],
+      "time":v["two_day_all_signals"]["time"],
+      "tp_pct":v["two_day_all_signals"]["tp_first_rate"],
+      "net_pct_per_signal":v["two_day_all_signals"]["mean_net_pct"]
+    } for v in results],ensure_ascii=False,separators=(",",":")),flush=True)
     for side in ("LONG","SHORT"):
         base=next(r for r in results if r["pattern"]=="ANY_CANDLE" and r["side"]==side)
         print("BASELINE_"+side+"="+json.dumps(base,separators=(",",":")),flush=True)
