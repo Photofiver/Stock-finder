@@ -15,7 +15,7 @@ def row(ts, o=100.0, h=100.2, l=99.8, c=100.0, volume=100.0):
 def good_bars():
     bars=[row(T-(200-i)*F) for i in range(200)]
     # last candle close=T: RED after immediate GREEN
-    bars[-2]=row(T-2*F,100.0,100.15,99.9,100.10,20.0)
+    bars[-31]["c"]=99.8  # 150m earlier: the signal close must be >= this\n    bars[-2]=row(T-2*F,100.0,100.15,99.9,100.10,20.0)
     bars[-1]=row(T-F,100.1,100.2,99.8,99.99,70.0)
     return bars
 
