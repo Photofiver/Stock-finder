@@ -97,25 +97,8 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
-          # Never run audit rotation against a partially downloaded history.
-          # An archive download failure must not prevent saving current state.
-          ARCHIVES_READY=0
-          if git sparse-checkout add /blofin_live_scans/ /blofin_trade_charts/; then
-            ARCHIVES_READY=1
-          else
-            echo 'AUDIT_ERROR: archive restoration failed; skipping audit and preserving LIVE state'
-          fi
-
-          # Read-only diagnostics run AFTER LIVE execution, never before placing orders.
-          # A diagnostics/API failure must never block saving LIVE state.
-          if [ "$ARCHIVES_READY" -eq 1 ] && [ -f blofin_live_state.json ]; then
-            LIVE_SIGNAL_MINUTES=5 python blofin_live_scan_audit.py || echo 'AUDIT_ERROR: scan diagnostics failed; preserving LIVE state'
-            for audit_file in blofin_live_scans/live_watch_history_5m_part*.json; do
-              if [ -f "$audit_file" ]; then
-                git add -- "$audit_file"
-              fi
-            done
-          fi
+          # Keep the LIVE critical path limited to small trading-state files.
+          # Historical 5m audit is handled by the separate postscan workflow.
           git add blofin_signal_state.json
           if [ -f blofin_pending_signal.json ]; then
             git add blofin_pending_signal.json
