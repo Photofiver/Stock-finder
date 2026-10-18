@@ -1,9 +1,8 @@
 name: BloFin LIVE post-scan audit (separate from LIVE runner)
 
+# Manual until the main LIVE save stage has been safely decoupled.
+# Running this automatically alongside the original audit would duplicate work.
 on:
-  workflow_run:
-    workflows: ["BloFin LIVE signal watch"]
-    types: [completed]
   workflow_dispatch:
 
 permissions:
