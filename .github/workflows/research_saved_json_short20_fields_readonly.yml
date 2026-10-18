@@ -1,0 +1,29 @@
+name: Inspect saved JSON candle fields SHORT READ ONLY
+on:
+  push:
+    paths:
+      - 'research_saved_json_short20_fields_readonly.py'
+      - '.github/workflows/research_saved_json_short20_fields_readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            research_saved_json_short20_fields_readonly.py
+            blofin_live_state.json
+            blofin_learning_12h.json
+            blofin_live_scans/live_watch_history_5m_part0029.json
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Inspect fields without trading
+        run: python -u research_saved_json_short20_fields_readonly.py
