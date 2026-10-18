@@ -1,9 +1,14 @@
 name: BloFin LIVE post-scan audit (separate from LIVE runner)
 
-# Manual until the main LIVE save stage has been safely decoupled.
-# Running this automatically alongside the original audit would duplicate work.
+# Run the heavy archive and historical audit on a separate 15-minute schedule.
+# This concurrency group is independent from LIVE trading every 5 minutes.
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '4,19,34,49 * * * *'
+  push:
+    paths:
+      - '.github/workflows/blofin_live_postscan_audit.yml'
 
 permissions:
   contents: write
@@ -14,7 +19,6 @@ concurrency:
 
 jobs:
   audit:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 18
     steps:
