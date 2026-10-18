@@ -1,0 +1,28 @@
+name: Test RED SMA10 rebound LIVE entry safety (NO ORDERS)
+
+on:
+  push:
+    paths:
+      - 'blofin_red_sma_rebound_live.py'
+      - 'test_red_sma_rebound_live.py'
+      - '.github/workflows/test_red_sma_rebound_live.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate Python syntax and all no-network mock broker tests
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: |
+          python -m py_compile blofin_red_sma_rebound_live.py test_red_sma_rebound_live.py
+          python -m unittest -v test_red_sma_rebound_live.py
