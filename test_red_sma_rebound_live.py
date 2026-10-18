@@ -120,10 +120,14 @@ class Entry(unittest.TestCase):
         self.sig={"inst":"EPIC-USDT","side":"LONG","close":97.4,
                   "signal_close_ms":self.bot.now-1000}
         self.state={"positions":{}}
-    def test_capital_must_be_at_least_25_free(self):
-        self.bot.free=Decimal("24.99")
+    def test_minimum_free_equity_20p50_buffer(self):
+        self.bot.free=Decimal("20.49")
         self.assertFalse(target.open_long(self.bot,self.state,self.sig,1,self.meta))
         self.assertFalse(self.bot.posts)
+    def test_25_usdt_target_not_permanent_free_equity_floor(self):
+        self.bot.free=Decimal("24.99")
+        self.assertTrue(target.open_long(self.bot,self.state,self.sig,1,self.meta))
+        self.assertEqual(len(self.bot.posts),2)
     def test_hard_drawdown_stop_blocks(self):
         self.bot.risk=True
         self.assertFalse(target.open_long(self.bot,self.state,self.sig,1,self.meta))
