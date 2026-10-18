@@ -1,0 +1,48 @@
+name: ONLY 37 winning vs 26 losing exact pattern search (READ ONLY)
+on:
+  push:
+    paths:
+      - 'short37_26_only_fast_exclusive_patterns.py'
+      - '.github/workflows/short37_26_only_fast_exclusive_patterns.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  analyse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            short37_26_only_fast_exclusive_patterns.py
+            short37_26_exclusive_only_winner_rules.py
+            short37_extra_indicators_readonly.py
+            short60_volume_mean10_24hour_readonly.py
+            blofin_top200_repeat_setup_research.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3 numpy scikit-learn
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 39148408029
+          github-token: ${{ github.token }}
+          pattern: short60-24h-market-shard-*
+          merge-multiple: true
+          path: shards
+      - name: Find exclusive features among ONLY the chosen 37/26
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u short37_26_only_fast_exclusive_patterns.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: short37-26-only-patterns-final
+          path: strict37_26_only_final_report.json
+          retention-days: 7
+          if-no-files-found: ignore
