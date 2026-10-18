@@ -1,0 +1,46 @@
+name: Explain 64 SHORT wins and 78 losses 3to4x (READ ONLY)
+on:
+  push:
+    paths:
+      - 'short60_subset_3to4x_winloss_explanation.py'
+      - '.github/workflows/short60_subset_3to4x_winloss_explanation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  analyse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            short60_subset_3to4x_winloss_explanation.py
+            short60_volume_mean10_24hour_readonly.py
+            blofin_top200_repeat_setup_research.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 39148408029
+          github-token: ${{ github.token }}
+          pattern: short60-24h-market-shard-*
+          merge-multiple: true
+          path: shards
+      - name: Audit and explain winning and losing entry characteristics
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u short60_subset_3to4x_winloss_explanation.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: short-64-winner-feature-explanation
+          path: short60_subset_3to4x_winloss_explanation.json
+          retention-days: 7
+          if-no-files-found: ignore
