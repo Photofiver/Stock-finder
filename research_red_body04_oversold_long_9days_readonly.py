@@ -371,7 +371,44 @@ def main():
         running+=ev["ret"]*NOTIONAL/100
         peak=max(peak,running)
         maxdd=max(maxdd,peak-running)
+    # Independent, exactly last-48h and last-24h sequential setups.
+    def interval_result(st):
+        signal_slice=[ev for ev in chosen_signals if ev["entry"]>=st]
+        busy=st;tr=[]
+        for ev in signal_slice:
+            if ev["entry"]>=busy:
+                tr.append(ev)
+                busy=ev["exit"]
+        return {"from_uk":when(st),"to_uk":when(END),
+             "candidate_signals":len(signal_slice),
+             "one_global_position":metric(tr),
+             "net_usdt":round(sum(e["ret"] for e in tr)*NOTIONAL/100,4),
+             "daily":{date:{"entries":len(v),"tp":sum(e["reason"]=="TP" for e in v),
+                         "sl":sum(e["reason"]=="SL" for e in v),
+                         "net_usdt":round(sum(e["ret"] for e in v)*.2,4)}
+                      for date,v in ((d,[e for e in tr if e["day"]==d]) for d in
+                            sorted(set(e["day"] for e in tr)))}}
+    last_48=interval_result(tstamp("2026-10-16","04:30"))
+    last_24=interval_result(tstamp("2026-10-17","04:30"))
+    # Strictly do not let entries immediately before boundaries get scored on
+    # bars after period boundaries. They are excluded from phase results.
+    strict_periods={}
+    for nm,left,right in (("train",START,TRAINEND),
+                          ("validation",TRAINEND,VALIDEND),
+                          ("holdout",VALIDEND,END)):
+        period_events=[ev for ev in chosen_signals
+                       if left<=ev["entry"] and ev["entry"]+12*FIVE<=right]
+        busy=left;eligible=[]
+        for ev in period_events:
+            if ev["entry"]>=busy:
+                eligible.append(ev);busy=ev["exit"]
+        strict_periods[nm]={"first_60m_boundary_excluded":len(period_events),
+                           "serial":metric(eligible),
+                           "net_usdt":round(sum(e["ret"] for e in eligible)*.2,4)}
     selected_full={
+        "exact_last_48h":last_48,
+        "exact_last_24h":last_24,
+        "strict_phase_no_outcomes_cross_boundary":strict_periods,
         "setup":"LONG after CLOSED 5m RED candle body >=0.4% and <0.8% (inclusive lower), with signal candle CLOSE >=2% BELOW SMA10 (SMA10 includes the just-closed signal candle). Confirmed next 5m OPEN entry. TP+1.5% SL-1% 60min max, conservative SL-first.",
         "selection_procedure":"Selected before holdout from 204 profitable raw-signal combinations on first 7 UK days; this candidate additionally had serial profit positive in both train and validation.",
         "signals_total":len(chosen_signals),
