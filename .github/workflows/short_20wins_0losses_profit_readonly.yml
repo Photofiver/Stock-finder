@@ -1,0 +1,47 @@
+name: Exact 20 winning SHORT profit (READ ONLY)
+on:
+  push:
+    paths:
+      - 'short_20wins_0losses_profit_readonly.py'
+      - '.github/workflows/short_20wins_0losses_profit_readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  compute:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            short_20wins_0losses_profit_readonly.py
+            short37_extra_indicators_readonly.py
+            short60_volume_mean10_24hour_readonly.py
+            blofin_top200_repeat_setup_research.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 39148408029
+          github-token: ${{ github.token }}
+          pattern: short60-24h-market-shard-*
+          merge-multiple: true
+          path: shards
+      - name: Calculate actual simulated returns of the selected 20 closed trades
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u short_20wins_0losses_profit_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: short-20wins-exact-daily-profit
+          path: short_20wins_0losses_profit_20261018.json
+          retention-days: 7
+          if-no-files-found: ignore
