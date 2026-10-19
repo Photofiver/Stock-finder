@@ -128,6 +128,26 @@ class Setups(unittest.TestCase):
         b = {"inst":"COIN-B","rank":5,"volume_strength_20":0.8}
         self.assertEqual(live.prioritize_volume_signals([a,b]), [b,a])
 
+    def test_extra_long_gates_keep_short_unchanged(self):
+        long_signal = live.entry_signal(self.bot, bars("LONG"), T)
+        self.assertLess(long_signal["signal_mean20_prev"],
+                        long_signal["previous_mean20_prev"])
+        self.assertIsNone(live.long_entry_extra_rejection(long_signal, 1))
+        self.assertIsNone(live.long_entry_extra_rejection(long_signal, 50))
+        self.assertEqual(live.long_entry_extra_rejection(long_signal, 51),
+                         "LONG_RANK_OUTSIDE_TOP50")
+        self.assertEqual(live.long_entry_extra_rejection(long_signal, 0),
+                         "LONG_RANK_OUTSIDE_TOP50")
+        long_signal["signal_mean20_prev"] = long_signal["previous_mean20_prev"]
+        self.assertEqual(live.long_entry_extra_rejection(long_signal, 1),
+                         "LONG_VOLUME_MA20_NOT_DECLINING")
+        long_signal["signal_mean20_prev"] = None
+        self.assertEqual(live.long_entry_extra_rejection(long_signal, 1),
+                         "LONG_VOLUME_MA20_UNAVAILABLE")
+        short_signal = live.entry_signal(self.bot, bars("SHORT"), T)
+        short_signal["signal_mean20_prev"] = None
+        self.assertIsNone(live.long_entry_extra_rejection(short_signal, 180))
+
     def test_block_if_volume_above_mean20(self):
         b=bars("LONG");b[-1]["v"]=120
         self.assertIsNone(live.entry_signal(self.bot,b,T))
@@ -307,6 +327,42 @@ class Broker(unittest.TestCase):
                          ["MID-USDT","MIN-USDT"])
 
     @patch("blofin_trade_charts.capture_chart",side_effect=RuntimeError("no rendering in offline tests"))
+    def test_long_only_entry_gates_filter_rank_and_nonfalling_volume_mean(self):
+        ranking = ["GOOD-LONG", "RISING-LONG", "GOOD-SHORT"] + [
+            f"OTHER-{i}" for i in range(47)] + ["RANK51-LONG"] + [
+            f"OTHER-LATE-{i}" for i in range(149)]
+        self.assertEqual(len(ranking), 200)
+        def confirmed(insts, close):
+            self.assertEqual(close, T)
+            rising = bars("LONG")
+            # Make the current 20-bar mean rise compared to the preceding
+            # average, without altering either of the signal candles.
+            rising[-22]["v"] = 1
+            self.assertGreaterEqual(
+                live.entry_signal(self.bot, rising, T)["volume_strength_20"], 0.90)
+            return {
+                "GOOD-LONG": bars("LONG"),
+                "RISING-LONG": rising,
+                "GOOD-SHORT": bars("SHORT"),
+                "RANK51-LONG": bars("LONG"),
+            }
+        observed = []
+        def observe(bot, state, sig, instruments):
+            observed.append((sig["inst"], sig["side"], sig["rank"]))
+            return False
+        with patch.dict("os.environ", {"LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES": "false"}):
+            with patch.object(live, "_open_one", side_effect=observe):
+                live.run(self.bot, self.state, ranking, {}, self.instruments,
+                         T, confirmed)
+        self.assertEqual(observed, [
+            ("GOOD-LONG", "LONG", 1), ("GOOD-SHORT", "SHORT", 3)])
+        scan = self.state["volume_long_last_scan"]
+        self.assertEqual(scan["long_entry_rank_range_inclusive"], [1, 50])
+        self.assertTrue(scan["long_requires_falling_prior_20bar_mean"])
+        reasons = {x["inst"]: x["reason"] for x in scan["rejections"]}
+        self.assertEqual(reasons["RISING-LONG"], "LONG_VOLUME_MA20_NOT_DECLINING")
+        self.assertEqual(reasons["RANK51-LONG"], "LONG_RANK_OUTSIDE_TOP50")
+
     def test_buy_long_sell_short_each_one_per_coin_tpsl(self,chart):
         self.assertTrue(live._open_one(self.bot,self.state,self.signal("ABC-USDT","LONG"),self.instruments))
         self.assertTrue(live._open_one(self.bot,self.state,self.signal("XYZ-USDT","SHORT"),self.instruments))
