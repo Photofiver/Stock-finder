@@ -717,7 +717,8 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
     unprotected=[]
     # Upgrade already-open V1 positions using their actual filled entry price.
     for inst,pos in list(active.items()):
-        if inst in broker_set and pos.get("strategy")==STRATEGY:
+        if (inst in broker_set and pos.get("strategy")==STRATEGY
+                and not pos.get("exit_pending")):
             try:
                 protected=_ensure_protection(bot,state,pos,instruments.get(inst))
             except Exception as exc:
