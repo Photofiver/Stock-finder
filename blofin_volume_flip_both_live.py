@@ -725,7 +725,12 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                 protected=False
                 pos["protection_error"]=f"{type(exc).__name__}: {exc}"[:250]
                 bot.save_state(state)
-            if not protected:
+            if protected:
+                attempt=(state.get("volume_long_order_attempts") or {}).get(inst)
+                if attempt and attempt.get("status") in ("PROTECTING","PROTECTION_UNCERTAIN"):
+                    attempt["status"]="TRACKED"
+                    bot.save_state(state)
+            else:
                 unprotected.append(inst)
                 bot.notify(f"CRITICAL {inst}: TP/SL 0.55/0.50 not verified; "
                            "no additional entries until resolved.",
