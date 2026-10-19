@@ -345,7 +345,7 @@ class VolumePriceTunnel(unittest.TestCase):
         self.assertEqual(
             [x["volume"] for x in channel["upper_anchors"]], [10, 20])
         self.assertEqual(
-            [x["volume"] for x in channel["lower_anchors"]], [40, 30])
+            [x["volume"] for x in channel["lower_anchors"]], [40, 60])
         self.assertAlmostEqual(
             channel["upper_price"] - channel["previous_upper_price"],
             channel["upper_slope_per_5m"])
@@ -375,7 +375,7 @@ class VolumePriceTunnel(unittest.TestCase):
         self.assertEqual(
             [x["volume"] for x in channel["upper_anchors"]], [10,20])
         self.assertEqual(
-            [x["volume"] for x in channel["lower_anchors"]], [40,30])
+            [x["volume"] for x in channel["lower_anchors"]], [40,60])
 
     def test_inside_allowed_without_breakout_and_beyond_blocked(self):
         for side, beyond in (("LONG",110), ("SHORT",95)):
@@ -391,7 +391,7 @@ class VolumePriceTunnel(unittest.TestCase):
     def test_crossed_real_price_lines_are_direction_change_not_bad_data(self):
         rows=self.sample("SHORT")
         # GREEN latest low rises ABOVE the falling RED upper line.
-        rows[-5] = candle(T-5*F, o=107, c=108, volume=30)
+        rows[-2] = candle(T-2*F, o=115, c=116, volume=60)
         signal=live.volume_price_tunnel_from_bars(rows, T, "SHORT")
         self.assertEqual(signal["status"], "VALID")
         self.assertTrue(signal["colour_order_changed"])
