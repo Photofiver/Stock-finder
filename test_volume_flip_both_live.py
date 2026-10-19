@@ -215,7 +215,7 @@ class Broker(unittest.TestCase):
         self.assertTrue(live._ensure_protection(self.bot,self.state,pos,
                                                  self.instruments["ABC-USDT"]))
         self.assertEqual(len(self.bot.posted),1)
-        self.assertEqual(pos["protection_status"],"TP055_SL05_ACTIVE")
+        self.assertEqual(pos["protection_status"],"TP055_SL05_MARK_ACTIVE")
 
 
     def test_new_tpsl_uses_mark_trigger_both_directions(self):
