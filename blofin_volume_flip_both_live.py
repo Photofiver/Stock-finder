@@ -227,16 +227,32 @@ def entry_signal(bot, bars, expected_close_ms):
         side = "SHORT"
     else:
         return None
+    mean20 = _previous20_mean(rows, ts)
     return {
         "side":side,"strategy":STRATEGY,
         "signal_close_ms":int(expected_close_ms),
         "close":now[3],"signal_volume":now[4],
+        # Ranking is relative to each coin's OWN prior 20 closed 5m bars.
+        # Entry qualification above already guarantees mean20 > 0.
+        "volume_strength_20":now[4]/mean20,
         "previous_opposite_volume":prev[4],
         "volume_ratio":now[4]/prev[4] if prev[4] else None,
-        "signal_mean20_prev":_previous20_mean(rows,ts),
+        "signal_mean20_prev":mean20,
         "previous_mean20_prev":_previous20_mean(rows,ts-FIVE),
         "signal_candle_ts":ts,
     }
+
+
+def prioritize_volume_signals(matches):
+    """Strongest qualified 5m signal volume / its own previous MA20 first.
+
+    All eligible LONGs and SHORTs compete on the same normalized scale.
+    Only equal-strength signals fall back to rank 24h for deterministic ties;
+    this never filters out an otherwise eligible setup.
+    """
+    return sorted(matches, key=lambda s: (
+        -s["volume_strength_20"], s["rank"], s["inst"]
+    ))
 
 
 def exit_transition(pos, bars, expected_close_ms):
@@ -743,7 +759,8 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
     if int(state.get("last_scan_close_ms") or 0)==expected_close_ms:
         print(f"{STRATEGY}: duplicate scan skipped")
         return
-    scan={"strategy":STRATEGY,"signal_close_ms":int(expected_close_ms),
+    scan={"strategy":STRATEGY,"selection_priority":"SIGNAL_VOLUME_DIV_PREVIOUS_20_BAR_MEAN_DESC",
+          "signal_close_ms":int(expected_close_ms),
           "top200_count":len(top200),"status":"PENDING",
           "scanned_confirmed":0,"matched":0,"candidates":[],
           "entries":[],"exits":[],"rejections":[]}
@@ -897,6 +914,10 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
             if sig is not None:
                 sig.update({"inst":inst,"rank":rank})
                 matches.append(sig)
+        # Full TOP200 was already checked against the exact same entry rules.
+        # From eligible signals, select strongest relative volume first,
+        # regardless of prior 24h price-change ranking.
+        matches = prioritize_volume_signals(matches)
         scan["matched"]=len(matches)
         scan["candidates"]=matches[:20]
         scan["status"]="NO_MATCH" if not matches else "MATCHES_NO_ENTRY"
