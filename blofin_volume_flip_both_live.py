@@ -156,6 +156,125 @@ def legacy_exit_transition(pos, bars, expected_close_ms):
     return False,red
 
 
+
+def _audit_colour(row):
+    """5m candle direction by price body, NOT by the color of volume bars."""
+    if row[3] > row[0]:
+        return "GREEN"
+    if row[3] < row[0]:
+        return "RED"
+    return "DOJI"
+
+
+def _volume_audit(pos):
+    """Durable, JSON-serializable data for research; never changes trade rules."""
+    audit = pos.get("volume_candle_audit")
+    if isinstance(audit, dict):
+        return audit
+    side = str(pos.get("side") or "").upper()
+    snap = pos.get("signal_snapshot") or {}
+    signal_close = int(pos.get("signal_close_ms") or snap.get("signal_close_ms") or 0)
+    if not signal_close or side not in ("LONG", "SHORT"):
+        return None
+    audit = {
+        "version": 1, "bar_minutes": 5,
+        "entry_signal_candle": {
+            "close_ms": signal_close,
+            "color": "GREEN" if side == "LONG" else "RED",
+            "volume": snap.get("signal_volume") or pos.get("signal_volume"),
+        },
+        # Every FULLY CLOSED bar AFTER the entry signal. The signal bar is
+        # separate because it closed BEFORE the order filled.
+        "candles": [], "missing_close_ms": [],
+        "audited_through_close_ms": signal_close,
+        "total_green_bars": 0, "total_red_bars": 0,
+        "total_doji_bars": 0, "total_opposite_bars": 0,
+        "total_trade_direction_bars": 0,
+        "current_green_streak": 0, "current_red_streak": 0,
+        "max_green_streak": 0, "max_red_streak": 0,
+        "max_opposite_streak": 0,
+        "exit_trigger_candle": None,
+    }
+    pos["volume_candle_audit"] = audit
+    return audit
+
+
+def _audit_confirmed_volume_candles(pos, bars, expected_close_ms):
+    """Capture every available confirmed 5m candle; dedupe and identify gaps.
+
+    Recalculating counters from recorded candles allows out-of-order gap
+    recovery after a delayed API response. A gap breaks a consecutive streak;
+    a missing bar is NEVER counted as a green or red bar.
+    No additional market or account requests are made.
+    """
+    if pos.get("strategy") != STRATEGY:
+        return None
+    audit = _volume_audit(pos)
+    if audit is None:
+        return None
+    start = int(audit["entry_signal_candle"]["close_ms"])
+    close = int(expected_close_ms)
+    if close <= start:
+        return audit
+    confirmed = _by_ts(bars, close)
+    previous = {
+        int(row["close_ms"]): row for row in audit["candles"]
+        if isinstance(row, dict) and row.get("close_ms")
+    }
+    for ts in range(start + FIVE, close + 1, FIVE):
+        if ts in previous:
+            continue
+        candle = confirmed.get(ts - FIVE)
+        if candle is None:
+            continue
+        previous[ts] = {
+            "close_ms": ts, "color": _audit_colour(candle),
+            "volume": candle[4],
+            "open": candle[0], "close": candle[3],
+        }
+    audit["candles"] = [previous[ts] for ts in sorted(previous) if start < ts <= close]
+    # A skipped/missing 5m candle is visible as a gap in the JSON, not silently
+    # treated as a candle of the preferred direction.
+    audit["missing_close_ms"] = [
+        ts for ts in range(start + FIVE, close + 1, FIVE) if ts not in previous
+    ]
+    audit["audited_through_close_ms"] = close
+    green = red = doji = 0
+    green_streak = red_streak = 0
+    max_green = max_red = max_opposite = 0
+    last_close = start
+    side = str(pos.get("side") or "").upper()
+    for item in audit["candles"]:
+        if int(item["close_ms"]) - last_close != FIVE:
+            green_streak = red_streak = 0
+        last_close = int(item["close_ms"])
+        col = item["color"]
+        if col == "GREEN":
+            green += 1
+            green_streak += 1
+            red_streak = 0
+        elif col == "RED":
+            red += 1
+            red_streak += 1
+            green_streak = 0
+        else:
+            doji += 1
+            green_streak = red_streak = 0
+        max_green = max(max_green, green_streak)
+        max_red = max(max_red, red_streak)
+        max_opposite = max(max_opposite, red_streak if side == "LONG" else green_streak)
+    audit.update({
+        "total_green_bars": green, "total_red_bars": red,
+        "total_doji_bars": doji,
+        "total_opposite_bars": red if side == "LONG" else green,
+        "total_trade_direction_bars": green if side == "LONG" else red,
+        "current_green_streak": green_streak, "current_red_streak": red_streak,
+        "max_green_streak": max_green, "max_red_streak": max_red,
+        "max_opposite_streak": max_opposite,
+    })
+    return audit
+
+
 def _open_one(bot, state, sig, instruments):
     inst = sig["inst"]
     side = sig["side"]
@@ -256,6 +375,7 @@ def _open_one(bot, state, sig, instruments):
         "protection_status":"NO_TPSL_USER_REQUESTED",
         "code_commit":bot.CODE_COMMIT,
     }
+    _volume_audit(pos)  # Persist signal-volume baseline from the first LIVE fill.
     bot.get_tracked_positions(state)[inst]=pos
     bot.save_state(state)
     fill = bot.wait_for_order_fill(inst,pos["order_id"],order_id)
@@ -423,6 +543,13 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                list(dict.fromkeys(list(top200)+list(active))))
     confirmed = wait_for_confirmed_close(requested, expected_close_ms) or {}
     scan["scanned_confirmed"]=sum(1 for inst in top200 if inst in confirmed)
+    # Archive all confirmed 5m candles for tracked trades, including trades
+    # waiting for broker close reconciliation. No new BloFin API calls.
+    for inst, pos in list(active.items()):
+        bars = confirmed.get(inst)
+        if (pos.get("strategy")==STRATEGY and bars and
+                int(bot.bar_close_ms(bars[-1]))==expected_close_ms):
+            _audit_confirmed_volume_candles(pos, bars, expected_close_ms)
     for inst,pos in list(active.items()):
         legacy = pos.get("strategy")==LEGACY_STRATEGY and pos.get("hold_policy")==LEGACY_HOLD_POLICY
         if not legacy and not (pos.get("strategy")==STRATEGY and pos.get("hold_policy")==HOLD_POLICY):
@@ -442,6 +569,21 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         pos["last_red_volume" if legacy else "last_same_volume"]=new_volume
         pos["last_checked_signal_close_ms"]=int(expected_close_ms)
         if should_close:
+            # Archive the EXACT confirmed trigger bar BEFORE submitting close.
+            # In 429 recovery, this remains the original trigger candle;
+            # a later broker fill must not overwrite the historic trigger.
+            if not legacy:
+                audit = _volume_audit(pos)
+                signal_bar = _by_ts(bars, expected_close_ms).get(expected_close_ms-FIVE)
+                if audit is not None and signal_bar is not None and audit.get("exit_trigger_candle") is None:
+                    audit["exit_trigger_candle"] = {
+                        "close_ms": int(expected_close_ms),
+                        "color": _audit_colour(signal_bar),
+                        "volume": signal_bar[4],
+                        "open": signal_bar[0],
+                        "close": signal_bar[3],
+                        "entry_signal_volume": (pos.get("signal_snapshot") or {}).get("signal_volume"),
+                    }
             # Persist a close intent BEFORE the POST; after any ambiguous
             # response, retry only after a fresh, same-side broker verification.
             if not legacy:
