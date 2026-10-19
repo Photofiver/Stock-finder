@@ -275,6 +275,10 @@ class Broker(unittest.TestCase):
     def test_buy_long_sell_short_each_one_per_coin_tpsl(self,chart):
         self.assertTrue(live._open_one(self.bot,self.state,self.signal("ABC-USDT","LONG"),self.instruments))
         self.assertTrue(live._open_one(self.bot,self.state,self.signal("XYZ-USDT","SHORT"),self.instruments))
+        # First position targets 20 USDT, not half the bankroll.
+        self.assertEqual(self.state["positions"]["ABC-USDT"]["notional_usdt"],"20.00")
+        # Remaining available capital is capped by the shared bankroll.
+        self.assertEqual(self.state["positions"]["XYZ-USDT"]["notional_usdt"],"5.00")
         self.assertEqual(self.state["positions"]["ABC-USDT"]["side"],"LONG")
         self.assertEqual(self.state["positions"]["XYZ-USDT"]["side"],"SHORT")
         self.assertEqual(self.bot.posted[0][2]["side"],"buy")
