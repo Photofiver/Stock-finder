@@ -35,6 +35,15 @@ def trusted_volume_trend_for_existing_scan_tests(bars, close_ms, previous=None):
     }
 
 
+REAL_VOLUME_PRICE_TUNNEL = live.volume_price_tunnel_from_bars
+
+
+def trusted_tunnel_for_legacy_scan_tests(bars, close_ms, side):
+    """Isolate previous volume/quote/rank tests from the new tunnel rule."""
+    return {"status": "VALID", "reason": "CONFIRMED_BREAKOUT",
+            "breakout_confirmed": True, "side": side}
+
+
 class FakeBot(prior.FakeBot):
     def __init__(self):
         super().__init__()
@@ -297,6 +306,85 @@ class Setups(unittest.TestCase):
         self.assertEqual(live.entry_signal(self.bot,b,T),
                          live.entry_signal(self.bot,b[:-1],T))
 
+class VolumePriceTunnel(unittest.TestCase):
+    """Checks price/volume anchor selection, colour order and closed breakout."""
+
+    def sample(self, side, breakout=True):
+        rows = [candle(T-(55-i)*F, o=100, c=100, volume=50)
+                for i in range(55)]
+        if side == "LONG":
+            # Green high-volume candle highs form the UPPER line.
+            rows[-18] = candle(T-18*F, o=101, c=102, volume=200)
+            rows[-7] = candle(T-7*F, o=103, c=104, volume=220)
+            # Red high-volume candle lows form the LOWER line.
+            rows[-16] = candle(T-16*F, o=99, c=98, volume=180)
+            rows[-5] = candle(T-5*F, o=100, c=99, volume=210)
+            rows[-2] = candle(T-2*F, o=103, c=102, volume=60)
+            rows[-1] = candle(T-F, o=103,
+                               c=106 if breakout else 104, volume=94)
+        else:
+            # Red high-volume candle highs form the UPPER line.
+            rows[-18] = candle(T-18*F, o=109, c=108, volume=200)
+            rows[-7] = candle(T-7*F, o=108, c=107, volume=220)
+            # Green high-volume candle lows form the LOWER line.
+            rows[-16] = candle(T-16*F, o=103, c=104, volume=180)
+            rows[-5] = candle(T-5*F, o=101, c=102, volume=210)
+            rows[-2] = candle(T-2*F, o=101, c=103, volume=60)
+            rows[-1] = candle(T-F, o=102,
+                               c=99 if breakout else 102, volume=94)
+        return rows
+
+    def test_long_green_upper_red_lower_and_fresh_breakout(self):
+        channel = live.volume_price_tunnel_from_bars(self.sample("LONG"), T, "LONG")
+        self.assertEqual(channel["status"], "VALID")
+        self.assertTrue(channel["breakout_confirmed"])
+        self.assertEqual((channel["upper_color"], channel["lower_color"]),
+                         ("GREEN", "RED"))
+        self.assertEqual(
+            [x["volume"] for x in channel["upper_anchors"]], [200, 220])
+        self.assertEqual(
+            [x["volume"] for x in channel["lower_anchors"]], [180, 210])
+        self.assertGreater(channel["upper_price"], channel["lower_price"])
+        self.assertLessEqual(channel["previous_close_price"],
+                             channel["previous_upper_price"])
+        self.assertGreater(channel["signal_close_price"], channel["upper_price"])
+
+    def test_short_red_upper_green_lower_and_fresh_breakdown(self):
+        channel = live.volume_price_tunnel_from_bars(self.sample("SHORT"), T, "SHORT")
+        self.assertEqual(channel["status"], "VALID")
+        self.assertTrue(channel["breakout_confirmed"])
+        self.assertEqual((channel["upper_color"], channel["lower_color"]),
+                         ("RED", "GREEN"))
+        self.assertGreaterEqual(channel["previous_close_price"],
+                                channel["previous_lower_price"])
+        self.assertLess(channel["signal_close_price"], channel["lower_price"])
+
+    def test_only_fresh_breakouts_and_no_future_bar_leak(self):
+        for side in ("LONG", "SHORT"):
+            rows = self.sample(side, breakout=False)
+            outcome = live.volume_price_tunnel_from_bars(rows, T, side)
+            self.assertEqual(outcome["status"], "VALID")
+            self.assertEqual(outcome["reason"], "NO_FRESH_BREAKOUT")
+            self.assertFalse(outcome["breakout_confirmed"])
+            actual = self.sample(side)
+            before = live.volume_price_tunnel_from_bars(actual, T, side)
+            actual.append(candle(T, o=100, c=1000, volume=1000000))
+            self.assertEqual(before,
+                             live.volume_price_tunnel_from_bars(actual, T, side))
+
+    def test_missing_volume_anchor_or_history_blocks_entry(self):
+        for side in ("LONG", "SHORT"):
+            self.assertEqual(
+                live.volume_price_tunnel_from_bars(bars(side), T, side)["reason"],
+                "INSUFFICIENT_GREEN_RED_ANCHORS")
+            sample = self.sample(side)
+            sample.pop(-9)
+            result = live.volume_price_tunnel_from_bars(sample, T, side)
+            self.assertEqual(result["status"], "UNAVAILABLE")
+            self.assertEqual(result["reason"], "MISSING_CHANNEL_HISTORY")
+            self.assertFalse(result["breakout_confirmed"])
+
+
 class VolumeTrend(unittest.TestCase):
     def mkbars(self, volumes_and_colours, start=None):
         start = start if start is not None else live._volume_trend_midnight_ms(T)
@@ -368,6 +456,11 @@ class Broker(unittest.TestCase):
             side_effect=trusted_volume_trend_for_existing_scan_tests)
         stub.start()
         self.addCleanup(stub.stop)
+        tunnel_stub = patch.object(
+            live, "volume_price_tunnel_from_bars",
+            side_effect=trusted_tunnel_for_legacy_scan_tests)
+        tunnel_stub.start()
+        self.addCleanup(tunnel_stub.stop)
         self.instruments={"ABC-USDT":{"contractValue":"1","tickSize":"0.01"},
                           "XYZ-USDT":{"contractValue":"1","tickSize":"0.01"}}
     def signal(self,coin,side):
@@ -400,6 +493,29 @@ class Broker(unittest.TestCase):
             [(r["inst"], r["reason"]) for r in reasons if r["reason"]=="VOLUME_TREND_OPPOSES_ENTRY"],
             [("LONG-USDT", "VOLUME_TREND_OPPOSES_ENTRY"),
              ("SHORT-USDT", "VOLUME_TREND_OPPOSES_ENTRY")])
+
+    def test_new_volume_tunnel_blocks_entries_without_valid_anchors(self):
+        ranking = ["ABC-USDT", "XYZ-USDT"] + [
+            f"OTHER-{i}-USDT" for i in range(198)]
+        up = bars("LONG")
+        down = bars("SHORT")
+        up[-1]["v"] = 94
+        down[-1]["v"] = 94
+        def confirmed(insts, close):
+            return {"ABC-USDT": up, "XYZ-USDT": down}
+        with patch.dict("os.environ", {"LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES": "false"}):
+            with patch.object(live, "volume_price_tunnel_from_bars",
+                              side_effect=REAL_VOLUME_PRICE_TUNNEL):
+                with patch.object(live, "_open_one") as open_order:
+                    live.run(self.bot, self.state, ranking, {}, self.instruments,
+                             T, confirmed)
+                    open_order.assert_not_called()
+        rejections = self.state["volume_long_last_scan"]["rejections"]
+        blocked = [x for x in rejections
+                   if x["reason"] == "VOLUME_TUNNEL_UNAVAILABLE"]
+        self.assertEqual({x["inst"] for x in blocked},
+                         {"ABC-USDT", "XYZ-USDT"})
+        self.assertEqual(self.state["volume_long_last_scan"]["matched"], 0)
 
     def test_full_top200_scan_attempts_strongest_volume_first(self):
         weak = bars("LONG")
