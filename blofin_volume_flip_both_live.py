@@ -23,6 +23,8 @@ SL_PCT = Decimal("0.005")
 TP_POLICY = "TP055"
 SL_POLICY = "SL05"
 TRIGGER_TYPE = "mark"  # Match unrealized PnL displayed by BloFin.
+ENTRY_VOLUME_STRENGTH_MIN = 0.90  # inclusive; volume / prior 20-bar mean
+ENTRY_VOLUME_STRENGTH_MAX = 1.00  # exclusive; do not enter at or above mean
 LEGACY_HOLD_POLICY = "VOLUME_REV_SHORT_LONG"
 FIVE = 300_000
 VOL_MIN = 3.0
@@ -760,6 +762,8 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         print(f"{STRATEGY}: duplicate scan skipped")
         return
     scan={"strategy":STRATEGY,"selection_priority":"SIGNAL_VOLUME_DIV_PREVIOUS_20_BAR_MEAN_DESC",
+          "volume_entry_strength_min_inclusive":ENTRY_VOLUME_STRENGTH_MIN,
+          "volume_entry_strength_max_exclusive":ENTRY_VOLUME_STRENGTH_MAX,
           "signal_close_ms":int(expected_close_ms),
           "top200_count":len(top200),"status":"PENDING",
           "scanned_confirmed":0,"matched":0,"candidates":[],
@@ -911,7 +915,11 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
             bars=confirmed.get(inst)
             if not bars or int(bot.bar_close_ms(bars[-1]))!=expected_close_ms:continue
             sig=entry_signal(bot,bars,expected_close_ms)
-            if sig is not None:
+            # Entry-only filter: 90% <= signal 5m volume / PRIOR 20-bar
+            # average < 100%. Does not alter exits or protective TP/SL.
+            if (sig is not None and
+                    ENTRY_VOLUME_STRENGTH_MIN <= sig["volume_strength_20"]
+                    < ENTRY_VOLUME_STRENGTH_MAX):
                 sig.update({"inst":inst,"rank":rank})
                 matches.append(sig)
         # Full TOP200 was already checked against the exact same entry rules.
