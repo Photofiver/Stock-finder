@@ -320,8 +320,8 @@ class VolumePriceTunnel(unittest.TestCase):
             rows[-16] = candle(T-16*F, o=99, c=98, volume=180)
             rows[-5] = candle(T-5*F, o=100, c=99, volume=210)
             rows[-2] = candle(T-2*F, o=103, c=102, volume=60)
-            rows[-1] = candle(T-F, o=103,
-                               c=106 if breakout else 104, volume=94)
+            rows[-1] = candle(T-F, o=102.4,
+                               c=106 if breakout else 103, volume=94)
         else:
             # Red high-volume candle highs form the UPPER line.
             rows[-18] = candle(T-18*F, o=109, c=108, volume=200)
