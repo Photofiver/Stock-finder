@@ -22,6 +22,7 @@ TP_PCT = Decimal("0.0055")
 SL_PCT = Decimal("0.005")
 TP_POLICY = "TP055"
 SL_POLICY = "SL05"
+TRIGGER_TYPE = "mark"  # Match unrealized PnL displayed by BloFin.
 LEGACY_HOLD_POLICY = "VOLUME_REV_SHORT_LONG"
 FIVE = 300_000
 VOL_MIN = 3.0
@@ -57,18 +58,60 @@ def _protection_prices(bot, pos, meta):
     return tp,sl
 
 
+
+def _ensure_mark_trigger(bot, state, pos, tp, sl):
+    """Verify broker OCO and safely amend existing LAST triggers to MARK."""
+    inst=pos["inst"]
+    try:
+        detail=bot.private_request("GET","/api/v1/trade/order-tpsl-detail",
+                    params={"instId":inst,"tpslId":str(pos["tpsl_id"])}) or {}
+        if isinstance(detail,list):
+            detail=detail[0] if detail else {}
+        if (str(detail.get("state") or "").lower()!="live"
+            or str(detail.get("tpslId") or "")!=str(pos["tpsl_id"])
+            or bot.d(detail.get("tpTriggerPrice") or "0")!=tp
+            or bot.d(detail.get("slTriggerPrice") or "0")!=sl):
+            raise RuntimeError("Active broker TP/SL is missing or differs from tracked levels")
+        types=(str(detail.get("tpTriggerPriceType") or "").lower(),
+               str(detail.get("slTriggerPriceType") or "").lower())
+        if types==(TRIGGER_TYPE,TRIGGER_TYPE):
+            pos.update(tp_trigger_type=TRIGGER_TYPE,sl_trigger_type=TRIGGER_TYPE,
+                       protection_status="TP055_SL05_MARK_ACTIVE")
+            pos.pop("mark_amend_request_id",None)
+            pos.pop("protection_error",None)
+            bot.save_state(state)
+            return True
+        if types!=("last","last"):
+            raise RuntimeError("Unexpected broker TP/SL trigger types: "+str(types))
+        if pos.get("mark_amend_request_id"):
+            raise RuntimeError("Prior mark-trigger amendment is awaiting broker confirmation")
+        request_id=("volmark"+uuid.uuid4().hex)[:32]
+        pos["mark_amend_request_id"]=request_id
+        pos["protection_status"]="MARK_TPSL_AMEND_SENT"
+        bot.save_state(state)
+        result=bot.private_request("POST","/api/v1/trade/amend-tpsl",body={
+            "instId":inst,"tpslId":str(pos["tpsl_id"]),"requestId":request_id,
+            "newTpTriggerPriceType":TRIGGER_TYPE,"newSlTriggerPriceType":TRIGGER_TYPE
+        })
+        row=result[0] if isinstance(result,list) and result else (result or {})
+        if str(row.get("code","0"))!="0":
+            raise RuntimeError("Broker rejected trigger amendment: "+str(row)[:180])
+        # Broker acknowledgement alone is insufficient; verify on next read.
+        return _ensure_mark_trigger(bot,state,pos,tp,sl)
+    except Exception as exc:
+        pos["protection_status"]="TPSL_MARK_VERIFICATION_PENDING"
+        pos["protection_error"]=f"{type(exc).__name__}: {exc}"[:250]
+        bot.save_state(state)
+        return False
+
+
 def _ensure_protection(bot,state,pos,meta):
     """One broker-side combined TPSL order; never repeat an uncertain POST."""
     if pos.get("strategy")!=STRATEGY:
         return True
     tp,sl=_protection_prices(bot,pos,meta)
-    if (pos.get("tp_policy")==TP_POLICY and pos.get("sl_policy")==SL_POLICY
-            and pos.get("tpsl_id") and pos.get("protection_status")=="TP055_SL05_ACTIVE"):
-        return True
     if pos.get("tpsl_id"):
-        pos["protection_status"]="TPSL_CONFLICT_REVIEW_REQUIRED"
-        bot.save_state(state)
-        return False
+        return _ensure_mark_trigger(bot,state,pos,tp,sl)
     inst=pos["inst"]
     client=str(pos.get("tpsl_client_order_id") or "")
     if client:
@@ -84,10 +127,9 @@ def _ensure_protection(bot,state,pos,meta):
                     and bot.d(detail.get("slTriggerPrice") or "0")==sl):
                 pos.update(tpsl_id=str(detail["tpslId"]),tp=bot.clean_decimal(tp),
                            sl=bot.clean_decimal(sl),tp_policy=TP_POLICY,
-                           sl_policy=SL_POLICY,protection_status="TP055_SL05_ACTIVE")
-                pos.pop("protection_error",None)
+                           sl_policy=SL_POLICY)
                 bot.save_state(state)
-                return True
+                return _ensure_mark_trigger(bot,state,pos,tp,sl)
         except Exception as exc:
             pos["protection_error"]=str(exc)[:250]
         pos["protection_status"]="TPSL_UNCERTAIN_NEEDS_BROKER_CONFIRMATION"
@@ -103,8 +145,8 @@ def _ensure_protection(bot,state,pos,meta):
             "instId":inst,"marginMode":bot.MARGIN_MODE,"positionSide":"net",
             "side":"sell" if pos["side"]=="LONG" else "buy",
             "tpTriggerPrice":bot.clean_decimal(tp),"tpOrderPrice":"-1",
-            "tpTriggerPriceType":"last","slTriggerPrice":bot.clean_decimal(sl),
-            "slOrderPrice":"-1","slTriggerPriceType":"last",
+            "tpTriggerPriceType":TRIGGER_TYPE,"slTriggerPrice":bot.clean_decimal(sl),
+            "slOrderPrice":"-1","slTriggerPriceType":TRIGGER_TYPE,
             "size":"-1","reduceOnly":"true","clientOrderId":client,
         })
         row=response[0] if isinstance(response,list) and response else (response or {})
@@ -116,10 +158,8 @@ def _ensure_protection(bot,state,pos,meta):
         bot.save_state(state)
         return False
     pos["tpsl_id"]=str(row["tpslId"])
-    pos["protection_status"]="TP055_SL05_ACTIVE"
-    pos.pop("protection_error",None)
     bot.save_state(state)
-    return True
+    return _ensure_mark_trigger(bot,state,pos,tp,sl)
 
 
 def _by_ts(bars, close_ms):
@@ -599,7 +639,7 @@ def _open_one(bot, state, sig, instruments):
     bot.notify(
         f"OPEN {side} {inst} | rank {sig['rank']}/200 | vol ratio {sig['volume_ratio'] or 0:.2f}x "
         f"| 1x isolated, notional {pos['notional_usdt']} USDT | "
-        f"TP +0.55% {pos['tp']} | SL -0.50% {pos['sl']} | "
+        f"TP +0.55% {pos['tp']} (Mark) | SL -0.50% {pos['sl']} (Mark) | "
         "EXIT: broker TP/SL or opposite CLOSED 5m volume > ENTRY candle volume.",
         "BloFin LIVE both sides volume flip",
         attachment_path=pos.get("entry_chart"),
