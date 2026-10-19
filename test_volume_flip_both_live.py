@@ -378,7 +378,11 @@ class Broker(unittest.TestCase):
         ranking=["LONG-USDT","SHORT-USDT"]+[f"OTHER-{i}" for i in range(198)]
         observed=[]
         def confirmed(insts, close):
-            return {"LONG-USDT": bars("LONG"), "SHORT-USDT": bars("SHORT")}
+            up = bars("LONG")
+            down = bars("SHORT")
+            up[-1]["v"] = 94
+            down[-1]["v"] = 94
+            return {"LONG-USDT": up, "SHORT-USDT": down}
         def opposite_trend(history, close_ms, previous=None):
             t = trusted_volume_trend_for_existing_scan_tests(history, close_ms)
             t["trend"] = "SHORT" if t["trend"] == "LONG" else "LONG"
@@ -468,13 +472,16 @@ class Broker(unittest.TestCase):
             # Make the current 20-bar mean rise compared to the preceding
             # average, without altering either of the signal candles.
             rising[-22]["v"] = 1
+            rising[-1]["v"] = 94
             self.assertGreaterEqual(
                 live.entry_signal(self.bot, rising, T)["volume_strength_20"], 0.90)
+            good = bars("LONG")
+            good[-1]["v"] = 94
             return {
-                "GOOD-LONG": bars("LONG"),
+                "GOOD-LONG": good,
                 "RISING-LONG": rising,
                 "GOOD-SHORT": bars("SHORT"),
-                "RANK51-LONG": bars("LONG"),
+                "RANK51-LONG": good,
             }
         observed = []
         def observe(bot, state, sig, instruments):
