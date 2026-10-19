@@ -21,6 +21,20 @@ def bars(side):
         candles[-1]=candle(T-F,o=100.1,c=100.0,volume=80)
     return candles
 
+
+def trusted_volume_trend_for_existing_scan_tests(bars, close_ms, previous=None):
+    """Existing tests isolate non-trend filters; trend has its own real tests."""
+    last = bars[-1]
+    side = "LONG" if last["c"] > last["o"] else "SHORT"
+    return {
+        "day_start_ms": live._volume_trend_midnight_ms(close_ms),
+        "last_close_ms": close_ms,
+        "trend": side,
+        "peak_volume": float(last["v"]),
+        "trend_started_close_ms": close_ms,
+    }
+
+
 class FakeBot(prior.FakeBot):
     def __init__(self):
         super().__init__()
@@ -283,16 +297,106 @@ class Setups(unittest.TestCase):
         self.assertEqual(live.entry_signal(self.bot,b,T),
                          live.entry_signal(self.bot,b[:-1],T))
 
+class VolumeTrend(unittest.TestCase):
+    def mkbars(self, volumes_and_colours, start=None):
+        start = start if start is not None else live._volume_trend_midnight_ms(T)
+        rows = []
+        for i, (volume, colour) in enumerate(volumes_and_colours):
+            o = 100.0
+            c = 101.0 if colour == "GREEN" else 99.0 if colour == "RED" else o
+            rows.append(candle(start+i*F, o=o, c=c, volume=volume))
+        return rows, start
+
+    def test_day_peak_trend_changes_only_on_strict_opposite_volume(self):
+        sample, start = self.mkbars([
+            (100, "GREEN"), (80, "RED"), (120, "GREEN"),
+            (120, "RED"), (121, "RED"), (119, "GREEN"),
+            (122, "GREEN")])
+        expect = ["LONG", "LONG", "LONG", "LONG", "SHORT", "SHORT", "LONG"]
+        saved = None
+        for i, direction in enumerate(expect):
+            end = start+(i+1)*F
+            # Reuse full available candles; incrementally update live state.
+            saved = live.volume_trend_from_bars(sample, end, saved)
+            self.assertIsNotNone(saved)
+            self.assertEqual(saved["trend"], direction)
+        self.assertEqual(saved["peak_volume"], 122)
+        self.assertEqual(saved["day_start_ms"], start)
+
+    def test_missing_candle_is_not_assumed_and_cannot_trade(self):
+        rows, start = self.mkbars([
+            (100, "GREEN"), (50, "RED"), (90, "RED")])
+        self.assertEqual(
+            live.volume_trend_from_bars(rows, start+2*F)["trend"], "LONG")
+        with_gap = [rows[0], rows[2]]
+        self.assertIsNone(live.volume_trend_from_bars(
+            with_gap, start+3*F))
+        prev = live.volume_trend_from_bars(rows, start+F)
+        self.assertIsNone(live.volume_trend_from_bars(
+            with_gap, start+3*F, prev))
+
+    def test_new_day_resets_peak_and_future_candles_ignored(self):
+        start = live._volume_trend_midnight_ms(T)
+        first, _ = self.mkbars([(600, "RED"), (100, "GREEN")], start)
+        snap = live.volume_trend_from_bars(first, start+2*F)
+        self.assertEqual(snap["trend"], "SHORT")
+        next_day = live._volume_trend_midnight_ms(start+25*60*60*1000)
+        self.assertGreater(next_day, start)
+        next_bars, _ = self.mkbars([(100, "GREEN")], next_day)
+        reset = live.volume_trend_from_bars(next_bars, next_day+F, snap)
+        self.assertEqual(reset["trend"], "LONG")
+        self.assertEqual(reset["peak_volume"], 100.0)
+        # Later unfinished/future bar must not change the historical signal.
+        rows = first + [candle(start+2*F, o=100, c=99, volume=900)]
+        self.assertEqual(
+            live.volume_trend_from_bars(rows, start+2*F)["trend"], "SHORT")
+
+    def test_no_opening_bar_today_returns_unknown(self):
+        midnight = live._volume_trend_midnight_ms(T)
+        rows, _ = self.mkbars([(500, "GREEN")], midnight+F)
+        self.assertIsNone(live.volume_trend_from_bars(rows, midnight+2*F))
+
+
 class Broker(unittest.TestCase):
     def setUp(self):
         self.bot=FakeBot()
         self.state={"positions":{}}
+        # Other LIVE tests cover order and volume gates without dependence on
+        # UK's midnight time; dedicated VolumeTrend tests use real logic.
+        stub = patch.object(
+            live, "volume_trend_from_bars",
+            side_effect=trusted_volume_trend_for_existing_scan_tests)
+        stub.start()
+        self.addCleanup(stub.stop)
         self.instruments={"ABC-USDT":{"contractValue":"1","tickSize":"0.01"},
                           "XYZ-USDT":{"contractValue":"1","tickSize":"0.01"}}
     def signal(self,coin,side):
         s=live.entry_signal(self.bot,bars(side),T)
         s.update(inst=coin,rank=1)
         return s
+    def test_live_trend_rejects_opposite_entry_and_logs_reason(self):
+        ranking=["LONG-USDT","SHORT-USDT"]+[f"OTHER-{i}" for i in range(198)]
+        observed=[]
+        def confirmed(insts, close):
+            return {"LONG-USDT": bars("LONG"), "SHORT-USDT": bars("SHORT")}
+        def opposite_trend(history, close_ms, previous=None):
+            t = trusted_volume_trend_for_existing_scan_tests(history, close_ms)
+            t["trend"] = "SHORT" if t["trend"] == "LONG" else "LONG"
+            return t
+        def observe(bot, state, sig, meta):
+            observed.append(sig["inst"])
+            return False
+        with patch.dict("os.environ", {"LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES": "false"}):
+            with patch.object(live, "volume_trend_from_bars", side_effect=opposite_trend):
+                with patch.object(live, "_open_one", side_effect=observe):
+                    live.run(self.bot, self.state, ranking, {}, self.instruments, T, confirmed)
+        self.assertEqual(observed, [])
+        reasons = self.state["volume_long_last_scan"]["rejections"]
+        self.assertEqual(
+            [(r["inst"], r["reason"]) for r in reasons if r["reason"]=="VOLUME_TREND_OPPOSES_ENTRY"],
+            [("LONG-USDT", "VOLUME_TREND_OPPOSES_ENTRY"),
+             ("SHORT-USDT", "VOLUME_TREND_OPPOSES_ENTRY")])
+
     def test_full_top200_scan_attempts_strongest_volume_first(self):
         weak = bars("LONG")
         weak[-1]["v"] = 92
