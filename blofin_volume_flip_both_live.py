@@ -13,6 +13,8 @@ Existing legacy red-volume LONG positions retain their original exit.
 import math
 import os
 import uuid
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 
 STRATEGY = "VOLUME_FLIP_BOTH_5M_V1"
@@ -395,6 +397,79 @@ def short_entry_extra_rejection(side, quote):
     if spread > SHORT_ENTRY_MAX_SPREAD_PCT:
         return "SHORT_SPREAD_ABOVE_005PCT"
     return None
+
+
+UK_TZ = ZoneInfo("Europe/London")
+
+
+def _volume_trend_midnight_ms(signal_close_ms):
+    """UK-local midnight for the latest FULLY CLOSED 5m candle."""
+    candle_open_ms = int(signal_close_ms) - FIVE
+    local_open = datetime.fromtimestamp(candle_open_ms / 1000, UK_TZ)
+    midnight = local_open.replace(hour=0, minute=0, second=0, microsecond=0)
+    return int(midnight.timestamp() * 1000)
+
+
+def volume_trend_from_bars(bars, expected_close_ms, previous=None):
+    """Carry forward the day's dominant-volume trend, using only closed bars.
+
+    LONG peak updates on GREEN, flips to SHORT only for RED > LONG peak.
+    SHORT peak updates on RED, flips to LONG only for GREEN > SHORT peak.
+    Exact ties and dojis never reverse the trend. Daily reset: 00:00 UK.
+
+    Returns None when historical candle coverage is incomplete; callers must
+    NOT admit new entries using a guessed trend. No additional API requests.
+    """
+    day_start = _volume_trend_midnight_ms(expected_close_ms)
+    rows = _by_ts(bars, expected_close_ms)
+    if (expected_close_ms - FIVE) not in rows:
+        return None
+
+    valid_prev = (
+        isinstance(previous, dict)
+        and previous.get("day_start_ms") == day_start
+        and previous.get("trend") in ("LONG", "SHORT", "NEUTRAL")
+        and isinstance(previous.get("last_close_ms"), int)
+        and day_start <= previous["last_close_ms"] <= expected_close_ms
+        and isinstance(previous.get("peak_volume"), (int, float))
+        and math.isfinite(previous["peak_volume"])
+        and previous["peak_volume"] >= 0
+    )
+    if valid_prev:
+        direction = previous["trend"]
+        peak = float(previous["peak_volume"])
+        first_close_ms = previous["last_close_ms"] + FIVE
+        trend_started = previous.get("trend_started_close_ms")
+    else:
+        direction, peak, trend_started = "NEUTRAL", 0.0, None
+        first_close_ms = day_start + FIVE
+
+    if first_close_ms > expected_close_ms:
+        return dict(previous) if valid_prev and previous["last_close_ms"] == expected_close_ms else None
+
+    # Every bar since the last trusted checkpoint must be present, in order.
+    for candle_close_ms in range(first_close_ms, expected_close_ms + 1, FIVE):
+        bar = rows.get(candle_close_ms - FIVE)
+        if bar is None:
+            return None
+        o, _, _, c, vol = bar
+        if c == o or vol <= 0:
+            continue
+        color = "LONG" if c > o else "SHORT"
+        if direction == "NEUTRAL":
+            direction, peak, trend_started = color, vol, candle_close_ms
+        elif color == direction:
+            peak = max(peak, vol)
+        elif vol > peak:
+            direction, peak, trend_started = color, vol, candle_close_ms
+
+    return {
+        "day_start_ms": day_start,
+        "last_close_ms": int(expected_close_ms),
+        "trend": direction,
+        "peak_volume": peak,
+        "trend_started_close_ms": trend_started,
+    }
 
 
 def prioritize_volume_signals(matches):
@@ -923,6 +998,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         print(f"{STRATEGY}: duplicate scan skipped")
         return
     scan={"strategy":STRATEGY,"selection_priority":"SIGNAL_VOLUME_DIV_PREVIOUS_20_BAR_MEAN_DESC",
+          "entry_volume_trend_filter":"DAY_UK_DOMINANT_COLOUR_VOLUME",
           "volume_entry_strength_min_inclusive":ENTRY_VOLUME_STRENGTH_MIN,
           "volume_entry_strength_max_exclusive":ENTRY_VOLUME_STRENGTH_MAX,
           "short_entry_min_adverse_gap_pct_inclusive":float(SHORT_ENTRY_MIN_ADVERSE_GAP_PCT),
@@ -992,6 +1068,27 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                list(dict.fromkeys(list(top200)+list(active))))
     confirmed = wait_for_confirmed_close(requested, expected_close_ms) or {}
     scan["scanned_confirmed"]=sum(1 for inst in top200 if inst in confirmed)
+    # Maintain every observable coin's UK-day volume regime even while entries
+    # are paused or risk-blocked. This is observational, never changes exits.
+    volume_trends = state.setdefault("volume_trends_uk_daily", {})
+    day_start = _volume_trend_midnight_ms(expected_close_ms)
+    for inst in list(volume_trends):
+        if (not isinstance(volume_trends[inst], dict)
+                or volume_trends[inst].get("day_start_ms") != day_start):
+            del volume_trends[inst]
+    confirmed_trends = {}
+    for inst in top200:
+        bars = confirmed.get(inst)
+        if not bars or int(bot.bar_close_ms(bars[-1])) != expected_close_ms:
+            continue
+        trend = volume_trend_from_bars(
+            bars, expected_close_ms, volume_trends.get(inst))
+        if trend is not None:
+            volume_trends[inst] = trend
+            confirmed_trends[inst] = trend
+    scan["volume_trends_confirmed"] = len(confirmed_trends)
+    scan["volume_trends_long"] = sum(x["trend"] == "LONG" for x in confirmed_trends.values())
+    scan["volume_trends_short"] = sum(x["trend"] == "SHORT" for x in confirmed_trends.values())
     # Archive all confirmed 5m candles for tracked trades, including trades
     # waiting for broker close reconciliation. No new BloFin API calls.
     for inst, pos in list(active.items()):
@@ -1090,7 +1187,23 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                         "reason": long_rejection,
                     })
                     continue
-                sig.update({"inst":inst,"rank":rank})
+                trend_data = confirmed_trends.get(inst)
+                trend_direction = (trend_data or {}).get("trend", "UNKNOWN")
+                if trend_direction != sig["side"]:
+                    scan["rejections"].append({
+                        "inst": inst, "rank": rank, "side": sig["side"],
+                        "reason": "VOLUME_TREND_UNKNOWN"
+                                  if trend_direction == "UNKNOWN"
+                                  else "VOLUME_TREND_OPPOSES_ENTRY",
+                        "volume_trend": trend_direction,
+                    })
+                    continue
+                sig.update({
+                    "inst": inst, "rank": rank,
+                    "volume_trend_direction": trend_direction,
+                    "volume_trend_peak": trend_data["peak_volume"],
+                    "volume_trend_started_close_ms": trend_data["trend_started_close_ms"],
+                })
                 matches.append(sig)
         # Full TOP200 was already checked against the exact same entry rules.
         # From eligible signals, select strongest relative volume first,
