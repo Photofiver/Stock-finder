@@ -6,6 +6,7 @@ on:
       - 'test_volume_flip_both_live.py'
       - 'test_volume_flip_exit_429_recovery.py'
       - 'test_volume_candle_audit.py'
+      - 'test_price_movement_audit.py'
       - 'blofin_live_hourly.py'
       - '.github/workflows/test_volume_flip_both_live.yml'
   workflow_dispatch:
@@ -24,6 +25,7 @@ jobs:
             test_volume_flip_both_live.py
             test_volume_flip_exit_429_recovery.py
             test_volume_candle_audit.py
+            test_price_movement_audit.py
             blofin_live_hourly.py
             blofin_selection_rank.py
             blofin_nearest_volume.py
@@ -40,4 +42,4 @@ jobs:
         env:
           BLOFIN_LIVE_ENABLED: 'false'
           LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES: 'true'
-        run: python -m unittest -v test_volume_flip_both_live test_volume_flip_exit_429_recovery test_volume_candle_audit
+        run: python -m unittest -v test_volume_flip_both_live test_volume_flip_exit_429_recovery test_volume_candle_audit test_price_movement_audit
