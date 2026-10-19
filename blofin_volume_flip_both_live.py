@@ -491,27 +491,17 @@ VOLUME_TUNNEL_LOOKBACK_BARS = 20
 
 
 def volume_price_tunnel_from_bars(bars, expected_close_ms, side):
-    """Two STRAIGHT 5m price lines selected by the COLOURS of volume bars.
+    """Straight PRICE lines anchored to the two strongest CLOSED volume bars
+    of each colour (not the first/last bars or the volume chart's Y scale).
 
-    Reproduce the manually drawn price tunnel: each boundary is a single
-    straight line between TWO chronological candles whose volume bar has the
-    specified colour, not an SMA, smoothed curve, weighted average, or a
-    line joining the two globally largest volumes.
-
-    SHORT: RED candle highs form the upper line; GREEN candle lows lower.
-    LONG: GREEN candle highs form the upper line; RED candle lows lower.
-    Each line connects the FIRST and LAST matching-colour closed candles
-    of the past 20 bars. Extend that segment linearly to the signal candle.
-    The signal candle never moves its own boundary (no look-ahead).
-
-    Matching existing entry signals must be INSIDE the price tunnel, not
-    a forced upper/lower breakout. The separate daily dominant-volume gate
-    decides LONG vs SHORT. A crossed channel is a direction conflict, not
-    an API/data failure and not a reason to invent a made-up boundary.
+    SHORT reference: RED candle highs above GREEN candle lows.
+    LONG reference: GREEN candle highs above RED candle lows.
+    At a reversal, the lines exchange order; that is a trend change, NOT
+    corrupt data. Never use the signal candle to choose its own anchors.
     """
     timestamp = int(expected_close_ms)
     result = {
-        "rule": "STRAIGHT_COLOUR_VOLUME_PRICE_TUNNEL_20BAR",
+        "rule": "STRAIGHT_STRONGEST_VOLUME_PRICE_TUNNEL_20BAR_V2",
         "requested_side": side,
         "timeframe": "5m",
         "lookback_bars": VOLUME_TUNNEL_LOOKBACK_BARS,
@@ -551,33 +541,55 @@ def volume_price_tunnel_from_bars(bars, expected_close_ms, side):
         result["reason"] = "INSUFFICIENT_GREEN_RED_ANCHORS"
         return result
 
-    upper_colour = "GREEN" if side == "LONG" else "RED"
-    lower_colour = "RED" if side == "LONG" else "GREEN"
-    upper_anchors = [colours[upper_colour][0], colours[upper_colour][-1]]
-    lower_anchors = [colours[lower_colour][0], colours[lower_colour][-1]]
+    # Select by volume first, THEN order the two points chronologically.
+    # Equal volumes are deterministic; no future candle or smoothed line.
+    strongest = {
+        colour: sorted(
+            sorted(colours[colour], key=lambda bar: (-bar["volume"], bar["close_ms"]))[:2],
+            key=lambda bar: bar["close_ms"],
+        )
+        for colour in ("GREEN", "RED")
+    }
+    reference_upper_colour = "GREEN" if side == "LONG" else "RED"
+    reference_lower_colour = "RED" if side == "LONG" else "GREEN"
+    reference_upper_anchors = strongest[reference_upper_colour]
+    reference_lower_anchors = strongest[reference_lower_colour]
 
     def straight_at(anchors, coordinate, target):
         first, last = anchors
         start, stop = first["close_ms"], last["close_ms"]
-        # Distinct CLOSED candle timestamps, not same candle or future data.
         return (first[coordinate]
                 + (last[coordinate] - first[coordinate])
                 * (target - start) / (stop - start))
 
-    upper = straight_at(upper_anchors, "high", timestamp)
-    lower = straight_at(lower_anchors, "low", timestamp)
-    previous_upper = straight_at(upper_anchors, "high", timestamp - FIVE)
-    previous_lower = straight_at(lower_anchors, "low", timestamp - FIVE)
+    reference_upper = straight_at(reference_upper_anchors, "high", timestamp)
+    reference_lower = straight_at(reference_lower_anchors, "low", timestamp)
+    previous_upper = straight_at(reference_upper_anchors, "high", timestamp - FIVE)
+    previous_lower = straight_at(reference_lower_anchors, "low", timestamp - FIVE)
     if not all(math.isfinite(x) and x > 0 for x in
-               (upper, lower, previous_upper, previous_lower)):
+               (reference_upper, reference_lower, previous_upper, previous_lower)):
         result["reason"] = "INVALID_PRICE_DATA"
         return result
 
-    crossed = upper <= lower or previous_upper <= previous_lower
-    # Signal CLOSE, not a candle wick, must remain within the two price lines.
-    inside = (not crossed and lower <= signal[3] <= upper)
-    if crossed:
-        reason = "PRICE_LINES_CROSSED_DIRECTION_CHANGE"
+    inverted = reference_upper < reference_lower
+    touching = reference_upper == reference_lower
+    reversed_on_signal = (previous_upper >= previous_lower and inverted)
+    trend_direction = ("LONG" if side == "SHORT" else "SHORT") if inverted else side
+    upper = max(reference_upper, reference_lower)
+    lower = min(reference_upper, reference_lower)
+    inside = (not touching and lower <= signal[3] <= upper)
+    # When the two straight lines cross, a CLOSED volume-flip signal may
+    # confirm a price move through the new boundary in the new direction.
+    confirmed_reversal_breakout = (
+        reversed_on_signal and
+        ((trend_direction == "LONG" and signal[3] > upper) or
+         (trend_direction == "SHORT" and signal[3] < lower))
+    )
+    eligible_price = inside or confirmed_reversal_breakout
+    if touching:
+        reason = "LINES_TOUCH_TREND_UNDECIDED"
+    elif inverted:
+        reason = "PRICE_LINES_CROSSED_TREND_REVERSED"
     elif inside:
         reason = "PRICE_INSIDE_STRAIGHT_TUNNEL"
     elif signal[3] > upper:
@@ -588,27 +600,30 @@ def volume_price_tunnel_from_bars(bars, expected_close_ms, side):
     result.update({
         "status": "VALID",
         "reason": reason,
-        "tunnel_direction": ("SHORT" if side == "LONG" else "LONG")
-                            if crossed else side,
-        "colour_order_changed": crossed,
-        "upper_color": upper_colour,
-        "lower_color": lower_colour,
+        "tunnel_direction": trend_direction if not touching else "NEUTRAL",
+        "colour_order_changed": inverted,
+        "crossing_on_signal": reversed_on_signal,
+        "upper_color": reference_lower_colour if inverted else reference_upper_colour,
+        "lower_color": reference_upper_colour if inverted else reference_lower_colour,
         "upper_price": upper,
         "lower_price": lower,
         "previous_upper_price": previous_upper,
         "previous_lower_price": previous_lower,
+        "reference_upper_price": reference_upper,
+        "reference_lower_price": reference_lower,
         "previous_close_price": previous[3],
         "signal_close_price": signal[3],
-        "upper_anchors": upper_anchors,
-        "lower_anchors": lower_anchors,
-        "upper_slope_per_5m": (upper - previous_upper),
-        "lower_slope_per_5m": (lower - previous_lower),
-        "entry_allowed": inside,
-        # Retain the historic audit field; this is NOT a breakout strategy.
-        "breakout_confirmed": False,
+        "upper_anchors": reference_lower_anchors if inverted else reference_upper_anchors,
+        "lower_anchors": reference_upper_anchors if inverted else reference_lower_anchors,
+        "upper_slope_per_5m": (
+            reference_lower - previous_lower if inverted else reference_upper - previous_upper),
+        "lower_slope_per_5m": (
+            reference_upper - previous_upper if inverted else reference_lower - previous_lower),
+        "entry_allowed": not touching and eligible_price,
+        "breakout_confirmed": confirmed_reversal_breakout,
+        "anchor_selection": "TOP_2_VOLUME_BARS_PER_COLOUR_CHRONOLOGICAL",
     })
     return result
-
 
 
 def prioritize_volume_signals(matches):
@@ -1361,13 +1376,29 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                     continue
                 tunnel = volume_price_tunnel_from_bars(
                     bars, expected_close_ms, sig["side"])
-                if not tunnel["entry_allowed"]:
+                # A crossover means that the old direction became the NEW
+                # direction. Check that interpretation as well instead of
+                # rejecting every intersection as invalid data.
+                if (tunnel["status"] == "VALID"
+                        and (not tunnel["entry_allowed"]
+                             or tunnel["tunnel_direction"] != sig["side"])):
+                    old_side = "SHORT" if sig["side"] == "LONG" else "LONG"
+                    flipped = volume_price_tunnel_from_bars(
+                        bars, expected_close_ms, old_side)
+                    if (flipped["status"] == "VALID"
+                            and flipped["colour_order_changed"]
+                            and flipped["tunnel_direction"] == sig["side"]
+                            and flipped["entry_allowed"]):
+                        flipped["reversal_from_side"] = old_side
+                        tunnel = flipped
+                if (tunnel["status"] != "VALID" or not tunnel["entry_allowed"]
+                        or tunnel["tunnel_direction"] != sig["side"]):
                     scan["rejections"].append({
                         "inst": inst, "rank": rank, "side": sig["side"],
                         "reason": ("VOLUME_TUNNEL_UNAVAILABLE"
                                    if tunnel["status"] != "VALID"
-                                   else "VOLUME_TUNNEL_DIRECTION_CHANGE"
-                                   if tunnel["colour_order_changed"]
+                                   else "VOLUME_TUNNEL_OPPOSITE_TREND"
+                                   if tunnel["tunnel_direction"] != sig["side"]
                                    else "PRICE_OUTSIDE_STRAIGHT_TUNNEL"),
                         "tunnel_reason": tunnel["reason"],
                         "volume_tunnel": tunnel,
