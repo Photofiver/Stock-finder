@@ -1001,6 +1001,8 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
           "entry_volume_trend_filter":"DAY_UK_DOMINANT_COLOUR_VOLUME",
           "volume_entry_strength_min_inclusive":ENTRY_VOLUME_STRENGTH_MIN,
           "volume_entry_strength_max_exclusive":ENTRY_VOLUME_STRENGTH_MAX,
+          "long_entry_rank_range_inclusive":[1,LONG_ENTRY_MAX_RANK],
+          "long_requires_falling_prior_20bar_mean":True,
           "short_entry_min_adverse_gap_pct_inclusive":float(SHORT_ENTRY_MIN_ADVERSE_GAP_PCT),
           "short_entry_max_spread_pct_inclusive":float(SHORT_ENTRY_MAX_SPREAD_PCT),
           "signal_close_ms":int(expected_close_ms),
