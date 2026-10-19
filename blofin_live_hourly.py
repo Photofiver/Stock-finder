@@ -2129,8 +2129,8 @@ def cancel_tracked_tpsl(state):
 
     # Managed LIVE positions intentionally keep their broker-side TP/SL protection.
     if (
-        pos.get("tp_policy") in ("TP1", "TP_GROSS1")
-        or pos.get("sl_policy") == "SL1"
+        pos.get("tp_policy") in ("TP1", "TP_GROSS1", "TP055")
+        or pos.get("sl_policy") in ("SL1", "SL05")
         or str(pos.get("risk_profile") or "").endswith(("SL10", "SL1", "SL05"))
     ):
         return False
