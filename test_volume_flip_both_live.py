@@ -25,13 +25,32 @@ class FakeBot(prior.FakeBot):
     def __init__(self):
         super().__init__()
         self.now=T+1000
+        self.exchange_tpsl={}
+        self.amend_calls=0
+        self.amend_uncertain=False
+        self.defer_amend=False
     def private_request(self,method,path,body=None,params=None):
         if path=="/api/v1/trade/order-tpsl":
             self.posted.append((method,path,body))
-            return [{"code":"0","tpslId":"test-"+str(len(self.posted))}]
+            tid="test-"+str(len(self.posted))
+            self.exchange_tpsl[body["instId"]]={
+                "state":"live","instId":body["instId"],"tpslId":tid,
+                "tpTriggerPrice":body["tpTriggerPrice"],
+                "slTriggerPrice":body["slTriggerPrice"],
+                "tpTriggerPriceType":body["tpTriggerPriceType"],
+                "slTriggerPriceType":body["slTriggerPriceType"]}
+            return [{"code":"0","tpslId":tid}]
         if path=="/api/v1/trade/order-tpsl-detail":
-            return {"state":"live","tpslId":"prior-1",
-                    "tpTriggerPrice":"100.55","slTriggerPrice":"99.50"}
+            return dict(self.exchange_tpsl.get(params["instId"],{}))
+        if path=="/api/v1/trade/amend-tpsl":
+            self.amend_calls+=1
+            self.posted.append((method,path,body))
+            if not self.defer_amend:
+                entry=self.exchange_tpsl[body["instId"]]
+                entry["tpTriggerPriceType"]=body["newTpTriggerPriceType"]
+                entry["slTriggerPriceType"]=body["newSlTriggerPriceType"]
+            if self.amend_uncertain: raise RuntimeError("HTTP 429 uncertain")
+            return [{"code":"0","tpslId":body["tpslId"]}]
         return super().private_request(method,path,body)
     def bar_close_ms(self,b):
         return int(b["ts"])+F
@@ -197,6 +216,53 @@ class Broker(unittest.TestCase):
                                                  self.instruments["ABC-USDT"]))
         self.assertEqual(len(self.bot.posted),1)
         self.assertEqual(pos["protection_status"],"TP055_SL05_ACTIVE")
+
+
+    def test_new_tpsl_uses_mark_trigger_both_directions(self):
+        self.assertTrue(live._open_one(self.bot,self.state,self.signal("ABC-USDT","LONG"),self.instruments))
+        self.assertTrue(live._open_one(self.bot,self.state,self.signal("XYZ-USDT","SHORT"),self.instruments))
+        for coin in ("ABC-USDT","XYZ-USDT"):
+            record=self.bot.exchange_tpsl[coin]
+            self.assertEqual(record["tpTriggerPriceType"],"mark")
+            self.assertEqual(record["slTriggerPriceType"],"mark")
+            self.assertEqual(self.state["positions"][coin]["protection_status"],"TP055_SL05_MARK_ACTIVE")
+
+    def test_existing_live_last_order_amended_without_cancel(self):
+        pos={"strategy":live.STRATEGY,"inst":"ABC-USDT","side":"LONG",
+             "reference_entry":"100","tp":"100.55","sl":"99.50",
+             "tp_policy":"TP055","sl_policy":"SL05","tpsl_id":"legacy"}
+        self.bot.exchange_tpsl["ABC-USDT"]={
+             "state":"live","tpslId":"legacy","tpTriggerPrice":"100.55",
+             "slTriggerPrice":"99.50","tpTriggerPriceType":"last",
+             "slTriggerPriceType":"last"}
+        self.assertTrue(live._ensure_protection(self.bot,self.state,pos,self.instruments["ABC-USDT"]))
+        self.assertTrue(live._ensure_protection(self.bot,self.state,pos,self.instruments["ABC-USDT"]))
+        self.assertEqual(self.bot.amend_calls,1)
+        self.assertEqual([x[1] for x in self.bot.posted],["/api/v1/trade/amend-tpsl"])
+        self.assertEqual(pos["protection_status"],"TP055_SL05_MARK_ACTIVE")
+        self.assertEqual(pos["tpsl_id"],"legacy")
+
+    def test_uncertain_amend_not_sent_twice(self):
+        pos={"strategy":live.STRATEGY,"inst":"ABC-USDT","side":"LONG",
+             "reference_entry":"100","tpsl_id":"legacy"}
+        self.bot.exchange_tpsl["ABC-USDT"]={
+             "state":"live","tpslId":"legacy","tpTriggerPrice":"100.55",
+             "slTriggerPrice":"99.50","tpTriggerPriceType":"last",
+             "slTriggerPriceType":"last"}
+        self.bot.amend_uncertain=True
+        self.bot.defer_amend=True
+        self.assertFalse(live._ensure_protection(self.bot,self.state,pos,self.instruments["ABC-USDT"]))
+        self.assertFalse(live._ensure_protection(self.bot,self.state,pos,self.instruments["ABC-USDT"]))
+        self.assertEqual(self.bot.amend_calls,1)
+        self.bot.exchange_tpsl["ABC-USDT"].update(tpTriggerPriceType="mark",slTriggerPriceType="mark")
+        self.assertTrue(live._ensure_protection(self.bot,self.state,pos,self.instruments["ABC-USDT"]))
+        self.assertEqual(self.bot.amend_calls,1)
+
+    def test_missing_broker_order_blocks_not_replaces(self):
+        pos={"strategy":live.STRATEGY,"inst":"ABC-USDT","side":"LONG",
+             "reference_entry":"100","tpsl_id":"missing"}
+        self.assertFalse(live._ensure_protection(self.bot,self.state,pos,self.instruments["ABC-USDT"]))
+        self.assertEqual(self.bot.posted,[])
 
     def test_tick_rounding_never_exceeds_stop(self):
         x=live._protection_prices(self.bot,{"side":"LONG",
