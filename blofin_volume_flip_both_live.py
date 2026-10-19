@@ -183,6 +183,106 @@ def _by_ts(bars, close_ms):
     return valid
 
 
+
+def _readonly_entry_indicators(bars, signal_close_ms, side, signal_price):
+    """Log diagnostics at the confirmed 5m signal close; NEVER gate an order.
+
+    Reuse the bot's existing calculation functions and already-fetched candles.
+    No market/API requests. Later candles are excluded to avoid look-ahead.
+    """
+    result = {
+        "indicator_timeframe": "5m",
+        "indicator_signal_close_ms": int(signal_close_ms),
+        "indicator_status": "UNAVAILABLE",
+        "rsi14": None, "rsi14_previous": None,
+        "macd_dif": None, "macd_dea": None, "macd_hist": None,
+        "macd_hist_previous": None,
+        "stoch_k": None, "stoch_d": None,
+        "stoch_k_previous": None, "stoch_d_previous": None,
+        "sma10": None, "sma20": None,
+        "atr14_pct": None, "obv_delta_5": None,
+        "sr_levels": None, "sr_entry_decision_readonly": None,
+    }
+    try:
+        # Match prior LIVE JSON indicator definitions without a new dependency.
+        import blofin_live_hourly as indicators
+        import blofin_support_resistance as sr
+
+        latest_ts = int(signal_close_ms) - FIVE
+        confirmed = _by_ts(bars, int(signal_close_ms))
+        continuous = []
+        for offset in range(200):
+            bar = confirmed.get(latest_ts - offset * FIVE)
+            if bar is None:
+                break
+            continuous.append(bar)
+        continuous.reverse()
+        if not continuous:
+            return result
+        series = [
+            {"o": o, "h": high, "l": low, "c": close, "v": volume}
+            for o, high, low, close, volume in continuous
+        ]
+        rsi = indicators.rsi_wilder(series, 14)
+        macd_dif, macd_dea, macd_hist = indicators.macd_series(series)
+        stoch_k, stoch_d = indicators.stochastic_kd_series(series, 14, 3)
+        n = len(series)
+        last = series[-1]
+
+        result.update({
+            "rsi14": rsi[-1],
+            "rsi14_previous": rsi[-2] if n >= 2 else None,
+            "macd_dif": macd_dif[-1],
+            "macd_dea": macd_dea[-1],
+            "macd_hist": macd_hist[-1],
+            "macd_hist_previous": macd_hist[-2] if n >= 2 else None,
+            "stoch_k": stoch_k[-1],
+            "stoch_d": stoch_d[-1],
+            "stoch_k_previous": stoch_k[-2] if n >= 2 else None,
+            "stoch_d_previous": stoch_d[-2] if n >= 2 else None,
+            "sma10": sum(bar["c"] for bar in series[-10:]) / 10 if n >= 10 else None,
+            "sma20": sum(bar["c"] for bar in series[-20:]) / 20 if n >= 20 else None,
+        })
+        if n >= 15:
+            ranges = [
+                max(row["h"] - row["l"], abs(row["h"] - series[i-1]["c"]),
+                    abs(row["l"] - series[i-1]["c"]))
+                for i, row in enumerate(series) if i >= n - 14
+            ]
+            result["atr14_pct"] = 100.0 * (sum(ranges) / 14) / last["c"]
+        if n >= 6:
+            result["obv_delta_5"] = sum(
+                (1 if series[i]["c"] > series[i-1]["c"]
+                 else -1 if series[i]["c"] < series[i-1]["c"] else 0) * series[i]["v"]
+                for i in range(n-5, n)
+            )
+        result["indicator_status"] = (
+            "OK" if rsi[-1] is not None and macd_hist[-1] is not None
+            and stoch_d[-1] is not None else "INSUFFICIENT_CONFIRMED_HISTORY"
+        )
+
+        # Historical support/resistance levels are OBSERVATIONS ONLY.
+        # Two subsequent CLOSED bars confirm a swing, never future ones.
+        sr_bars = [
+            {"ts": latest_ts - (n - 1 - i) * FIVE,
+             "h": bar["h"], "l": bar["l"]}
+            for i, bar in enumerate(series)
+        ]
+        try:
+            levels = sr.confirmed_levels(sr_bars, signal_close_ms, FIVE)
+            result["sr_levels"] = levels
+            result["sr_entry_decision_readonly"] = sr.check_entry(
+                levels, side, signal_price
+            )
+        except (ValueError, TypeError, KeyError) as exc:
+            result["sr_diagnostic_error"] = f"{type(exc).__name__}: {exc}"[:160]
+    except Exception as exc:
+        # Data collection must NEVER block or change a qualified LIVE trade.
+        result["indicator_status"] = "ERROR"
+        result["indicator_error"] = f"{type(exc).__name__}: {exc}"[:160]
+    return result
+
+
 def _previous10_mean(series, ts):
     previous = [series.get(ts - i*FIVE) for i in range(1, 11)]
     return sum(x[4] for x in previous) / 10.0 if all(x is not None for x in previous) else None
@@ -242,6 +342,7 @@ def entry_signal(bot, bars, expected_close_ms):
         "signal_mean20_prev":mean20,
         "previous_mean20_prev":_previous20_mean(rows,ts-FIVE),
         "signal_candle_ts":ts,
+        **_readonly_entry_indicators(bars, expected_close_ms, side, now[3]),
     }
 
 
