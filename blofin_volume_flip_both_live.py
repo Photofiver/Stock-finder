@@ -13,7 +13,9 @@ Existing legacy red-volume LONG positions retain their original exit.
 import math
 import os
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
+from zoneinfo import ZoneInfo
 
 STRATEGY = "VOLUME_FLIP_BOTH_5M_V1"
 LEGACY_STRATEGY = "REV_SHORT_20W_LONG_VOLUME_V1"
@@ -36,6 +38,7 @@ MAX_PER_COIN_USDT = Decimal("20")
 MIN_PER_COIN_USDT = Decimal("5")
 CASH_BUFFER_USDT = Decimal("0.50")
 AGE_MAX_MS = 120_000
+UK_ZONE = ZoneInfo("Europe/London")
 
 
 
@@ -243,6 +246,61 @@ def entry_signal(bot, bars, expected_close_ms):
         "previous_mean20_prev":_previous20_mean(rows,ts-FIVE),
         "signal_candle_ts":ts,
     }
+
+
+
+def _uk_day_open_ms(bar_open_ms):
+    """UK midnight for a 5m bar, handling BST/GMT changes correctly."""
+    local = datetime.fromtimestamp(bar_open_ms / 1000, timezone.utc).astimezone(UK_ZONE)
+    return int(local.replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000)
+
+
+def volume_peak_regime(bars, expected_close_ms, previous=None):
+    """Track the biggest same-colour VOL since the current trend began.
+
+    The first bar of each UK day seeds a new regime. Later scans carry the
+    last VERIFIED state, and replay every missing intervening closed candle.
+    If midnight or a candle gap cannot be verified, reject new entries; exits
+    remain independent. Never infer a trend from an incomplete price history.
+    """
+    expected_close_ms = int(expected_close_ms)
+    latest_open = expected_close_ms - FIVE
+    rows = _by_ts(bars, expected_close_ms)
+    day_open = _uk_day_open_ms(latest_open)
+    base = {"day_open_ms": day_open, "complete": False,
+            "direction": None, "peak_volume": 0.0,
+            "peak_candle_ts": None, "last_close_ms": day_open}
+    if latest_open not in rows:
+        return base
+    if (isinstance(previous, dict) and previous.get("complete")
+            and int(previous.get("day_open_ms") or 0) == day_open
+            and day_open <= int(previous.get("last_close_ms") or 0) <= expected_close_ms):
+        regime = dict(previous)
+        start = int(regime["last_close_ms"])
+    else:
+        regime = dict(base)
+        start = day_open
+        if start not in rows:
+            return base
+    for ts in range(start, expected_close_ms, FIVE):
+        bar = rows.get(ts)
+        if bar is None:
+            return base
+        o, c, volume = bar[0], bar[3], bar[4]
+        direction = "LONG" if c > o else "SHORT" if c < o else None
+        if direction is not None and volume > 0:
+            if regime["direction"] is None:
+                regime.update(direction=direction, peak_volume=volume,
+                              peak_candle_ts=ts)
+            elif direction == regime["direction"]:
+                if volume > regime["peak_volume"]:
+                    regime.update(peak_volume=volume, peak_candle_ts=ts)
+            elif volume > regime["peak_volume"]:
+                regime.update(direction=direction, peak_volume=volume,
+                              peak_candle_ts=ts)
+        regime["last_close_ms"] = ts + FIVE
+    regime["complete"] = regime["last_close_ms"] == expected_close_ms
+    return regime
 
 
 def prioritize_volume_signals(matches):
@@ -829,6 +887,21 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                list(dict.fromkeys(list(top200)+list(active))))
     confirmed = wait_for_confirmed_close(requested, expected_close_ms) or {}
     scan["scanned_confirmed"]=sum(1 for inst in top200 if inst in confirmed)
+    # User's dominant-volume trend: an opposing bar must beat the PEAK of
+    # the entire active trend, not just the immediately preceding green/red.
+    # Record verified 5m regime for all scanned coins, including while blocked
+    # by bankroll/risk stops, so late-day scans retain the exact UK-day trend.
+    regimes = state.setdefault("volume_peak_regimes_uk_day", {})
+    current_day = _uk_day_open_ms(int(expected_close_ms) - FIVE)
+    for inst, prior in list(regimes.items()):
+        if not isinstance(prior, dict) or prior.get("day_open_ms") != current_day:
+            del regimes[inst]
+    current_regimes = {}
+    for inst, bars in confirmed.items():
+        regime = volume_peak_regime(bars, expected_close_ms, regimes.get(inst))
+        current_regimes[inst] = regime
+        if regime["complete"]:
+            regimes[inst] = regime
     # Archive all confirmed 5m candles for tracked trades, including trades
     # waiting for broker close reconciliation. No new BloFin API calls.
     for inst, pos in list(active.items()):
@@ -915,6 +988,26 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
             bars=confirmed.get(inst)
             if not bars or int(bot.bar_close_ms(bars[-1]))!=expected_close_ms:continue
             sig=entry_signal(bot,bars,expected_close_ms)
+            if sig is not None:
+                regime = current_regimes.get(inst) or {}
+                if not regime.get("complete") or regime.get("direction") != sig["side"]:
+                    scan["rejections"].append({
+                        "inst": inst, "reason": "DOMINANT_VOLUME_TREND_BLOCK",
+                        "candidate_side": sig["side"],
+                        "candidate_volume": sig["signal_volume"],
+                        "preceding_opposite_volume": sig["previous_opposite_volume"],
+                        "current_trend": regime.get("direction"),
+                        "trend_peak_volume": regime.get("peak_volume"),
+                        "trend_peak_candle_ts": regime.get("peak_candle_ts"),
+                        "regime_data_complete": bool(regime.get("complete")),
+                        "note": "Opposing candle must beat active trend peak, not last bar"
+                    })
+                    continue
+                sig.update({
+                    "trend_peak_volume": regime["peak_volume"],
+                    "trend_peak_candle_ts": regime["peak_candle_ts"],
+                    "volume_trend_direction": regime["direction"]
+                })
             # Entry-only filter: 90% <= signal 5m volume / PRIOR 20-bar
             # average < 100%. Does not alter exits or protective TP/SL.
             if (sig is not None and
