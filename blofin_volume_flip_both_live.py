@@ -487,6 +487,110 @@ def _bootstrap_volume_trend_history(bot, inst, expected_close_ms, previous=None)
     return volume_trend_from_bars(bars, expected_close_ms, previous)
 
 
+VOLUME_TUNNEL_LOOKBACK_BARS = 20
+
+
+def volume_price_tunnel_from_bars(bars, expected_close_ms, side):
+    """5m PRICE tunnel anchored to the strongest coloured VOLUME candles.
+
+    Trend LONG: GREEN high line above / RED low line below.
+    Trend SHORT: RED high line above / GREEN low line below.
+    Use the top two volume candles of each colour in the previous 20
+    COMPLETED bars, excluding the entry signal bar. Lines connect their
+    candle HIGH/LOW prices and extend to the signal close; both boundaries
+    must be well ordered. Only an actual fresh CLOSED-candle break of the
+    appropriate boundary may confirm entry. No future bars/API calls.
+    """
+    result = {
+        "rule": "TOP2_COLOURED_VOLUME_20BAR_PRICE_TUNNEL",
+        "side": side,
+        "timeframe": "5m",
+        "lookback_bars": VOLUME_TUNNEL_LOOKBACK_BARS,
+        "signal_close_ms": int(expected_close_ms),
+        "status": "UNAVAILABLE",
+        "breakout_confirmed": False,
+    }
+    if side not in ("LONG", "SHORT"):
+        result["reason"] = "INVALID_SIDE"
+        return result
+    rows = _by_ts(bars, int(expected_close_ms))
+    signal = rows.get(int(expected_close_ms) - FIVE)
+    previous = rows.get(int(expected_close_ms) - 2 * FIVE)
+    if signal is None or previous is None:
+        result["reason"] = "MISSING_CLOSED_SIGNAL"
+        return result
+
+    green, red = [], []
+    # All anchors close BEFORE the signal candle opens (no look-ahead).
+    for age in range(VOLUME_TUNNEL_LOOKBACK_BARS + 1, 1, -1):
+        ts = int(expected_close_ms) - age * FIVE
+        bar = rows.get(ts)
+        if bar is None:
+            result["reason"] = "MISSING_CHANNEL_HISTORY"
+            return result
+        o, high, low, close, vol = bar
+        if vol <= 0 or close == o:
+            continue
+        anchor = (ts + FIVE, vol, high, low)
+        (green if close > o else red).append(anchor)
+
+    if len(green) < 2 or len(red) < 2:
+        result["reason"] = "INSUFFICIENT_GREEN_RED_ANCHORS"
+        return result
+
+    def strongest_pair(candidates):
+        # Volume chooses the candles; chronology chooses the line slope.
+        return sorted(
+            sorted(candidates, key=lambda x: (x[1], x[0]), reverse=True)[:2],
+            key=lambda x: x[0],
+        )
+
+    def price_at(pair, coordinate, target_close_ms):
+        a, b = pair
+        return a[coordinate] + (
+            (b[coordinate] - a[coordinate])
+            * (target_close_ms - a[0]) / (b[0] - a[0])
+        )
+
+    green_pair = strongest_pair(green)
+    red_pair = strongest_pair(red)
+    upper_pair = green_pair if side == "LONG" else red_pair
+    lower_pair = red_pair if side == "LONG" else green_pair
+    upper = price_at(upper_pair, 2, int(expected_close_ms))
+    lower = price_at(lower_pair, 3, int(expected_close_ms))
+    prev_upper = price_at(upper_pair, 2, int(expected_close_ms) - FIVE)
+    prev_lower = price_at(lower_pair, 3, int(expected_close_ms) - FIVE)
+    if (not all(math.isfinite(x) and x > 0
+                for x in (upper, lower, prev_upper, prev_lower))
+            or upper <= lower or prev_upper <= prev_lower):
+        result["reason"] = "INVALID_OR_CROSSED_TUNNEL"
+        return result
+
+    breakout = (
+        signal[3] > upper and previous[3] <= prev_upper
+        if side == "LONG"
+        else signal[3] < lower and previous[3] >= prev_lower
+    )
+    result.update({
+        "status": "VALID",
+        "reason": "CONFIRMED_BREAKOUT" if breakout else "NO_FRESH_BREAKOUT",
+        "upper_color": "GREEN" if side == "LONG" else "RED",
+        "lower_color": "RED" if side == "LONG" else "GREEN",
+        "upper_price": upper,
+        "lower_price": lower,
+        "previous_upper_price": prev_upper,
+        "previous_lower_price": prev_lower,
+        "previous_close_price": previous[3],
+        "signal_close_price": signal[3],
+        "upper_anchors": [{"close_ms": x[0], "volume": x[1], "high": x[2]}
+                          for x in upper_pair],
+        "lower_anchors": [{"close_ms": x[0], "volume": x[1], "low": x[3]}
+                          for x in lower_pair],
+        "breakout_confirmed": breakout,
+    })
+    return result
+
+
 def prioritize_volume_signals(matches):
     """Strongest qualified 5m signal volume / its own previous MA20 first.
 
@@ -1014,6 +1118,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         return
     scan={"strategy":STRATEGY,"selection_priority":"SIGNAL_VOLUME_DIV_PREVIOUS_20_BAR_MEAN_DESC",
           "entry_volume_trend_filter":"DAY_UK_DOMINANT_COLOUR_VOLUME",
+          "entry_price_tunnel_filter":"TOP2_COLOURED_VOLUME_20BAR_PRICE_TUNNEL_BREAKOUT",
           "volume_entry_strength_min_inclusive":ENTRY_VOLUME_STRENGTH_MIN,
           "volume_entry_strength_max_exclusive":ENTRY_VOLUME_STRENGTH_MAX,
           "long_entry_rank_range_inclusive":[1,LONG_ENTRY_MAX_RANK],
@@ -1234,12 +1339,25 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                         "volume_trend": trend_direction,
                     })
                     continue
+                tunnel = volume_price_tunnel_from_bars(
+                    bars, expected_close_ms, sig["side"])
+                if not tunnel["breakout_confirmed"]:
+                    scan["rejections"].append({
+                        "inst": inst, "rank": rank, "side": sig["side"],
+                        "reason": "VOLUME_TUNNEL_UNAVAILABLE"
+                                  if tunnel["status"] != "VALID"
+                                  else "VOLUME_TUNNEL_NO_FRESH_BREAKOUT",
+                        "tunnel_reason": tunnel["reason"],
+                        "volume_tunnel": tunnel,
+                    })
+                    continue
                 sig.update({
                     "inst": inst, "rank": rank,
                     "volume_trend_direction": trend_direction,
                     "volume_trend_peak": trend_data["peak_volume"],
                     "volume_trend_started_close_ms": trend_data["trend_started_close_ms"],
                 })
+                sig["volume_price_tunnel"] = tunnel
                 matches.append(sig)
         # Full TOP200 was already checked against the exact same entry rules.
         # From eligible signals, select strongest relative volume first,
