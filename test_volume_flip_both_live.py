@@ -67,6 +67,41 @@ class Setups(unittest.TestCase):
         s=live.entry_signal(self.bot,bars("SHORT"),T)
         self.assertEqual(s["side"],"SHORT")
         self.assertEqual(s["signal_volume"],80)
+    def test_entry_snapshot_contains_readonly_indicators(self):
+        # Retain the existing volume entry; indicators are observations only.
+        for side in ("LONG", "SHORT"):
+            signal = live.entry_signal(self.bot, bars(side), T)
+            self.assertIsNotNone(signal)
+            self.assertEqual(signal["indicator_status"], "OK",
+                             signal.get("indicator_error"))
+            self.assertEqual(signal["indicator_signal_close_ms"], T)
+            for key in ("rsi14", "macd_dif", "macd_dea", "macd_hist",
+                        "macd_hist_previous", "stoch_k", "stoch_d",
+                        "sma10", "sma20", "atr14_pct", "obv_delta_5"):
+                self.assertIsInstance(signal[key], (int, float), key)
+            self.assertIsInstance(signal["sr_levels"], dict)
+            self.assertIsInstance(signal["sr_entry_decision_readonly"], dict)
+
+    def test_readonly_indicators_ignore_future_candle(self):
+        current = bars("LONG")
+        before = live.entry_signal(self.bot, current, T)
+        current.append(candle(T, o=100.0, c=400.0, volume=1e8))
+        after = live.entry_signal(self.bot, current, T)
+        for key in ("rsi14", "macd_hist", "macd_hist_previous",
+                    "stoch_k", "stoch_d", "sma10", "sma20", "atr14_pct",
+                    "obv_delta_5", "sr_levels"):
+            self.assertEqual(before[key], after[key], key)
+
+    def test_short_indicator_history_does_not_block_valid_volume_entry(self):
+        # 23 bars are enough for the volume rule, but not full MACD.
+        short_history = bars("LONG")[-23:]
+        signal = live.entry_signal(self.bot, short_history, T)
+        self.assertIsNotNone(signal)
+        self.assertEqual(signal["side"], "LONG")
+        self.assertEqual(signal["indicator_status"],
+                         "INSUFFICIENT_CONFIRMED_HISTORY")
+        self.assertIsNone(signal["macd_hist"])
+
     def test_volume_strength_beats_price_rank_for_long_and_short(self):
         weak = bars("LONG")
         weak[-1]["v"] = 70
