@@ -915,6 +915,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         if (pos.get("strategy")==STRATEGY and bars and
                 int(bot.bar_close_ms(bars[-1]))==expected_close_ms):
             _audit_confirmed_volume_candles(pos, bars, expected_close_ms)
+    closed_flip_candidates = {}
     for inst,pos in list(active.items()):
         legacy = pos.get("strategy")==LEGACY_STRATEGY and pos.get("hold_policy")==LEGACY_HOLD_POLICY
         if not legacy and not (pos.get("strategy")==STRATEGY and pos.get("hold_policy")==HOLD_POLICY):
@@ -971,12 +972,15 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                 pos["exit_retry_next_ms"] = bot.now_ms() + 60000
                 bot.save_state(state)
             try:
+                old_position = dict(pos)
                 bot._run_for_tracked_position(
                     state,inst,bot.close_tracked_position,
                     ("LEGACY VOLUME: GREEN vol > last RED" if legacy else
                      "VOLUME EXIT: verified dominant opposite-volume trend"))
                 if inst in bot.get_tracked_positions(state):
                     bot.get_tracked_positions(state)[inst]["exit_pending"]="AWAITING_BROKER_FLAT"
+                elif not legacy:
+                    closed_flip_candidates[inst] = old_position
                 scan["exits"].append(inst)
             except Exception as exc:
                 tracked = bot.get_tracked_positions(state).get(inst)
@@ -989,6 +993,59 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                 bot.notify(f"CRITICAL {inst}: exit uncertain: {exc}. "
                            "Will reconcile broker position before a future retry.",
                            "BloFin LIVE volume exit safety")
+    # A confirmed flip can CLOSE one side and OPEN the other on this same
+    # completed candle only after the broker independently verifies flat and
+    # that the old reduce-only OCO is no longer live. Otherwise fail closed.
+    recent_flip_reentry_block = set()
+    if closed_flip_candidates:
+        try:
+            broker_set = {str(row.get("instId")) for row in bot.get_open_positions()}
+            unknown = broker_set - set(bot.get_tracked_positions(state))
+            if unknown:
+                scan["status"] = "BLOCK_UNTRACKED_ACCOUNT_POSITIONS"
+                scan["untracked"] = sorted(unknown)
+            for inst, old_pos in closed_flip_candidates.items():
+                if inst in broker_set:
+                    recent_flip_reentry_block.add(inst)
+                    scan["rejections"].append({
+                        "inst": inst, "reason": "FLIP_CLOSE_NOT_BROKER_FLAT"
+                    })
+                    continue
+                old_tpsl_id = str(old_pos.get("tpsl_id") or "")
+                if not old_tpsl_id:
+                    recent_flip_reentry_block.add(inst)
+                    scan["rejections"].append({
+                        "inst": inst, "reason": "OLD_TPSL_STATUS_UNKNOWN"
+                    })
+                    continue
+                try:
+                    detail = bot.private_request(
+                        "GET", "/api/v1/trade/order-tpsl-detail",
+                        params={"instId": inst, "tpslId": old_tpsl_id}) or {}
+                    if isinstance(detail, list):
+                        detail = detail[0] if detail else {}
+                    old_state = (str(detail.get("state") or "").lower()
+                                 if isinstance(detail, dict) else "")
+                    if old_state not in (
+                            "canceled", "cancelled", "effective", "triggered",
+                            "completed", "complete", "expired", "filled"):
+                        recent_flip_reentry_block.add(inst)
+                        scan["rejections"].append({
+                            "inst": inst, "reason": "OLD_BROKER_TPSL_STILL_LIVE",
+                            "old_tpsl_state": old_state or "unverified",
+                        })
+                except Exception as exc:
+                    recent_flip_reentry_block.add(inst)
+                    scan["rejections"].append({
+                        "inst": inst, "reason": "OLD_BROKER_TPSL_UNVERIFIED",
+                        "error": f"{type(exc).__name__}: {exc}"[:180],
+                    })
+        except Exception as exc:
+            scan["status"] = "BLOCK_UNCERTAIN_ORDERS"
+            scan["rejections"].append({
+                "reason": "FLIP_CLOSE_BROKER_RECHECK_FAILED",
+                "error": f"{type(exc).__name__}: {exc}"[:180],
+            })
     # Do not trade until any uncertain broker order or closure is reconciled.
     if os.getenv("LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES", "true").strip().lower() == "true":
         scan["status"]="PAUSED_NEW_ENTRIES_KEEP_EXISTING_EXITS"
@@ -1005,6 +1062,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         for rank,inst in enumerate(top200,1):
             if inst in bot.get_tracked_positions(state):continue
             if inst in broker_set:continue
+            if inst in recent_flip_reentry_block:continue
             bars=confirmed.get(inst)
             if not bars or int(bot.bar_close_ms(bars[-1]))!=expected_close_ms:continue
             sig=entry_signal(bot,bars,expected_close_ms)
