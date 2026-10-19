@@ -348,7 +348,7 @@ def entry_signal(bot, bars, expected_close_ms):
     }
 
 
-LONG_ENTRY_MAX_RANK = 50
+LONG_ENTRY_MAX_RANK = 200
 
 
 def long_entry_extra_rejection(sig, rank):
@@ -360,7 +360,7 @@ def long_entry_extra_rejection(sig, rank):
     if sig.get("side") != "LONG":
         return None
     if not 1 <= rank <= LONG_ENTRY_MAX_RANK:
-        return "LONG_RANK_OUTSIDE_TOP50"
+        return "LONG_RANK_OUTSIDE_TOP200"
     try:
         current = float(sig["signal_mean20_prev"])
         previous = float(sig["previous_mean20_prev"])
