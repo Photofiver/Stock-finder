@@ -199,6 +199,90 @@ def _volume_audit(pos):
     return audit
 
 
+
+def _price_movement_from_candles(pos, candles):
+    """Directional 5m price excursions relative to the actual broker entry.
+
+    MFE/MAE include intra-5m high/low; the bar containing the entry fill may
+    contain pre-fill extremes. Also record a stricter FULL-bars-only series.
+    These are research observations, NOT simulated orders or actual TP/SL fills.
+    """
+    side = str(pos.get("side") or "").upper()
+    try:
+        entry = float(pos.get("reference_entry") or "0")
+        opened = int(pos.get("opened_ms") or 0)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if side not in ("LONG", "SHORT") or not math.isfinite(entry) or entry <= 0 or opened <= 0:
+        return None
+    direction = 1 if side == "LONG" else -1
+    approx_best = approx_worst = 0.0
+    full_best = full_worst = 0.0
+    max_close = min_close = 0.0
+    approximate_best_price = approximate_worst_price = entry
+    first_partial = False
+    counted_approx = counted_full = missing = 0
+    for row in candles:
+        bar_end = int(row["close_ms"])
+        bar_start = bar_end - FIVE
+        if bar_end <= opened:
+            row["price_exposure"] = "BEFORE_ENTRY"
+            continue
+        partial = bar_start < opened
+        row["price_exposure"] = "ENTRY_PARTIAL" if partial else "FULL"
+        if partial:
+            first_partial = True
+        if row.get("high") is None or row.get("low") is None or row.get("close") is None:
+            missing += 1
+            continue
+        high, low, close = float(row["high"]), float(row["low"]), float(row["close"])
+        if not all(math.isfinite(x) and x > 0 for x in (high,low,close)):
+            missing += 1
+            continue
+        # Profit-direction gains and adverse reversal, as POSITIVE percent
+        # for LONG and SHORT, with zeros when no excursion occurred.
+        f_price = high if direction == 1 else low
+        a_price = low if direction == 1 else high
+        favourable = max(0.0, direction * (f_price / entry - 1.0) * 100.0)
+        adverse = max(0.0, -direction * (a_price / entry - 1.0) * 100.0)
+        close_return = direction * (close / entry - 1.0) * 100.0
+        row["position_return_close_pct"] = round(close_return, 6)
+        row["favorable_in_bar_pct_approx"] = round(favourable, 6)
+        row["adverse_in_bar_pct_approx"] = round(adverse, 6)
+        counted_approx += 1
+        max_close = max(max_close, close_return)
+        min_close = min(min_close, close_return)
+        if favourable > approx_best:
+            approx_best = favourable
+            approximate_best_price = f_price
+        if adverse > approx_worst:
+            approx_worst = adverse
+            approximate_worst_price = a_price
+        if not partial:
+            counted_full += 1
+            full_best = max(full_best, favourable)
+            full_worst = max(full_worst, adverse)
+    # Recomputed on every confirmed scan, safe against a delayed candle
+    # and safe after restarting GitHub Actions.
+    return {
+        "version":1, "side":side, "entry_price":entry,
+        "opened_ms":opened, "bar_minutes":5,
+        "fully_observed_candles":counted_full,
+        "observed_candles_including_entry_partial":counted_approx,
+        "candles_missing_ohlc":missing,
+        "contains_partial_entry_candle":first_partial,
+        "max_favorable_move_pct_approx":round(approx_best,6),
+        "max_adverse_move_pct_approx":round(approx_worst,6),
+        "max_favorable_move_pct_full_bars_only":round(full_best,6),
+        "max_adverse_move_pct_full_bars_only":round(full_worst,6),
+        "best_price_5m_approx":approximate_best_price,
+        "worst_price_5m_approx":approximate_worst_price,
+        "best_close_return_pct":round(max_close,6),
+        "worst_close_return_pct":round(min_close,6),
+        "limitations":"5m OHLC extremes within entry candle may have occurred before fill; 5m bars cannot determine high/low order or true TP-vs-SL first touch. Missing bars are not estimated.",
+    }
+
+
 def _audit_confirmed_volume_candles(pos, bars, expected_close_ms):
     """Capture every available confirmed 5m candle; dedupe and identify gaps.
 
@@ -222,16 +306,21 @@ def _audit_confirmed_volume_candles(pos, bars, expected_close_ms):
         if isinstance(row, dict) and row.get("close_ms")
     }
     for ts in range(start + FIVE, close + 1, FIVE):
-        if ts in previous:
-            continue
         candle = confirmed.get(ts - FIVE)
         if candle is None:
             continue
-        previous[ts] = {
-            "close_ms": ts, "color": _audit_colour(candle),
-            "volume": candle[4],
-            "open": candle[0], "close": candle[3],
-        }
+        if ts not in previous:
+            previous[ts] = {
+                "close_ms": ts, "color": _audit_colour(candle),
+                "volume": candle[4],
+                "open": candle[0], "high": candle[1],
+                "low": candle[2], "close": candle[3],
+            }
+        else:
+            # Earlier saved audits may contain volume, open and close but
+            # no OHLC highs/lows: fill only missing price fields when available.
+            previous[ts].setdefault("high", candle[1])
+            previous[ts].setdefault("low", candle[2])
     audit["candles"] = [previous[ts] for ts in sorted(previous) if start < ts <= close]
     # A skipped/missing 5m candle is visible as a gap in the JSON, not silently
     # treated as a candle of the preferred direction.
@@ -267,11 +356,14 @@ def _audit_confirmed_volume_candles(pos, bars, expected_close_ms):
         "total_green_bars": green, "total_red_bars": red,
         "total_doji_bars": doji,
         "total_opposite_bars": red if side == "LONG" else green,
-        "total_trade_direction_bars": green if side == "LONG" else red,
         "current_green_streak": green_streak, "current_red_streak": red_streak,
+        "total_trade_direction_bars": green if side == "LONG" else red,
         "max_green_streak": max_green, "max_red_streak": max_red,
         "max_opposite_streak": max_opposite,
     })
+    movement = _price_movement_from_candles(pos, audit["candles"])
+    if movement is not None:
+        pos["price_movement"] = movement
     return audit
 
 
@@ -393,6 +485,10 @@ def _open_one(bot, state, sig, instruments):
         "filled_size":bot.clean_decimal(actual_size),
         "notional_usdt":bot.clean_decimal(actual_price*actual_size*contract_value),
         "entry_fee":str(fill.get("fee") or "")})
+    # Set the broker-confirmed price baseline before the first subsequent bar.
+    pos["price_movement"] = _price_movement_from_candles(
+        pos, pos["volume_candle_audit"]["candles"]
+    )
     attempt["status"]="TRACKED"
     bot.save_state(state)
     try:
