@@ -290,6 +290,96 @@ def _open_one(bot, state, sig, instruments):
     return True
 
 
+
+def _reconcile_pending_volume_closes(bot, state, broker_rows, scan):
+    """Retry a pending *close only* after a fresh account-side broker snapshot.
+
+    A failed/uncertain POST is never repeated solely because a timer elapsed.
+    The snapshot must show the original same-direction net position, isolated
+    margin, and a size no greater than the bot's verified original fill.
+    This also makes previously stuck 429 exits from older bot runs recoverable.
+    """
+    active = bot.get_tracked_positions(state)
+    now = int(bot.now_ms())
+    by_inst = {}
+    for row in broker_rows:
+        by_inst.setdefault(str(row.get("instId") or ""), []).append(row)
+    for inst, pos in list(active.items()):
+        if not pos.get("exit_pending") or pos.get("strategy") != STRATEGY:
+            continue
+        rows = by_inst.get(inst, [])
+        if len(rows) != 1:
+            # No position: reconciliation in sync_all_tracked_positions must
+            # finish via verified broker history, not a duplicate close.
+            # Multiple positions: unsafe to issue "close entire net position".
+            scan["rejections"].append({"inst":inst,
+                "reason":"PENDING_EXIT_BROKER_ABSENT_OR_AMBIGUOUS"})
+            continue
+        row = rows[0]
+        try:
+            from decimal import Decimal
+            signed = Decimal(str(row["positions"]))
+            original = Decimal(str(pos.get("filled_size") or pos.get("size") or "0"))
+            if not signed.is_finite() or not original.is_finite() or original <= 0:
+                raise ValueError("missing verified original size or broker quantity")
+            if signed == 0:
+                raise ValueError("broker quantity is zero")
+            broker_side = "LONG" if signed > 0 else "SHORT"
+            if str(row.get("positionSide") or "").lower() != "net":
+                raise ValueError("position mode is not net")
+            if str(row.get("marginMode") or "").lower() != "isolated":
+                raise ValueError("margin mode is not isolated")
+            if broker_side != str(pos.get("side") or "").upper():
+                raise ValueError("broker side differs from tracked position")
+            if abs(signed) > original:
+                raise ValueError("broker size exceeds originally verified fill")
+            broker_created = int(row.get("createTime") or 0)
+            opened_ms = int(pos.get("opened_ms") or 0)
+            if broker_created and opened_ms and broker_created > opened_ms + 120000:
+                raise ValueError("broker position was reopened since bot entry")
+        except (TypeError, ValueError, ArithmeticError) as exc:
+            scan["rejections"].append({"inst":inst,
+                "reason":"PENDING_EXIT_BROKER_IDENTITY_MISMATCH",
+                "error":str(exc)[:200]})
+            print(f"{STRATEGY}: BLOCK CLOSE RETRY {inst}: {exc}")
+            continue
+        if now < int(pos.get("exit_retry_next_ms") or 0):
+            scan["rejections"].append({"inst":inst,
+                "reason":"PENDING_EXIT_RETRY_BACKOFF"})
+            continue
+        # Persist BEFORE sending, to prevent a restart/re-run from rapidly
+        # repeating an HTTP request whose result may not yet be visible.
+        attempt = int(pos.get("exit_retry_count") or 0) + 1
+        pos["exit_retry_count"] = attempt
+        pos["exit_retry_last_ms"] = now
+        pos["exit_retry_next_ms"] = now + min(600000, 60000 * (2 ** min(attempt - 1, 4)))
+        pos["exit_pending"] = "RETRY_POST_STARTED"
+        bot.save_state(state)
+        try:
+            bot._run_for_tracked_position(
+                state, inst, bot.close_tracked_position,
+                "RECOVERED VOLUME EXIT: broker-verified pending close")
+            # record_closed may leave position tracked while exchange
+            # history is pending. Do not permit new entries until flat.
+            if inst in bot.get_tracked_positions(state):
+                bot.get_tracked_positions(state)[inst]["exit_pending"] = "AWAITING_BROKER_FLAT"
+            scan["exits"].append(inst)
+            print(f"{STRATEGY}: CLOSE RETRY ACCEPTED {inst}, attempt {attempt}")
+        except Exception as exc:
+            still = bot.get_tracked_positions(state).get(inst)
+            if still:
+                still["exit_pending"] = "UNCERTAIN_CLOSE"
+                still["exit_retry_error"] = f"{type(exc).__name__}: {exc}"[:240]
+            scan["rejections"].append({"inst":inst,
+                "reason":"PENDING_EXIT_RETRY_FAILED",
+                "error":f"{type(exc).__name__}: {exc}"[:240]})
+            bot.notify(f"CRITICAL {inst}: broker-verified close retry attempt "
+                       f"{attempt} failed: {exc}; next attempt after cooldown. "
+                       "Trading remains blocked until reconciliation.",
+                       "BloFin LIVE volume exit safety")
+        bot.save_state(state)
+
+
 def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_confirmed_close):
     if bot.SIGNAL_MINUTES!=5 or bot.TOP_N!=200 or len(top200)!=200:
         raise RuntimeError("Volume flip LONG/SHORT requires confirmed 5m and TOP200")
@@ -322,8 +412,15 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         scan["status"]="BLOCK_UNCERTAIN_ORDERS"
         scan["uncertain_instruments"]=uncertain
 
-    # Every open coin must be confirmed for exits even when it fell outside TOP200.
-    requested=list(dict.fromkeys(list(top200)+list(active)))
+    # Prioritise CLOSE reconciliation over hundreds of public candle calls:
+    # for already pending positions, a fresh broker snapshot was obtained above.
+    _reconcile_pending_volume_closes(bot, state, broker, scan)
+    active = bot.get_tracked_positions(state)
+    unresolved = any(p.get("exit_pending") for p in active.values())
+    # While any close remains uncertain, suspend public TOP200 candle traffic.
+    # This preserves API quota for the urgent broker close and forbids new trades.
+    requested=(list(active) if unresolved else
+               list(dict.fromkeys(list(top200)+list(active))))
     confirmed = wait_for_confirmed_close(requested, expected_close_ms) or {}
     scan["scanned_confirmed"]=sum(1 for inst in top200 if inst in confirmed)
     for inst,pos in list(active.items()):
@@ -345,21 +442,31 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         pos["last_red_volume" if legacy else "last_same_volume"]=new_volume
         pos["last_checked_signal_close_ms"]=int(expected_close_ms)
         if should_close:
-            # Broker close acknowledged before recording completion.
+            # Persist a close intent BEFORE the POST; after any ambiguous
+            # response, retry only after a fresh, same-side broker verification.
+            if not legacy:
+                pos["exit_pending"] = "POST_STARTED"
+                pos["exit_retry_count"] = 0
+                pos["exit_retry_next_ms"] = bot.now_ms() + 60000
+                bot.save_state(state)
             try:
                 bot._run_for_tracked_position(
                     state,inst,bot.close_tracked_position,
                     ("LEGACY VOLUME: GREEN vol > last RED" if legacy else
                      "VOLUME EXIT: opposite candle vol > opening signal candle vol"))
                 if inst in bot.get_tracked_positions(state):
-                    bot.get_tracked_positions(state)[inst]["exit_pending"]=True
+                    bot.get_tracked_positions(state)[inst]["exit_pending"]="AWAITING_BROKER_FLAT"
                 scan["exits"].append(inst)
             except Exception as exc:
-                pos["exit_pending"]="UNCERTAIN_CLOSE"
+                tracked = bot.get_tracked_positions(state).get(inst)
+                if tracked is not None:
+                    tracked["exit_pending"]="UNCERTAIN_CLOSE"
+                    tracked["exit_retry_error"]=f"{type(exc).__name__}: {exc}"[:240]
                 scan["rejections"].append({"inst":inst,
                     "reason":"UNCERTAIN_BROKER_CLOSE",
                     "error":f"{type(exc).__name__}: {exc}"})
-                bot.notify(f"CRITICAL {inst}: exit uncertain: {exc}",
+                bot.notify(f"CRITICAL {inst}: exit uncertain: {exc}. "
+                           "Will reconcile broker position before a future retry.",
                            "BloFin LIVE volume exit safety")
     # Do not trade until any uncertain broker order or closure is reconciled.
     if os.getenv("LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES", "true").strip().lower() == "true":
