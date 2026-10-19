@@ -25,6 +25,14 @@ class FakeBot(prior.FakeBot):
     def __init__(self):
         super().__init__()
         self.now=T+1000
+    def private_request(self,method,path,body=None,params=None):
+        if path=="/api/v1/trade/order-tpsl":
+            self.posted.append((method,path,body))
+            return [{"code":"0","tpslId":"test-"+str(len(self.posted))}]
+        if path=="/api/v1/trade/order-tpsl-detail":
+            return {"state":"live","tpslId":"prior-1",
+                    "tpTriggerPrice":"100.55","slTriggerPrice":"99.50"}
+        return super().private_request(method,path,body)
     def bar_close_ms(self,b):
         return int(b["ts"])+F
 
@@ -152,25 +160,52 @@ class Broker(unittest.TestCase):
     def setUp(self):
         self.bot=FakeBot()
         self.state={"positions":{}}
-        self.instruments={"ABC-USDT":{"contractValue":"1"},
-                          "XYZ-USDT":{"contractValue":"1"}}
+        self.instruments={"ABC-USDT":{"contractValue":"1","tickSize":"0.01"},
+                          "XYZ-USDT":{"contractValue":"1","tickSize":"0.01"}}
     def signal(self,coin,side):
         s=live.entry_signal(self.bot,bars(side),T)
         s.update(inst=coin,rank=1)
         return s
     @patch("blofin_trade_charts.capture_chart",side_effect=RuntimeError("no rendering in offline tests"))
-    def test_buy_long_sell_short_each_one_per_coin_no_tpsl(self,chart):
+    def test_buy_long_sell_short_each_one_per_coin_tpsl(self,chart):
         self.assertTrue(live._open_one(self.bot,self.state,self.signal("ABC-USDT","LONG"),self.instruments))
         self.assertTrue(live._open_one(self.bot,self.state,self.signal("XYZ-USDT","SHORT"),self.instruments))
         self.assertEqual(self.state["positions"]["ABC-USDT"]["side"],"LONG")
         self.assertEqual(self.state["positions"]["XYZ-USDT"]["side"],"SHORT")
         self.assertEqual(self.bot.posted[0][2]["side"],"buy")
+        self.assertEqual(self.bot.posted[2][2]["side"],"sell")
+        self.assertEqual(len(self.bot.posted),4)
+        self.assertEqual([x[1] for x in self.bot.posted],
+                         ["/api/v1/trade/order","/api/v1/trade/order-tpsl",
+                          "/api/v1/trade/order","/api/v1/trade/order-tpsl"])
+        a=self.state["positions"]["ABC-USDT"]
+        b=self.state["positions"]["XYZ-USDT"]
+        self.assertEqual((a["tp"],a["sl"]),("100.55","99.50"))
+        self.assertEqual((b["tp"],b["sl"]),("99.45","100.50"))
+        self.assertEqual((a["tp_policy"],b["sl_policy"]),("TP055","SL05"))
         self.assertEqual(self.bot.posted[1][2]["side"],"sell")
-        self.assertEqual(len(self.bot.posted),2)
-        self.assertTrue(all(x[1]=="/api/v1/trade/order" for x in self.bot.posted))
-        self.assertTrue(all(p["tp"]=="" and p["sl"]=="" for p in self.state["positions"].values()))
+        self.assertEqual(self.bot.posted[3][2]["side"],"buy")
         self.assertFalse(live._open_one(self.bot,self.state,self.signal("ABC-USDT","LONG"),self.instruments))
         self.assertLessEqual(sum(Decimal(p["notional_usdt"]) for p in self.state["positions"].values()),Decimal("25"))
+    def test_existing_position_protected_once(self):
+        pos={"inst":"ABC-USDT","side":"LONG","strategy":live.STRATEGY,
+             "reference_entry":"100","tp":"","sl":""}
+        self.state["positions"]["ABC-USDT"]=pos
+        self.assertTrue(live._ensure_protection(self.bot,self.state,pos,
+                                                 self.instruments["ABC-USDT"]))
+        self.assertTrue(live._ensure_protection(self.bot,self.state,pos,
+                                                 self.instruments["ABC-USDT"]))
+        self.assertEqual(len(self.bot.posted),1)
+        self.assertEqual(pos["protection_status"],"TP055_SL05_ACTIVE")
+
+    def test_tick_rounding_never_exceeds_stop(self):
+        x=live._protection_prices(self.bot,{"side":"LONG",
+          "reference_entry":"0.07003"},{"tickSize":"0.0001"})
+        y=live._protection_prices(self.bot,{"side":"SHORT",
+          "reference_entry":"0.07003"},{"tickSize":"0.0001"})
+        self.assertEqual(tuple(map(str,x)),("0.0705","0.0697"))
+        self.assertEqual(tuple(map(str,y)),("0.0696","0.0703"))
+
     @patch("blofin_trade_charts.capture_chart",side_effect=RuntimeError("no rendering in offline tests"))
     def test_paused_does_not_open_new_but_closes_old_short(self,chart):
         self.assertTrue(live._open_one(self.bot,self.state,self.signal("XYZ-USDT","SHORT"),self.instruments))

@@ -6,18 +6,22 @@ Qualified means each candle volume <= its own prior 20-bar mean.
 Exit on any CLOSED opposite-color candle volume > the OPENING signal
 candle volume, WITHOUT a volume-average filter; next 5m scan.
 
-No BTC/price/DI/3-4x filters, no broker TP or SL for NEW positions.
+No BTC/price/DI/3-4x filters. Broker TP +0.55%, SL -0.50% for both sides.
 Existing legacy red-volume LONG positions retain their original exit.
 1x isolated, up to four different coins, shared bankroll and risk gate.
 """
 import math
 import os
 import uuid
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 
 STRATEGY = "VOLUME_FLIP_BOTH_5M_V1"
 LEGACY_STRATEGY = "REV_SHORT_20W_LONG_VOLUME_V1"
 HOLD_POLICY = "VOLUME_FLIP_BOTH_NO_TPSL"
+TP_PCT = Decimal("0.0055")
+SL_PCT = Decimal("0.005")
+TP_POLICY = "TP055"
+SL_POLICY = "SL05"
 LEGACY_HOLD_POLICY = "VOLUME_REV_SHORT_LONG"
 FIVE = 300_000
 VOL_MIN = 3.0
@@ -29,6 +33,93 @@ MAX_PER_COIN_USDT = Decimal("20")
 MIN_PER_COIN_USDT = Decimal("5")
 CASH_BUFFER_USDT = Decimal("0.50")
 AGE_MAX_MS = 120_000
+
+
+
+def _protection_prices(bot, pos, meta):
+    """Tick-aligned triggers from actual broker fill; do not exceed -0.50% SL."""
+    entry=bot.d(pos.get("reference_entry") or "0")
+    tick=bot.d((meta or {}).get("tickSize") or "0")
+    if entry<=0 or tick<=0 or not entry.is_finite() or not tick.is_finite():
+        raise RuntimeError("Verified entry and tickSize are required for TP/SL")
+    if pos["side"]=="LONG":
+        tp=((entry*(1+TP_PCT)/tick).to_integral_value(rounding=ROUND_CEILING))*tick
+        sl=((entry*(1-SL_PCT)/tick).to_integral_value(rounding=ROUND_CEILING))*tick
+        valid=sl<entry<tp
+    elif pos["side"]=="SHORT":
+        tp=((entry*(1-TP_PCT)/tick).to_integral_value(rounding=ROUND_FLOOR))*tick
+        sl=((entry*(1+SL_PCT)/tick).to_integral_value(rounding=ROUND_FLOOR))*tick
+        valid=tp<entry<sl
+    else:
+        raise RuntimeError("Unknown side")
+    if not valid:
+        raise RuntimeError("tickSize too large for 0.55/0.50 TP/SL")
+    return tp,sl
+
+
+def _ensure_protection(bot,state,pos,meta):
+    """One broker-side combined TPSL order; never repeat an uncertain POST."""
+    if pos.get("strategy")!=STRATEGY:
+        return True
+    tp,sl=_protection_prices(bot,pos,meta)
+    if (pos.get("tp_policy")==TP_POLICY and pos.get("sl_policy")==SL_POLICY
+            and pos.get("tpsl_id") and pos.get("protection_status")=="TP055_SL05_ACTIVE"):
+        return True
+    if pos.get("tpsl_id"):
+        pos["protection_status"]="TPSL_CONFLICT_REVIEW_REQUIRED"
+        bot.save_state(state)
+        return False
+    inst=pos["inst"]
+    client=str(pos.get("tpsl_client_order_id") or "")
+    if client:
+        # The prior POST may have succeeded even if its HTTP response was lost.
+        try:
+            detail=bot.private_request("GET","/api/v1/trade/order-tpsl-detail",
+                                       params={"instId":inst,"clientOrderId":client}) or {}
+            if isinstance(detail,list):
+                detail=detail[0] if detail else {}
+            if (str(detail.get("state") or "").lower()=="live"
+                    and detail.get("tpslId")
+                    and bot.d(detail.get("tpTriggerPrice") or "0")==tp
+                    and bot.d(detail.get("slTriggerPrice") or "0")==sl):
+                pos.update(tpsl_id=str(detail["tpslId"]),tp=bot.clean_decimal(tp),
+                           sl=bot.clean_decimal(sl),tp_policy=TP_POLICY,
+                           sl_policy=SL_POLICY,protection_status="TP055_SL05_ACTIVE")
+                pos.pop("protection_error",None)
+                bot.save_state(state)
+                return True
+        except Exception as exc:
+            pos["protection_error"]=str(exc)[:250]
+        pos["protection_status"]="TPSL_UNCERTAIN_NEEDS_BROKER_CONFIRMATION"
+        bot.save_state(state)
+        return False
+    client=("voltp055"+uuid.uuid4().hex)[:32]
+    pos.update(tpsl_client_order_id=client,protection_status="TPSL_POST_STARTED",
+               tp=bot.clean_decimal(tp),sl=bot.clean_decimal(sl),
+               tp_policy=TP_POLICY,sl_policy=SL_POLICY)
+    bot.save_state(state)
+    try:
+        response=bot.private_request("POST","/api/v1/trade/order-tpsl",body={
+            "instId":inst,"marginMode":bot.MARGIN_MODE,"positionSide":"net",
+            "side":"sell" if pos["side"]=="LONG" else "buy",
+            "tpTriggerPrice":bot.clean_decimal(tp),"tpOrderPrice":"-1",
+            "tpTriggerPriceType":"last","slTriggerPrice":bot.clean_decimal(sl),
+            "slOrderPrice":"-1","slTriggerPriceType":"last",
+            "size":"-1","reduceOnly":"true","clientOrderId":client,
+        })
+        row=response[0] if isinstance(response,list) and response else (response or {})
+        if str(row.get("code","0"))!="0" or not row.get("tpslId"):
+            raise RuntimeError("BloFin TPSL not confirmed: "+str(row)[:200])
+    except Exception as exc:
+        pos["protection_status"]="TPSL_UNCERTAIN_NEEDS_BROKER_CONFIRMATION"
+        pos["protection_error"]=str(exc)[:250]
+        bot.save_state(state)
+        return False
+    pos["tpsl_id"]=str(row["tpslId"])
+    pos["protection_status"]="TP055_SL05_ACTIVE"
+    pos.pop("protection_error",None)
+    bot.save_state(state)
+    return True
 
 
 def _by_ts(bars, close_ms):
@@ -463,8 +554,8 @@ def _open_one(bot, state, sig, instruments):
         "filled_size":"",
         "notional_usdt":bot.clean_decimal(expected_notional),
         "tp":"","sl":"","tp_policy":"NONE","sl_policy":"NONE",
-        "risk_profile":"1X_VOLUME_FLIP_NO_TPSL",
-        "protection_status":"NO_TPSL_USER_REQUESTED",
+        "risk_profile":"1X_VOLUME_FLIP_TP055_SL05",
+        "protection_status":"AWAITING_VERIFIED_FILL",
         "code_commit":bot.CODE_COMMIT,
     }
     _volume_audit(pos)  # Persist signal-volume baseline from the first LIVE fill.
@@ -489,6 +580,15 @@ def _open_one(bot, state, sig, instruments):
     pos["price_movement"] = _price_movement_from_candles(
         pos, pos["volume_candle_audit"]["candles"]
     )
+    attempt["status"]="PROTECTING"
+    bot.save_state(state)
+    if not _ensure_protection(bot,state,pos,meta):
+        attempt["status"]="PROTECTION_UNCERTAIN"
+        bot.save_state(state)
+        bot.notify(f"CRITICAL {side} {inst}: TP +0.55% / SL -0.50% "
+                   "not verified at BloFin; no additional entries until confirmed.",
+                   "BloFin LIVE TPSL SAFETY")
+        return True
     attempt["status"]="TRACKED"
     bot.save_state(state)
     try:
@@ -498,8 +598,9 @@ def _open_one(bot, state, sig, instruments):
         pos["entry_chart_error"]=f"{type(exc).__name__}: {exc}"
     bot.notify(
         f"OPEN {side} {inst} | rank {sig['rank']}/200 | vol ratio {sig['volume_ratio'] or 0:.2f}x "
-        f"| 1x isolated, notional {pos['notional_usdt']} USDT | NO TP/SL "
-        "| EXIT: opposite CLOSED 5m volume > ENTRY candle volume; MA20 not used.",
+        f"| 1x isolated, notional {pos['notional_usdt']} USDT | "
+        f"TP +0.55% {pos['tp']} | SL -0.50% {pos['sl']} | "
+        "EXIT: broker TP/SL or opposite CLOSED 5m volume > ENTRY candle volume.",
         "BloFin LIVE both sides volume flip",
         attachment_path=pos.get("entry_chart"),
     )
@@ -609,9 +710,30 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
 
     bot.sync_all_tracked_positions(state)
     bot.evaluate_all_tracked_exit_signals(state, expected_close_ms)
+
     active = bot.get_tracked_positions(state)
     broker = bot.get_open_positions()
     broker_set={str(p.get("instId")) for p in broker}
+    unprotected=[]
+    # Upgrade already-open V1 positions using their actual filled entry price.
+    for inst,pos in list(active.items()):
+        if inst in broker_set and pos.get("strategy")==STRATEGY:
+            try:
+                protected=_ensure_protection(bot,state,pos,instruments.get(inst))
+            except Exception as exc:
+                protected=False
+                pos["protection_error"]=f"{type(exc).__name__}: {exc}"[:250]
+                bot.save_state(state)
+            if not protected:
+                unprotected.append(inst)
+                bot.notify(f"CRITICAL {inst}: TP/SL 0.55/0.50 not verified; "
+                           "no additional entries until resolved.",
+                           "BloFin LIVE TPSL SAFETY")
+    # Clear protection uncertainty only after the broker reports a flat position.
+    for inst,attempt in (state.get("volume_long_order_attempts") or {}).items():
+        if (attempt.get("status") in ("PROTECTING","PROTECTION_UNCERTAIN")
+                and inst not in broker_set and inst not in active):
+            attempt["status"]="SAFE_CLOSED"
     # Preserve old positions' TP/SL. Existing old positions stay managed by
     # their prior policy; do not change, cancel or reprice their orders.
     untracked=broker_set-set(active)
@@ -620,12 +742,13 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         scan["untracked"]=sorted(untracked)
     pending=state.get("volume_long_order_attempts") or {}
     uncertain=[i for i,a in pending.items()
-               if a.get("status") in ("POST_STARTED","UNCERTAIN","BROKER_ACCEPTED","UNCERTAIN_FILL")]
+               if a.get("status") in ("POST_STARTED","UNCERTAIN","BROKER_ACCEPTED","UNCERTAIN_FILL","PROTECTING","PROTECTION_UNCERTAIN")]
     old_attempt=state.get("red_sma_order_attempt") or {}
     if old_attempt.get("status") in ("POST_STARTED","UNCERTAIN","ACCEPTED_BROKER"):
         uncertain.append("OLD_RED_ORDER")
-    if uncertain:
+    if uncertain or unprotected:
         scan["status"]="BLOCK_UNCERTAIN_ORDERS"
+        scan["unprotected"]=unprotected
         scan["uncertain_instruments"]=uncertain
 
     # Prioritise CLOSE reconciliation over hundreds of public candle calls:
