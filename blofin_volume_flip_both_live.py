@@ -1,14 +1,17 @@
-"""LIVE both-sided volume flip on CLOSED 5m BloFin candles.
+"""LIVE two-sided dominant-volume flip on confirmed CLOSED BloFin 5m bars.
 
-LONG: qualified GREEN after qualified RED, green volume > prior red.
-SHORT: qualified RED after qualified GREEN, red volume > prior green.
-Qualified means each candle volume <= its own prior 20-bar mean.
-Exit on any CLOSED opposite-color candle volume > the OPENING signal
-candle volume, WITHOUT a volume-average filter; next 5m scan.
+The active volume trend is set at UK midnight. Its peak is the highest
+same-colour volume since the last actual trend reversal. A CLOSED opposite
+colour can reverse it only with volume STRICTLY GREATER than that peak.
+The same confirmed reversal ends an existing opposite-side position and
+can start a new matching-side position, subject to broker-flat/OCO verification,
+the previous-20-bar MA20 entry-strength gate, and existing account risk limits.
+New entries additionally need the qualifying consecutive red/green setup.
+LIVE exits never compare against the opening signal candle's volume.
+Protective broker TP +0.55% and SL -0.50% remain active for both sides.
 
-No BTC/price/DI/3-4x filters. Broker TP +0.55%, SL -0.50% for both sides.
+No BTC/price/DI/3-4x filters. 1x isolated, up to four different coins.
 Existing legacy red-volume LONG positions retain their original exit.
-1x isolated, up to four different coins, shared bankroll and risk gate.
 """
 import math
 import os
