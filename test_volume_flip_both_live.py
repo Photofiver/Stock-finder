@@ -372,6 +372,49 @@ class VolumePriceTunnel(unittest.TestCase):
             self.assertEqual(before,
                              live.volume_price_tunnel_from_bars(actual, T, side))
 
+    def test_colour_order_auto_flips_instead_of_invalid_crossing(self):
+        # Stronger RED-volume anchors can sit above GREEN-volume anchors,
+        # so the SAME data represent a SHORT tunnel, never an invalid LONG.
+        up = self.sample("LONG")
+        up[-16] = candle(T-16*F, o=111, c=110, volume=180)
+        up[-5] = candle(T-5*F, o=112, c=111, volume=210)
+        long_eval = live.volume_price_tunnel_from_bars(up, T, "LONG")
+        self.assertEqual(long_eval["status"], "VALID")
+        self.assertEqual(long_eval["tunnel_direction"], "SHORT")
+        self.assertEqual((long_eval["upper_color"], long_eval["lower_color"]),
+                         ("RED", "GREEN"))
+        self.assertGreater(long_eval["upper_price"], long_eval["lower_price"])
+        self.assertEqual(long_eval["reason"], "OPPOSITE_TUNNEL_DIRECTION")
+        self.assertFalse(long_eval["breakout_confirmed"])
+        short_eval = live.volume_price_tunnel_from_bars(up, T, "SHORT")
+        self.assertEqual(short_eval["status"], "VALID")
+        self.assertEqual(short_eval["tunnel_direction"], "SHORT")
+        self.assertNotEqual(short_eval["reason"], "INVALID_OR_CROSSED_TUNNEL")
+
+    def test_colour_order_crossing_reverses_automatically_on_new_volume(self):
+        rows = self.sample("LONG")
+        original = live.volume_price_tunnel_from_bars(rows, T, "LONG")
+        self.assertEqual(original["tunnel_direction"], "LONG")
+        # Two later high-volume bearish bars dominate the next rolling
+        # window's red price centre above older green anchors.
+        # Independent price trends are evaluated from the closed bars only.
+        altered = self.sample("LONG")
+        altered[-16] = candle(T-16*F, o=111, c=110, volume=180)
+        altered[-5] = candle(T-5*F, o=112, c=111, volume=210)
+        second = live.volume_price_tunnel_from_bars(altered, T, "SHORT")
+        self.assertEqual(second["tunnel_direction"], "SHORT")
+        self.assertEqual((second["upper_color"], second["lower_color"]),
+                         ("RED", "GREEN"))
+        self.assertGreater(second["upper_price"], second["lower_price"])
+
+    def test_missing_previous_tunnel_snapshot_does_not_block_current(self):
+        rows=self.sample("LONG")[1:]
+        # If one older candle predating the 20-anchor window is absent,
+        # the new tunnel remains valid and crossover history stays unknown.
+        channel=live.volume_price_tunnel_from_bars(rows, T, "LONG")
+        self.assertEqual(channel["status"], "VALID")
+        self.assertTrue(channel["breakout_confirmed"])
+
     def test_missing_volume_anchor_or_history_blocks_entry(self):
         for side in ("LONG", "SHORT"):
             self.assertEqual(
