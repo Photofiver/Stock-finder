@@ -491,104 +491,161 @@ VOLUME_TUNNEL_LOOKBACK_BARS = 20
 
 
 def volume_price_tunnel_from_bars(bars, expected_close_ms, side):
-    """5m PRICE tunnel anchored to the strongest coloured VOLUME candles.
+    """Draw an adaptive 5m PRICE tunnel with two VOLUME-selected colour lines.
 
-    Trend LONG: GREEN high line above / RED low line below.
-    Trend SHORT: RED high line above / GREEN low line below.
-    Use the top two volume candles of each colour in the previous 20
-    COMPLETED bars, excluding the entry signal bar. Lines connect their
-    candle HIGH/LOW prices and extend to the signal close; both boundaries
-    must be well ordered. Only an actual fresh CLOSED-candle break of the
-    appropriate boundary may confirm entry. No future bars/API calls.
+    Select the two largest GREEN and two largest RED volume candles among the
+    prior 20 fully CLOSED candles (never the signal candle). Their own VOLUME-
+    weighted closing prices determine WHICH colour belongs on top:
+      GREEN above RED => LONG tunnel, GREEN upper high / RED lower low.
+      RED above GREEN => SHORT tunnel, RED upper high / GREEN lower low.
+    The corresponding volume-weighted high/low of those anchor candles form a
+    bounded current price channel, updated on each closed 5m candle. Unlike
+    unconstrained extrapolated lines, the resulting high/low price boundaries
+    do not cross simply because of different projection slopes. When the
+    colour price levels cross, the tunnel DIRECTION switches naturally. No
+    order if the direction disagrees with the requested LONG/SHORT or price
+    has not freshly broken the correct boundary. Old entry, exits, TP/SL stay.
     """
+    timestamp = int(expected_close_ms)
     result = {
-        "rule": "TOP2_COLOURED_VOLUME_20BAR_PRICE_TUNNEL",
-        "side": side,
+        "rule": "VOLUME_ANCHORED_ADAPTIVE_20BAR_PRICE_TUNNEL",
+        "requested_side": side,
         "timeframe": "5m",
         "lookback_bars": VOLUME_TUNNEL_LOOKBACK_BARS,
-        "signal_close_ms": int(expected_close_ms),
+        "signal_close_ms": timestamp,
         "status": "UNAVAILABLE",
         "breakout_confirmed": False,
     }
     if side not in ("LONG", "SHORT"):
         result["reason"] = "INVALID_SIDE"
         return result
-    rows = _by_ts(bars, int(expected_close_ms))
-    signal = rows.get(int(expected_close_ms) - FIVE)
-    previous = rows.get(int(expected_close_ms) - 2 * FIVE)
+
+    rows = _by_ts(bars, timestamp)
+    signal = rows.get(timestamp - FIVE)
+    previous = rows.get(timestamp - 2 * FIVE)
     if signal is None or previous is None:
         result["reason"] = "MISSING_CLOSED_SIGNAL"
         return result
 
-    green, red = [], []
-    # All anchors close BEFORE the signal candle opens (no look-ahead).
-    for age in range(VOLUME_TUNNEL_LOOKBACK_BARS + 1, 1, -1):
-        ts = int(expected_close_ms) - age * FIVE
-        bar = rows.get(ts)
-        if bar is None:
-            result["reason"] = "MISSING_CHANNEL_HISTORY"
-            return result
-        o, high, low, close, vol = bar
-        if vol <= 0 or close == o:
-            continue
-        anchor = (ts + FIVE, vol, high, low)
-        (green if close > o else red).append(anchor)
-
-    if len(green) < 2 or len(red) < 2:
-        result["reason"] = "INSUFFICIENT_GREEN_RED_ANCHORS"
-        return result
+    def candle_colour_groups(start_age):
+        green, red = [], []
+        # start_age=21 -> 20 candles ending at age=2 (pre-signal).
+        # start_age=22 -> previous 20-bar snapshot, for crossover reporting.
+        for age in range(start_age, start_age - VOLUME_TUNNEL_LOOKBACK_BARS, -1):
+            ts = timestamp - age * FIVE
+            candle = rows.get(ts)
+            if candle is None:
+                return None
+            o, high, low, close, volume = candle
+            if volume <= 0 or close == o:
+                continue
+            anchor = (ts + FIVE, volume, high, low, close)
+            (green if close > o else red).append(anchor)
+        return green, red
 
     def strongest_pair(candidates):
-        # Volume chooses the candles; chronology chooses the line slope.
         return sorted(
             sorted(candidates, key=lambda x: (x[1], x[0]), reverse=True)[:2],
             key=lambda x: x[0],
         )
 
-    def price_at(pair, coordinate, target_close_ms):
-        a, b = pair
-        return a[coordinate] + (
-            (b[coordinate] - a[coordinate])
-            * (target_close_ms - a[0]) / (b[0] - a[0])
-        )
+    def weighted_level(pair, coordinate):
+        vol_total = pair[0][1] + pair[1][1]
+        return sum(x[coordinate] * x[1] for x in pair) / vol_total
 
-    green_pair = strongest_pair(green)
-    red_pair = strongest_pair(red)
-    upper_pair = green_pair if side == "LONG" else red_pair
-    lower_pair = red_pair if side == "LONG" else green_pair
-    upper = price_at(upper_pair, 2, int(expected_close_ms))
-    lower = price_at(lower_pair, 3, int(expected_close_ms))
-    prev_upper = price_at(upper_pair, 2, int(expected_close_ms) - FIVE)
-    prev_lower = price_at(lower_pair, 3, int(expected_close_ms) - FIVE)
-    if (not all(math.isfinite(x) and x > 0
-                for x in (upper, lower, prev_upper, prev_lower))
-            or upper <= lower or prev_upper <= prev_lower):
-        result["reason"] = "INVALID_OR_CROSSED_TUNNEL"
+    def colour_levels(groups):
+        if groups is None:
+            return None
+        green, red = groups
+        if len(green) < 2 or len(red) < 2:
+            return None
+        green_pair = strongest_pair(green)
+        red_pair = strongest_pair(red)
+        green_centre = weighted_level(green_pair, 4)
+        red_centre = weighted_level(red_pair, 4)
+        if green_centre > red_centre:
+            direction, upper_pair, lower_pair = "LONG", green_pair, red_pair
+            upper_colour, lower_colour = "GREEN", "RED"
+        elif red_centre > green_centre:
+            direction, upper_pair, lower_pair = "SHORT", red_pair, green_pair
+            upper_colour, lower_colour = "RED", "GREEN"
+        else:
+            return {"direction": "NEUTRAL",
+                    "green_price": green_centre, "red_price": red_centre}
+        return {
+            "direction": direction,
+            "green_price": green_centre,
+            "red_price": red_centre,
+            "upper_color": upper_colour,
+            "lower_color": lower_colour,
+            "upper_pair": upper_pair,
+            "lower_pair": lower_pair,
+            "upper": weighted_level(upper_pair, 2),
+            "lower": weighted_level(lower_pair, 3),
+        }
+
+    current = colour_levels(candle_colour_groups(21))
+    if current is None:
+        result["reason"] = ("MISSING_CHANNEL_HISTORY"
+                            if candle_colour_groups(21) is None
+                            else "INSUFFICIENT_GREEN_RED_ANCHORS")
+        return result
+    if current["direction"] == "NEUTRAL":
+        result.update(reason="EQUAL_COLOUR_PRICE_LEVELS",
+                      tunnel_direction="NEUTRAL",
+                      green_price=current["green_price"],
+                      red_price=current["red_price"])
         return result
 
-    breakout = (
-        signal[3] > upper and previous[3] <= prev_upper
+    upper, lower = current["upper"], current["lower"]
+    # With green>red weighted closes, the green HIGH is necessarily above the
+    # red LOW, and vice versa. Any invalid price here is a data-quality error.
+    if not all(math.isfinite(x) and x > 0 for x in (upper, lower)) or upper <= lower:
+        result["reason"] = "INVALID_PRICE_DATA"
+        return result
+
+    past = colour_levels(candle_colour_groups(22))
+    previous_direction = past.get("direction") if past else None
+    flipped = (previous_direction in ("LONG", "SHORT")
+               and previous_direction != current["direction"])
+    # A single FIXED channel from the pre-signal candles is compared to BOTH
+    # previous close and current closed signal: no artificial breakout caused
+    # by moving the boundary between those two tests.
+    aligned = current["direction"] == side
+    breakout = aligned and (
+        (previous[3] <= upper and signal[3] > upper)
         if side == "LONG"
-        else signal[3] < lower and previous[3] >= prev_lower
+        else (previous[3] >= lower and signal[3] < lower)
     )
+    reason = ("OPPOSITE_TUNNEL_DIRECTION" if not aligned
+              else "CONFIRMED_BREAKOUT" if breakout
+              else "NO_FRESH_BREAKOUT")
     result.update({
         "status": "VALID",
-        "reason": "CONFIRMED_BREAKOUT" if breakout else "NO_FRESH_BREAKOUT",
-        "upper_color": "GREEN" if side == "LONG" else "RED",
-        "lower_color": "RED" if side == "LONG" else "GREEN",
+        "reason": reason,
+        "tunnel_direction": current["direction"],
+        "previous_tunnel_direction": previous_direction,
+        "colour_order_changed": bool(flipped),
+        "green_price_level": current["green_price"],
+        "red_price_level": current["red_price"],
+        "upper_color": current["upper_color"],
+        "lower_color": current["lower_color"],
         "upper_price": upper,
         "lower_price": lower,
-        "previous_upper_price": prev_upper,
-        "previous_lower_price": prev_lower,
+        "previous_upper_price": upper,
+        "previous_lower_price": lower,
         "previous_close_price": previous[3],
         "signal_close_price": signal[3],
-        "upper_anchors": [{"close_ms": x[0], "volume": x[1], "high": x[2]}
-                          for x in upper_pair],
-        "lower_anchors": [{"close_ms": x[0], "volume": x[1], "low": x[3]}
-                          for x in lower_pair],
+        "upper_anchors": [
+            {"close_ms": x[0], "volume": x[1], "high": x[2], "close": x[4]}
+            for x in current["upper_pair"]],
+        "lower_anchors": [
+            {"close_ms": x[0], "volume": x[1], "low": x[3], "close": x[4]}
+            for x in current["lower_pair"]],
         "breakout_confirmed": breakout,
     })
     return result
+
 
 
 def prioritize_volume_signals(matches):
@@ -1118,7 +1175,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         return
     scan={"strategy":STRATEGY,"selection_priority":"SIGNAL_VOLUME_DIV_PREVIOUS_20_BAR_MEAN_DESC",
           "entry_volume_trend_filter":"DAY_UK_DOMINANT_COLOUR_VOLUME",
-          "entry_price_tunnel_filter":"TOP2_COLOURED_VOLUME_20BAR_PRICE_TUNNEL_BREAKOUT",
+          "entry_price_tunnel_filter":"VOLUME_ANCHORED_ADAPTIVE_20BAR_PRICE_TUNNEL_BREAKOUT",
           "volume_entry_strength_min_inclusive":ENTRY_VOLUME_STRENGTH_MIN,
           "volume_entry_strength_max_exclusive":ENTRY_VOLUME_STRENGTH_MAX,
           "long_entry_rank_range_inclusive":[1,LONG_ENTRY_MAX_RANK],
@@ -1344,9 +1401,11 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                 if not tunnel["breakout_confirmed"]:
                     scan["rejections"].append({
                         "inst": inst, "rank": rank, "side": sig["side"],
-                        "reason": "VOLUME_TUNNEL_UNAVAILABLE"
-                                  if tunnel["status"] != "VALID"
-                                  else "VOLUME_TUNNEL_NO_FRESH_BREAKOUT",
+                        "reason": ("VOLUME_TUNNEL_UNAVAILABLE"
+                                   if tunnel["status"] != "VALID"
+                                   else "VOLUME_TUNNEL_OPPOSITE_TREND"
+                                   if tunnel["tunnel_direction"] != sig["side"]
+                                   else "VOLUME_TUNNEL_NO_FRESH_BREAKOUT"),
                         "tunnel_reason": tunnel["reason"],
                         "volume_tunnel": tunnel,
                     })
