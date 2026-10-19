@@ -213,7 +213,7 @@ class Broker(unittest.TestCase):
         return s
     def test_full_top200_scan_attempts_strongest_volume_first(self):
         weak = bars("LONG")
-        weak[-1]["v"] = 70
+        weak[-1]["v"] = 92
         strong = bars("SHORT")
         strong[-1]["v"] = 96
         ranking = ["ABC-USDT", "XYZ-USDT"] + [f"OTHER-{i}-USDT" for i in range(198)]
@@ -236,6 +236,40 @@ class Broker(unittest.TestCase):
         self.assertEqual([x["inst"] for x in scan["candidates"]],
                          ["XYZ-USDT", "ABC-USDT"])
         self.assertEqual(scan["entries"], [])
+
+    def test_live_accepts_90_to_below_100_percent_of_prior_20_only(self):
+        # Last signal candle's prior 20 bars average 98 (one red at vol60).
+        # All setups pass the original red/green and increasing-volume rules.
+        scenarios = (
+            ("LOW-USDT", 88, "LONG"),       # 88/98 = 89.8%: reject
+            ("MIN-USDT", 88.2, "SHORT"),     # 88.2/98 = 90%: accept
+            ("MID-USDT", 94, "LONG"),       # 94/98 = 95.9%: accept
+            ("UPPER-USDT", 98, "SHORT"),     # 98/98 = 100%: reject
+            ("ABOVE-USDT", 101, "LONG"),    # 101/98 > 100%: reject
+        )
+        ranking = [name for name,_,_ in scenarios] + [f"OTHER-{i}-USDT" for i in range(195)]
+        observed = []
+        def confirmed(insts, close_ms):
+            self.assertEqual(close_ms, T)
+            candles = {}
+            for inst,vol,side in scenarios:
+                candles[inst] = bars(side)
+                candles[inst][-1]["v"] = vol
+            return candles
+        def observe(bot, state, sig, instruments):
+            observed.append((sig["inst"], sig["volume_strength_20"]))
+            return False
+        with patch.dict("os.environ", {"LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES":"false"}):
+            with patch.object(live, "_open_one", side_effect=observe):
+                live.run(self.bot,self.state,ranking,{},self.instruments,T,confirmed)
+        self.assertEqual([x[0] for x in observed],["MID-USDT","MIN-USDT"])
+        self.assertTrue(all(.9<=x[1]<1.0 for x in observed))
+        scan=self.state["volume_long_last_scan"]
+        self.assertEqual(scan["matched"],2)
+        self.assertEqual(scan["volume_entry_strength_min_inclusive"],.90)
+        self.assertEqual(scan["volume_entry_strength_max_exclusive"],1.0)
+        self.assertEqual([x["inst"] for x in scan["candidates"]],
+                         ["MID-USDT","MIN-USDT"])
 
     @patch("blofin_trade_charts.capture_chart",side_effect=RuntimeError("no rendering in offline tests"))
     def test_buy_long_sell_short_each_one_per_coin_tpsl(self,chart):
