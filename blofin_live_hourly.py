@@ -2051,6 +2051,13 @@ def record_closed(state, reason_hint=None):
         "reason": reason,
         "history_id": str(hist.get("historyId") or ""),
         "signal_snapshot": pos.get("signal_snapshot") or {},
+        # Keep the entire 5m volume audit with the CLOSED trade, not only
+        # inside a currently-open position. Entry signal candle is separate.
+        "volume_candle_audit": (
+            pos.get("volume_candle_audit")
+            if str(pos.get("strategy") or "") == "VOLUME_FLIP_BOTH_5M_V1"
+            else None
+        ),
         "pattern_review": pattern_review,
     })
     if len(history) > TRADE_HISTORY_LIMIT:
