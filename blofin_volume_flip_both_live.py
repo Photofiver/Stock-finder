@@ -269,7 +269,8 @@ def volume_peak_regime(bars, expected_close_ms, previous=None):
     day_open = _uk_day_open_ms(latest_open)
     base = {"day_open_ms": day_open, "complete": False,
             "direction": None, "peak_volume": 0.0,
-            "peak_candle_ts": None, "last_close_ms": day_open}
+            "peak_candle_ts": None, "last_close_ms": day_open,
+            "last_flip": None}
     if latest_open not in rows:
         return base
     if (isinstance(previous, dict) and previous.get("complete")
@@ -282,6 +283,8 @@ def volume_peak_regime(bars, expected_close_ms, previous=None):
         start = day_open
         if start not in rows:
             return base
+    # last_flip applies ONLY to the newest fully closed 5m bar, never stale scans.
+    regime["last_flip"] = None
     for ts in range(start, expected_close_ms, FIVE):
         bar = rows.get(ts)
         if bar is None:
@@ -296,6 +299,12 @@ def volume_peak_regime(bars, expected_close_ms, previous=None):
                 if volume > regime["peak_volume"]:
                     regime.update(peak_volume=volume, peak_candle_ts=ts)
             elif volume > regime["peak_volume"]:
+                if ts == latest_open:
+                    regime["last_flip"] = {
+                        "from": regime["direction"], "to": direction,
+                        "candle_ts": ts, "previous_peak_volume": regime["peak_volume"],
+                        "trigger_volume": volume,
+                    }
                 regime.update(direction=direction, peak_volume=volume,
                               peak_candle_ts=ts)
         regime["last_close_ms"] = ts + FIVE
@@ -316,13 +325,10 @@ def prioritize_volume_signals(matches):
 
 
 def exit_transition(pos, bars, expected_close_ms):
-    """Close on first COMPLETED opposite-colour 5m candle with volume
-    STRICTLY GREATER than the volume of the candle that OPENED the trade.
+    """Historical entry-volume comparison for offline compatibility tests.
 
-    New strategies: MA20 is an ENTRY filter ONLY. EXIT does not consult MA20,
-    does not update reference volume while a trade is open, and does not
-    depend on later same-side candles. Works for existing tracked shorts/longs
-    created under the same strategy, using their saved signal snapshot.
+    The LIVE execution loop does NOT use this older rule: current LIVE exits
+    only when verified full-day dominant volume reverses against the position.
     """
     ts = int(expected_close_ms) - FIVE
     rows = _by_ts(bars, int(expected_close_ms))
@@ -716,7 +722,7 @@ def _open_one(bot, state, sig, instruments):
         f"OPEN {side} {inst} | rank {sig['rank']}/200 | vol ratio {sig['volume_ratio'] or 0:.2f}x "
         f"| 1x isolated, notional {pos['notional_usdt']} USDT | "
         f"TP +0.55% {pos['tp']} (Mark) | SL -0.50% {pos['sl']} (Mark) | "
-        "EXIT: broker TP/SL or opposite CLOSED 5m volume > ENTRY candle volume.",
+        "EXIT: broker TP/SL or confirmed CLOSED 5m dominant-volume trend reversal.",
         "BloFin LIVE both sides volume flip",
         attachment_path=pos.get("entry_chart"),
     )
@@ -923,9 +929,21 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         if not bars or int(bot.bar_close_ms(bars[-1])) != expected_close_ms:
             scan["rejections"].append({"inst":inst,"reason":"NO_CONFIRMED_EXIT_CANDLE"})
             continue
-        should_close,new_volume=(legacy_exit_transition(pos,bars,expected_close_ms)
-                                 if legacy else exit_transition(pos,bars,expected_close_ms))
-        pos["last_red_volume" if legacy else "last_same_volume"]=new_volume
+        if legacy:
+            should_close, new_volume = legacy_exit_transition(pos, bars, expected_close_ms)
+            pos["last_red_volume"] = new_volume
+        else:
+            regime = current_regimes.get(inst) or {}
+            if not regime.get("complete"):
+                scan["rejections"].append({
+                    "inst": inst, "reason": "UNVERIFIED_DOMINANT_TREND_FOR_EXIT"
+                })
+                continue
+            # The SAME verified peak-volume reversal is used for exit and entry.
+            # Opposite colour alone and volume > entry-candle are not exits.
+            should_close = (regime.get("direction") in ("LONG", "SHORT")
+                            and regime["direction"] != pos.get("side"))
+            pos["last_same_volume"] = regime["peak_volume"]
         pos["last_checked_signal_close_ms"]=int(expected_close_ms)
         if should_close:
             # Archive the EXACT confirmed trigger bar BEFORE submitting close.
@@ -942,6 +960,8 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                         "open": signal_bar[0],
                         "close": signal_bar[3],
                         "entry_signal_volume": (pos.get("signal_snapshot") or {}).get("signal_volume"),
+                        "previous_trend_peak_volume": (regime.get("last_flip") or {}).get("previous_peak_volume"),
+                        "new_trend_direction": regime.get("direction"),
                     }
             # Persist a close intent BEFORE the POST; after any ambiguous
             # response, retry only after a fresh, same-side broker verification.
@@ -954,7 +974,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                 bot._run_for_tracked_position(
                     state,inst,bot.close_tracked_position,
                     ("LEGACY VOLUME: GREEN vol > last RED" if legacy else
-                     "VOLUME EXIT: opposite candle vol > opening signal candle vol"))
+                     "VOLUME EXIT: verified dominant opposite-volume trend"))
                 if inst in bot.get_tracked_positions(state):
                     bot.get_tracked_positions(state)[inst]["exit_pending"]="AWAITING_BROKER_FLAT"
                 scan["exits"].append(inst)
@@ -990,7 +1010,11 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
             sig=entry_signal(bot,bars,expected_close_ms)
             if sig is not None:
                 regime = current_regimes.get(inst) or {}
-                if not regime.get("complete") or regime.get("direction") != sig["side"]:
+                flip = regime.get("last_flip") or {}
+                if (not regime.get("complete")
+                        or regime.get("direction") != sig["side"]
+                        or flip.get("to") != sig["side"]
+                        or flip.get("candle_ts") != expected_close_ms - FIVE):
                     scan["rejections"].append({
                         "inst": inst, "reason": "DOMINANT_VOLUME_TREND_BLOCK",
                         "candidate_side": sig["side"],
@@ -1000,13 +1024,15 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                         "trend_peak_volume": regime.get("peak_volume"),
                         "trend_peak_candle_ts": regime.get("peak_candle_ts"),
                         "regime_data_complete": bool(regime.get("complete")),
-                        "note": "Opposing candle must beat active trend peak, not last bar"
+                        "note": "New entry requires THIS 5m candle to reverse the full active volume trend"
                     })
                     continue
                 sig.update({
                     "trend_peak_volume": regime["peak_volume"],
                     "trend_peak_candle_ts": regime["peak_candle_ts"],
-                    "volume_trend_direction": regime["direction"]
+                    "volume_trend_direction": regime["direction"],
+                    "trend_flip_previous_peak_volume": flip["previous_peak_volume"],
+                    "trend_flip_trigger_volume": flip["trigger_volume"],
                 })
             # Entry-only filter: 90% <= signal 5m volume / PRIOR 20-bar
             # average < 100%. Does not alter exits or protective TP/SL.
