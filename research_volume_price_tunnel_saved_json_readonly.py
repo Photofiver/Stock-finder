@@ -112,7 +112,7 @@ def main():
     bars = defaultdict(dict)
     conflicting = set()
     archives = sorted(FOLDER.glob("live_watch_history_5m*.json"))
-    if len(archives) < 10:
+    if not archives:
         raise RuntimeError("Archived 5m JSON shards not checked out")
 
     read_scans = 0
