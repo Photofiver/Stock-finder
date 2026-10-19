@@ -1387,28 +1387,33 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                 # A crossover means that the old direction became the NEW
                 # direction. Check that interpretation as well instead of
                 # rejecting every intersection as invalid data.
-                if (tunnel["status"] == "VALID"
-                        and (not tunnel["entry_allowed"]
+                if (tunnel.get("status") == "VALID"
+                        and tunnel.get("tunnel_direction") in ("LONG", "SHORT")
+                        and (not tunnel.get("entry_allowed")
                              or tunnel["tunnel_direction"] != sig["side"])):
                     old_side = "SHORT" if sig["side"] == "LONG" else "LONG"
                     flipped = volume_price_tunnel_from_bars(
                         bars, expected_close_ms, old_side)
-                    if (flipped["status"] == "VALID"
-                            and flipped["colour_order_changed"]
-                            and flipped["tunnel_direction"] == sig["side"]
-                            and flipped["entry_allowed"]):
+                    if (flipped.get("status") == "VALID"
+                            and flipped.get("colour_order_changed")
+                            and flipped.get("tunnel_direction") == sig["side"]
+                            and flipped.get("entry_allowed")):
                         flipped["reversal_from_side"] = old_side
                         tunnel = flipped
-                if (tunnel["status"] != "VALID" or not tunnel["entry_allowed"]
-                        or tunnel["tunnel_direction"] != sig["side"]):
+                # Incomplete geometry must fail closed without crashing LIVE.
+                # A valid tunnel always states LONG or SHORT explicitly.
+                if (tunnel.get("status") != "VALID"
+                        or not tunnel.get("entry_allowed")
+                        or tunnel.get("tunnel_direction") != sig["side"]):
                     scan["rejections"].append({
                         "inst": inst, "rank": rank, "side": sig["side"],
                         "reason": ("VOLUME_TUNNEL_UNAVAILABLE"
-                                   if tunnel["status"] != "VALID"
+                                   if tunnel.get("status") != "VALID"
+                                   or tunnel.get("tunnel_direction") not in ("LONG", "SHORT")
                                    else "VOLUME_TUNNEL_OPPOSITE_TREND"
                                    if tunnel["tunnel_direction"] != sig["side"]
                                    else "PRICE_OUTSIDE_STRAIGHT_TUNNEL"),
-                        "tunnel_reason": tunnel["reason"],
+                        "tunnel_reason": tunnel.get("reason", "MISSING_TUNNEL_FIELDS"),
                         "volume_tunnel": tunnel,
                     })
                     continue
