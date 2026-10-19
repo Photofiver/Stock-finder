@@ -477,10 +477,12 @@ class Broker(unittest.TestCase):
                 live.entry_signal(self.bot, rising, T)["volume_strength_20"], 0.90)
             good = bars("LONG")
             good[-1]["v"] = 94
+            good_short = bars("SHORT")
+            good_short[-1]["v"] = 94
             return {
                 "GOOD-LONG": good,
                 "RISING-LONG": rising,
-                "GOOD-SHORT": bars("SHORT"),
+                "GOOD-SHORT": good_short,
                 "RANK51-LONG": good,
             }
         observed = []
