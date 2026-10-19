@@ -472,6 +472,21 @@ def volume_trend_from_bars(bars, expected_close_ms, previous=None):
     }
 
 
+def _bootstrap_volume_trend_history(bot, inst, expected_close_ms, previous=None):
+    """Fetch a complete UK-day history ONLY for an eligible entry signal.
+
+    The regular TOP200 scanner fetches 240 bars (~20h); late in the UK day
+    that is insufficient to reconstruct midnight's trend on first deployment.
+    BloFin supports up to 1440 candles; 400 closed 5m bars cover even a
+    25-hour DST day. Never use unconfirmed/future candles for decisions.
+    """
+    raw = bot.market_get("/api/v1/market/candles", {
+        "instId": inst, "bar": "5m", "limit": "400",
+    })
+    bars = bot.parse_candles(raw)
+    return volume_trend_from_bars(bars, expected_close_ms, previous)
+
+
 def prioritize_volume_signals(matches):
     """Strongest qualified 5m signal volume / its own previous MA20 first.
 
@@ -1089,6 +1104,8 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
             volume_trends[inst] = trend
             confirmed_trends[inst] = trend
     scan["volume_trends_confirmed"] = len(confirmed_trends)
+    scan["volume_trend_backfill_attempts"] = 0
+    scan["volume_trend_backfill_successes"] = 0
     scan["volume_trends_long"] = sum(x["trend"] == "LONG" for x in confirmed_trends.values())
     scan["volume_trends_short"] = sum(x["trend"] == "SHORT" for x in confirmed_trends.values())
     # Archive all confirmed 5m candles for tracked trades, including trades
@@ -1190,6 +1207,23 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                     })
                     continue
                 trend_data = confirmed_trends.get(inst)
+                if trend_data is None:
+                    # Targeted backfill for late-day startup only. Do NOT
+                    # expand all 200 public requests or guess the trend.
+                    scan["volume_trend_backfill_attempts"] += 1
+                    try:
+                        trend_data = _bootstrap_volume_trend_history(
+                            bot, inst, expected_close_ms, volume_trends.get(inst))
+                        if trend_data is not None:
+                            volume_trends[inst] = trend_data
+                            confirmed_trends[inst] = trend_data
+                            scan["volume_trend_backfill_successes"] += 1
+                    except Exception as exc:
+                        scan["rejections"].append({
+                            "inst": inst, "rank": rank, "side": sig["side"],
+                            "reason": "VOLUME_TREND_HISTORY_UNAVAILABLE",
+                            "error": f"{type(exc).__name__}: {exc}"[:220],
+                        })
                 trend_direction = (trend_data or {}).get("trend", "UNKNOWN")
                 if trend_direction != sig["side"]:
                     scan["rejections"].append({
