@@ -1,0 +1,35 @@
+name: ACTUAL two-hour BloFin entries vs 3 same 4 opposite READ ONLY
+on:
+  push:
+    paths:
+      - 'research_last_two_hours_live_vs_3same4opposite_20261019_readonly.py'
+      - '.github/workflows/research_last_two_hours_live_vs_3same4opposite_20261019_readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            research_last_two_hours_live_vs_3same4opposite_20261019_readonly.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - name: Historical 2h comparison using only public BloFin 5m bars and recorded fills
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: python -u research_last_two_hours_live_vs_3same4opposite_20261019_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: actual-2h-blofin-versus-3same4opposite-per-trade
+          path: last_two_hours_live_vs_3same4opposite_20261019_readonly.json
+          retention-days: 14
+          if-no-files-found: ignore
