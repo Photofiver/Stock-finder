@@ -349,6 +349,7 @@ class Broker(unittest.TestCase):
 
     def test_reversal_closes_long_and_attempts_short_after_verified_flat_and_oco(self):
         b=bars("SHORT")
+        b[-1]["v"]=95  # valid 90–100% MA20 entry strength; still a real red flip
         pos={"inst":"ABC-USDT","side":"LONG","strategy":live.STRATEGY,
              "hold_policy":live.HOLD_POLICY,
              "opened_ms":T-F+1000,"signal_close_ms":T-F,
@@ -370,6 +371,7 @@ class Broker(unittest.TestCase):
 
     def test_no_same_scan_reentry_when_old_oco_still_live(self):
         b=bars("SHORT")
+        b[-1]["v"]=95  # valid 90–100% MA20 entry strength; still a real red flip
         self.state["positions"]["ABC-USDT"]={
             "inst":"ABC-USDT","side":"LONG","strategy":live.STRATEGY,
             "hold_policy":live.HOLD_POLICY,
