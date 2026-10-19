@@ -2021,6 +2021,27 @@ def record_closed(state, reason_hint=None):
         exit_chart_error = f"{type(exc).__name__}: {exc}"
         print(f"LIVE EXIT CHART ERROR {pos['inst']}: {exit_chart_error}")
 
+    price_movement = None
+    if str(pos.get("strategy") or "") == "VOLUME_FLIP_BOTH_5M_V1":
+        price_movement = dict(pos.get("price_movement") or {})
+        try:
+            entry_fill = d(hist.get("openAveragePrice") or pos.get("reference_entry") or 0)
+            exit_fill = d(hist.get("closeAveragePrice") or 0)
+            if entry_fill > 0 and exit_fill > 0:
+                direction = Decimal("1") if pos.get("side") == "LONG" else Decimal("-1")
+                price_movement.update({
+                    "entry_price": float(entry_fill),
+                    "actual_exit_price": float(exit_fill),
+                    "actual_exit_ms": closed_ms,
+                    "actual_directional_return_pct": float(
+                        direction * (exit_fill / entry_fill - Decimal("1")) * 100
+                    ),
+                    "actual_gross_pnl_usdt": float(gross_pnl),
+                    "exit_fill_source": "verified BloFin positions-history",
+                })
+        except (TypeError, ValueError, ArithmeticError, ZeroDivisionError) as exc:
+            price_movement["exit_price_error"] = str(exc)[:180]
+
     history = state.setdefault("trade_history", [])
     history.append({
         "entry_chart": str(pos.get("entry_chart") or ""),
@@ -2058,6 +2079,9 @@ def record_closed(state, reason_hint=None):
             if str(pos.get("strategy") or "") == "VOLUME_FLIP_BOTH_5M_V1"
             else None
         ),
+        # Price movement based on fully CLOSED 5m OHLC, plus verified broker
+        # exit fill for later TP/SL research. Does not place TP or SL orders.
+        "price_movement": price_movement,
         "pattern_review": pattern_review,
     })
     if len(history) > TRADE_HISTORY_LIMIT:
