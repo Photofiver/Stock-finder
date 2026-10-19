@@ -12,7 +12,7 @@ def candle(ts,o=100.0,c=100.0,volume=100):
     return {"ts":ts,"o":o,"h":max(o,c)+0.2,"l":min(o,c)-0.2,"c":c,"v":volume}
 
 def bars(side):
-    candles=[candle(T-(50-i)*F) for i in range(50)]
+    candles=[candle(T-(96-i)*F) for i in range(96)]  # exact UK midnight to 08:00
     if side=="LONG":
         candles[-2]=candle(T-2*F,o=100.1,c=99.9,volume=60)
         candles[-1]=candle(T-F,o=100.0,c=100.1,volume=80)
@@ -87,6 +87,47 @@ class Setups(unittest.TestCase):
                          ["HIGHRANK-USDT", "LOWRANK-USDT"])
         self.assertEqual([s["rank"] for s in selected], [178, 1])
         self.assertEqual([s["side"] for s in selected], ["SHORT", "LONG"])
+
+
+    def bonk_like_candles(self, red_volume=3778):
+        # Base candles are neutral, so they don't create a false volume trend.
+        # All prior MA20 values are high enough for both small entry bars.
+        b=bars("SHORT")
+        for item in b:
+            item["v"]=10000
+        b[-4]=candle(T-4*F,o=100,c=100.1,volume=7138)
+        b[-2]=candle(T-2*F,o=100,c=100.1,volume=2550)
+        b[-1]=candle(T-F,o=100.1,c=100,volume=red_volume)
+        return b
+
+    def test_1000bonk_short_3778_below_earlier_green_peak_7138(self):
+        b=self.bonk_like_candles()
+        # Old implementation sees only 3778 > 2550 and chooses SHORT.
+        sig=live.entry_signal(self.bot,b,T)
+        self.assertEqual(sig["side"],"SHORT")
+        self.assertEqual(sig["volume_ratio"],3778/2550)
+        regime=live.volume_peak_regime(b,T)
+        self.assertTrue(regime["complete"])
+        self.assertEqual(regime["direction"],"LONG")
+        self.assertEqual(regime["peak_volume"],7138)
+        self.assertEqual(regime["peak_candle_ts"],T-4*F)
+        self.assertNotEqual(sig["side"],regime["direction"])
+
+    def test_short_allowed_only_after_beating_active_green_peak(self):
+        regime=live.volume_peak_regime(self.bonk_like_candles(8000),T)
+        self.assertTrue(regime["complete"])
+        self.assertEqual(regime["direction"],"SHORT")
+        self.assertEqual(regime["peak_volume"],8000)
+        self.assertEqual(live.entry_signal(self.bot,self.bonk_like_candles(8000),T)["side"],
+                         "SHORT")
+
+    def test_missing_start_of_uk_day_blocks_new_trend_assumption(self):
+        b=self.bonk_like_candles()[-30:]
+        self.assertFalse(live.volume_peak_regime(b,T)["complete"])
+        full=live.volume_peak_regime(self.bonk_like_candles(),T-F)
+        continued=live.volume_peak_regime(b,T,full)
+        self.assertTrue(continued["complete"])
+        self.assertEqual(continued["direction"],"LONG")
 
     def test_equal_volume_strength_has_stable_tie_break(self):
         a = {"inst":"COIN-A","rank":42,"volume_strength_20":0.8}
@@ -236,6 +277,27 @@ class Broker(unittest.TestCase):
         self.assertEqual([x["inst"] for x in scan["candidates"]],
                          ["XYZ-USDT", "ABC-USDT"])
         self.assertEqual(scan["entries"], [])
+
+
+    def test_live_blocks_1000bonk_short_on_bigger_earlier_green(self):
+        b=Setups().bonk_like_candles()
+        ranking=["ABC-USDT"]+[f"OTHER-{i}-USDT" for i in range(199)]
+        seen=[]
+        def confirm(insts,close):
+            return {"ABC-USDT":b}
+        def observe(bot,state,sig,instruments):
+            seen.append(sig["side"])
+            return False
+        with patch.dict("os.environ", {"LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES":"false"}):
+            with patch.object(live,"_open_one",side_effect=observe):
+                live.run(self.bot,self.state,ranking,{},self.instruments,T,confirm)
+        self.assertEqual(seen,[])
+        scan=self.state["volume_long_last_scan"]
+        blocks=[x for x in scan["rejections"] if x.get("reason")=="DOMINANT_VOLUME_TREND_BLOCK"]
+        self.assertEqual(len(blocks),1)
+        self.assertEqual(blocks[0]["trend_peak_volume"],7138)
+        self.assertEqual(blocks[0]["candidate_volume"],3778)
+        self.assertEqual(blocks[0]["current_trend"],"LONG")
 
     def test_live_accepts_90_to_below_100_percent_of_prior_20_only(self):
         # Last signal candle's prior 20 bars average 98 (one red at vol60).
