@@ -29,6 +29,13 @@ class FakeBot(prior.FakeBot):
         self.amend_calls=0
         self.amend_uncertain=False
         self.defer_amend=False
+    def checked_preorder_quote(self, inst, side, close, enforce_adverse_gap=True):
+        quote = super().checked_preorder_quote(inst, side, close,
+                                              enforce_adverse_gap=enforce_adverse_gap)
+        if side == "SHORT":
+            quote.update(adverse_gap_pct=0.06, spread_pct=0.02)
+        return quote
+
     def private_request(self,method,path,body=None,params=None):
         if path=="/api/v1/trade/order-tpsl":
             self.posted.append((method,path,body))
@@ -147,6 +154,26 @@ class Setups(unittest.TestCase):
         short_signal = live.entry_signal(self.bot, bars("SHORT"), T)
         short_signal["signal_mean20_prev"] = None
         self.assertIsNone(live.long_entry_extra_rejection(short_signal, 180))
+
+    def test_short_quote_gates_fail_closed_only_for_short(self):
+        good = {"adverse_gap_pct": 0.05, "spread_pct": 0.05}
+        self.assertIsNone(live.short_entry_extra_rejection("SHORT", good))
+        self.assertIsNone(live.short_entry_extra_rejection(
+            "SHORT", {"adverse_gap_pct": 0.09, "spread_pct": 0.01}))
+        self.assertEqual(
+            live.short_entry_extra_rejection(
+                "SHORT", {"adverse_gap_pct": 0.049, "spread_pct": 0.01}),
+            "SHORT_ADVERSE_GAP_BELOW_005PCT")
+        self.assertEqual(
+            live.short_entry_extra_rejection(
+                "SHORT", {"adverse_gap_pct": 0.08, "spread_pct": 0.051}),
+            "SHORT_SPREAD_ABOVE_005PCT")
+        self.assertEqual(live.short_entry_extra_rejection("SHORT", {}),
+                         "SHORT_QUOTE_METRICS_UNAVAILABLE")
+        self.assertEqual(live.short_entry_extra_rejection(
+            "SHORT", {"adverse_gap_pct": float("nan"), "spread_pct": 0.01}),
+            "SHORT_QUOTE_METRICS_UNAVAILABLE")
+        self.assertIsNone(live.short_entry_extra_rejection("LONG", {}))
 
     def test_block_if_volume_above_mean20(self):
         b=bars("LONG");b[-1]["v"]=120
@@ -326,7 +353,6 @@ class Broker(unittest.TestCase):
         self.assertEqual([x["inst"] for x in scan["candidates"]],
                          ["MID-USDT","MIN-USDT"])
 
-    @patch("blofin_trade_charts.capture_chart",side_effect=RuntimeError("no rendering in offline tests"))
     def test_long_only_entry_gates_filter_rank_and_nonfalling_volume_mean(self):
         ranking = ["GOOD-LONG", "RISING-LONG", "GOOD-SHORT"] + [
             f"OTHER-{i}" for i in range(47)] + ["RANK51-LONG"] + [
@@ -363,6 +389,25 @@ class Broker(unittest.TestCase):
         self.assertEqual(reasons["RISING-LONG"], "LONG_VOLUME_MA20_NOT_DECLINING")
         self.assertEqual(reasons["RANK51-LONG"], "LONG_RANK_OUTSIDE_TOP50")
 
+    def test_short_quote_filters_block_before_any_order_post(self):
+        sig = self.signal("XYZ-USDT", "SHORT")
+        for gap, spread, reason in [
+            (0.049, 0.01, "SHORT_ADVERSE_GAP_BELOW_005PCT"),
+            (0.08, 0.051, "SHORT_SPREAD_ABOVE_005PCT"),
+        ]:
+            sig.pop("preorder_rejection", None)
+            sig.pop("pre_order_quote", None)
+            with patch.object(self.bot, "checked_preorder_quote",
+                return_value={"expected_fill":"100", "adverse_gap_pct":gap,
+                              "spread_pct":spread}):
+                self.assertFalse(live._open_one(
+                    self.bot, self.state, sig, self.instruments))
+            self.assertEqual(sig["preorder_rejection"], reason)
+            self.assertFalse(self.state["positions"])
+            self.assertEqual(self.bot.posted, [])
+            self.assertNotIn("XYZ-USDT", self.state.get("volume_long_order_attempts", {}))
+
+    @patch("blofin_trade_charts.capture_chart",side_effect=RuntimeError("no rendering in offline tests"))
     def test_buy_long_sell_short_each_one_per_coin_tpsl(self,chart):
         self.assertTrue(live._open_one(self.bot,self.state,self.signal("ABC-USDT","LONG"),self.instruments))
         self.assertTrue(live._open_one(self.bot,self.state,self.signal("XYZ-USDT","SHORT"),self.instruments))
