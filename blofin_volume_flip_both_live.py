@@ -346,6 +346,31 @@ def entry_signal(bot, bars, expected_close_ms):
     }
 
 
+LONG_ENTRY_MAX_RANK = 50
+
+
+def long_entry_extra_rejection(sig, rank):
+    """Extra LONG entry gates only; SHORT and existing positions are unchanged.
+
+    Compare two consecutive 20-bar means formed solely from CLOSED 5m
+    candles before the entry signal. Never admit missing/invalid values.
+    """
+    if sig.get("side") != "LONG":
+        return None
+    if not 1 <= rank <= LONG_ENTRY_MAX_RANK:
+        return "LONG_RANK_OUTSIDE_TOP50"
+    try:
+        current = float(sig["signal_mean20_prev"])
+        previous = float(sig["previous_mean20_prev"])
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return "LONG_VOLUME_MA20_UNAVAILABLE"
+    if not all(math.isfinite(value) and value > 0 for value in (current, previous)):
+        return "LONG_VOLUME_MA20_UNAVAILABLE"
+    if current >= previous:
+        return "LONG_VOLUME_MA20_NOT_DECLINING"
+    return None
+
+
 def prioritize_volume_signals(matches):
     """Strongest qualified 5m signal volume / its own previous MA20 first.
 
@@ -1021,6 +1046,13 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
             if (sig is not None and
                     ENTRY_VOLUME_STRENGTH_MIN <= sig["volume_strength_20"]
                     < ENTRY_VOLUME_STRENGTH_MAX):
+                long_rejection = long_entry_extra_rejection(sig, rank)
+                if long_rejection:
+                    scan["rejections"].append({
+                        "inst": inst, "rank": rank, "side": "LONG",
+                        "reason": long_rejection,
+                    })
+                    continue
                 sig.update({"inst":inst,"rank":rank})
                 matches.append(sig)
         # Full TOP200 was already checked against the exact same entry rules.
