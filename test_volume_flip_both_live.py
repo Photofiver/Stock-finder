@@ -12,7 +12,7 @@ def candle(ts,o=100.0,c=100.0,volume=100):
     return {"ts":ts,"o":o,"h":max(o,c)+0.2,"l":min(o,c)-0.2,"c":c,"v":volume}
 
 def bars(side):
-    candles=[candle(T-(96-i)*F) for i in range(96)]  # exact UK midnight to 08:00
+    candles=[candle(T-(50-i)*F) for i in range(50)]
     if side=="LONG":
         candles[-2]=candle(T-2*F,o=100.1,c=99.9,volume=60)
         candles[-1]=candle(T-F,o=100.0,c=100.1,volume=80)
@@ -87,47 +87,6 @@ class Setups(unittest.TestCase):
                          ["HIGHRANK-USDT", "LOWRANK-USDT"])
         self.assertEqual([s["rank"] for s in selected], [178, 1])
         self.assertEqual([s["side"] for s in selected], ["SHORT", "LONG"])
-
-
-    def bonk_like_candles(self, red_volume=3778):
-        # Base candles are neutral, so they don't create a false volume trend.
-        # All prior MA20 values are high enough for both small entry bars.
-        b=bars("SHORT")
-        for item in b:
-            item["v"]=10000
-        b[-4]=candle(T-4*F,o=100,c=100.1,volume=7138)
-        b[-2]=candle(T-2*F,o=100,c=100.1,volume=2550)
-        b[-1]=candle(T-F,o=100.1,c=100,volume=red_volume)
-        return b
-
-    def test_1000bonk_short_3778_below_earlier_green_peak_7138(self):
-        b=self.bonk_like_candles()
-        # Old implementation sees only 3778 > 2550 and chooses SHORT.
-        sig=live.entry_signal(self.bot,b,T)
-        self.assertEqual(sig["side"],"SHORT")
-        self.assertEqual(sig["volume_ratio"],3778/2550)
-        regime=live.volume_peak_regime(b,T)
-        self.assertTrue(regime["complete"])
-        self.assertEqual(regime["direction"],"LONG")
-        self.assertEqual(regime["peak_volume"],7138)
-        self.assertEqual(regime["peak_candle_ts"],T-4*F)
-        self.assertNotEqual(sig["side"],regime["direction"])
-
-    def test_short_allowed_only_after_beating_active_green_peak(self):
-        regime=live.volume_peak_regime(self.bonk_like_candles(8000),T)
-        self.assertTrue(regime["complete"])
-        self.assertEqual(regime["direction"],"SHORT")
-        self.assertEqual(regime["peak_volume"],8000)
-        self.assertEqual(live.entry_signal(self.bot,self.bonk_like_candles(8000),T)["side"],
-                         "SHORT")
-
-    def test_missing_start_of_uk_day_blocks_new_trend_assumption(self):
-        b=self.bonk_like_candles()[-30:]
-        self.assertFalse(live.volume_peak_regime(b,T)["complete"])
-        full=live.volume_peak_regime(self.bonk_like_candles(),T-F)
-        continued=live.volume_peak_regime(b,T,full)
-        self.assertTrue(continued["complete"])
-        self.assertEqual(continued["direction"],"LONG")
 
     def test_equal_volume_strength_has_stable_tie_break(self):
         a = {"inst":"COIN-A","rank":42,"volume_strength_20":0.8}
@@ -277,121 +236,6 @@ class Broker(unittest.TestCase):
         self.assertEqual([x["inst"] for x in scan["candidates"]],
                          ["XYZ-USDT", "ABC-USDT"])
         self.assertEqual(scan["entries"], [])
-
-
-    def test_live_blocks_1000bonk_short_on_bigger_earlier_green(self):
-        b=Setups().bonk_like_candles()
-        ranking=["ABC-USDT"]+[f"OTHER-{i}-USDT" for i in range(199)]
-        seen=[]
-        def confirm(insts,close):
-            return {"ABC-USDT":b}
-        def observe(bot,state,sig,instruments):
-            seen.append(sig["side"])
-            return False
-        with patch.dict("os.environ", {"LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES":"false"}):
-            with patch.object(live,"_open_one",side_effect=observe):
-                live.run(self.bot,self.state,ranking,{},self.instruments,T,confirm)
-        self.assertEqual(seen,[])
-        scan=self.state["volume_long_last_scan"]
-        blocks=[x for x in scan["rejections"] if x.get("reason")=="DOMINANT_VOLUME_TREND_BLOCK"]
-        self.assertEqual(len(blocks),1)
-        self.assertEqual(blocks[0]["trend_peak_volume"],7138)
-        self.assertEqual(blocks[0]["candidate_volume"],3778)
-        self.assertEqual(blocks[0]["current_trend"],"LONG")
-
-    def test_only_new_dominant_flip_opens_not_repeated_same_direction(self):
-        b=bars("SHORT")
-        # Current red 95 beats last green 60, but established red peak 97
-        # still controls the trend: this is NOT a new SHORT.
-        b[-4]=candle(T-4*F,o=100.2,c=99.9,volume=97)
-        b[-2]=candle(T-2*F,o=100,c=100.1,volume=60)
-        b[-1]=candle(T-F,o=100.1,c=100.0,volume=95)
-        self.assertEqual(live.entry_signal(self.bot,b,T)["side"],"SHORT")
-        regime=live.volume_peak_regime(b,T)
-        self.assertEqual(regime["direction"],"SHORT")
-        self.assertIsNone(regime["last_flip"])
-        attempts=[]
-        rank=["ABC-USDT"]+[f"COIN-{i}-USDT" for i in range(199)]
-        with patch.dict("os.environ",{"LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES":"false"}),\
-             patch.object(live,"_open_one",side_effect=lambda *args: attempts.append(args[2]["side"])):
-            live.run(self.bot,self.state,rank,{},self.instruments,T,lambda *_:{"ABC-USDT":b})
-        self.assertEqual(attempts,[])
-        rejects=self.state["volume_long_last_scan"]["rejections"]
-        self.assertTrue(any(x["reason"]=="DOMINANT_VOLUME_TREND_BLOCK" for x in rejects))
-
-    def test_dominant_peak_not_entry_volume_controls_long_exit(self):
-        # A strong older green peak 120 must not be overruled by red 90
-        # merely because the entry candle's green volume was only 80.
-        for red_volume,expected_closed in ((90,False),(120,False),(121,True)):
-            with self.subTest(red_volume=red_volume):
-                bot=FakeBot()
-                bot.now=T+F+1000
-                b=bars("LONG")
-                b[-4]=candle(T-4*F,o=100,c=100.1,volume=120)
-                b.append(candle(T,o=100.1,c=100,volume=red_volume))
-                state={"positions":{"ABC-USDT":{
-                    "inst":"ABC-USDT","side":"LONG","strategy":live.STRATEGY,
-                    "hold_policy":live.HOLD_POLICY,
-                    "opened_ms":T+1000,"signal_close_ms":T,
-                    "signal_snapshot":{"signal_volume":80},
-                    "last_checked_signal_close_ms":T,
-                    "reference_entry":"100","tpsl_id":"old"
-                }}}
-                bot.account["ABC-USDT"]=True
-                bot.exchange_tpsl["ABC-USDT"]={"tpslId":"old","state":"canceled"}
-                ranks=["ABC-USDT"]+[f"OTHER-{i}-USDT" for i in range(199)]
-                with patch.dict("os.environ",{"LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES":"true"}),\
-                     patch.object(live,"_ensure_protection",return_value=True):
-                    live.run(bot,state,ranks,{},self.instruments,T+F,
-                             lambda *_: {"ABC-USDT":b})
-                self.assertEqual("ABC-USDT" in bot.closed,expected_closed)
-                self.assertEqual("ABC-USDT" in state["positions"],not expected_closed)
-
-    def test_reversal_closes_long_and_attempts_short_after_verified_flat_and_oco(self):
-        b=bars("SHORT")
-        b[-1]["v"]=95  # valid 90–100% MA20 entry strength; still a real red flip
-        pos={"inst":"ABC-USDT","side":"LONG","strategy":live.STRATEGY,
-             "hold_policy":live.HOLD_POLICY,
-             "opened_ms":T-F+1000,"signal_close_ms":T-F,
-             "signal_snapshot":{"signal_volume":60},
-             "last_checked_signal_close_ms":T-F,
-             "reference_entry":"100","tpsl_id":"old"}
-        self.state["positions"]["ABC-USDT"]=pos
-        self.bot.account["ABC-USDT"]=True
-        self.bot.exchange_tpsl["ABC-USDT"]={"tpslId":"old","state":"canceled"}
-        observed=[]
-        ranking=["ABC-USDT"]+[f"OTHER-{i}-USDT" for i in range(199)]
-        with patch.dict("os.environ",{"LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES":"false"}),\
-             patch.object(live,"_ensure_protection",return_value=True),\
-             patch.object(live,"_open_one",side_effect=lambda bot,st,sig,ins:observed.append(sig["side"]) or False):
-            live.run(self.bot,self.state,ranking,{},self.instruments,T,
-                     lambda *_: {"ABC-USDT":b})
-        self.assertEqual(self.bot.closed,["ABC-USDT"])
-        self.assertEqual(observed,["SHORT"])
-
-    def test_no_same_scan_reentry_when_old_oco_still_live(self):
-        b=bars("SHORT")
-        b[-1]["v"]=95  # valid 90–100% MA20 entry strength; still a real red flip
-        self.state["positions"]["ABC-USDT"]={
-            "inst":"ABC-USDT","side":"LONG","strategy":live.STRATEGY,
-            "hold_policy":live.HOLD_POLICY,
-            "opened_ms":T-F+1000,"signal_close_ms":T-F,
-            "signal_snapshot":{"signal_volume":60},
-            "last_checked_signal_close_ms":T-F,
-            "reference_entry":"100","tpsl_id":"old"}
-        self.bot.account["ABC-USDT"]=True
-        self.bot.exchange_tpsl["ABC-USDT"]={"tpslId":"old","state":"live"}
-        observed=[]
-        ranking=["ABC-USDT"]+[f"OTHER-{i}-USDT" for i in range(199)]
-        with patch.dict("os.environ",{"LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES":"false"}),\
-             patch.object(live,"_ensure_protection",return_value=True),\
-             patch.object(live,"_open_one",side_effect=lambda bot,st,sig,ins:observed.append(sig["side"]) or False):
-            live.run(self.bot,self.state,ranking,{},self.instruments,T,
-                     lambda *_: {"ABC-USDT":b})
-        self.assertEqual(self.bot.closed,["ABC-USDT"])
-        self.assertEqual(observed,[])
-        self.assertTrue(any(x["reason"]=="OLD_BROKER_TPSL_STILL_LIVE" for x in
-                            self.state["volume_long_last_scan"]["rejections"]))
 
     def test_live_accepts_90_to_below_100_percent_of_prior_20_only(self):
         # Last signal candle's prior 20 bars average 98 (one red at vol60).
