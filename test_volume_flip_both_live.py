@@ -41,7 +41,9 @@ REAL_VOLUME_PRICE_TUNNEL = live.volume_price_tunnel_from_bars
 def trusted_tunnel_for_legacy_scan_tests(bars, close_ms, side):
     """Isolate previous volume/quote/rank tests from the new tunnel rule."""
     return {"status": "VALID", "reason": "PRICE_INSIDE_STRAIGHT_TUNNEL",
-            "entry_allowed": True, "breakout_confirmed": False, "side": side}
+            "entry_allowed": True, "breakout_confirmed": False,
+            "tunnel_direction": side, "colour_order_changed": False,
+            "side": side}
 
 
 class FakeBot(prior.FakeBot):
@@ -164,10 +166,12 @@ class Setups(unittest.TestCase):
                         long_signal["previous_mean20_prev"])
         self.assertIsNone(live.long_entry_extra_rejection(long_signal, 1))
         self.assertIsNone(live.long_entry_extra_rejection(long_signal, 50))
-        self.assertEqual(live.long_entry_extra_rejection(long_signal, 51),
-                         "LONG_RANK_OUTSIDE_TOP50")
+        self.assertIsNone(live.long_entry_extra_rejection(long_signal, 51))
+        self.assertIsNone(live.long_entry_extra_rejection(long_signal, 200))
+        self.assertEqual(live.long_entry_extra_rejection(long_signal, 201),
+                         "LONG_RANK_OUTSIDE_TOP200")
         self.assertEqual(live.long_entry_extra_rejection(long_signal, 0),
-                         "LONG_RANK_OUTSIDE_TOP50")
+                         "LONG_RANK_OUTSIDE_TOP200")
         long_signal["signal_mean20_prev"] = long_signal["previous_mean20_prev"]
         self.assertEqual(live.long_entry_extra_rejection(long_signal, 1),
                          "LONG_VOLUME_MA20_NOT_DECLINING")
@@ -365,17 +369,19 @@ class VolumePriceTunnel(unittest.TestCase):
         self.assertLessEqual(channel["lower_price"], channel["signal_close_price"])
         self.assertLessEqual(channel["signal_close_price"], channel["upper_price"])
 
-    def test_no_maximum_volume_pair_selection(self):
-        # Very strong MIDDLE volumes cannot replace the FIRST/LAST anchors.
+    def test_two_strongest_volume_anchors_per_colour_selected(self):
+        # The highest-volume bars replace the older FIRST/LAST selection.
         rows=self.sample("LONG")
         rows[-12] = candle(T-12*F, o=102, c=103, volume=1000000)
         rows[-10] = candle(T-10*F, o=99, c=98, volume=500000)
         channel=live.volume_price_tunnel_from_bars(rows, T, "LONG")
         self.assertTrue(channel["entry_allowed"])
+        self.assertEqual(channel["anchor_selection"],
+                         "TOP_2_VOLUME_BARS_PER_COLOUR_CHRONOLOGICAL")
         self.assertEqual(
-            [x["volume"] for x in channel["upper_anchors"]], [10,20])
+            [x["volume"] for x in channel["upper_anchors"]], [1000000,20])
         self.assertEqual(
-            [x["volume"] for x in channel["lower_anchors"]], [40,60])
+            [x["volume"] for x in channel["lower_anchors"]], [500000,60])
 
     def test_inside_allowed_without_breakout_and_beyond_blocked(self):
         for side, beyond in (("LONG",110), ("SHORT",95)):
@@ -396,7 +402,7 @@ class VolumePriceTunnel(unittest.TestCase):
         self.assertEqual(signal["status"], "VALID")
         self.assertTrue(signal["colour_order_changed"])
         self.assertEqual(signal["tunnel_direction"], "LONG")
-        self.assertEqual(signal["reason"], "PRICE_LINES_CROSSED_DIRECTION_CHANGE")
+        self.assertEqual(signal["reason"], "PRICE_LINES_CROSSED_TREND_REVERSED")
         self.assertFalse(signal["entry_allowed"])
 
     def test_missing_volume_anchor_or_closed_history_fails_safe(self):
@@ -550,6 +556,24 @@ class Broker(unittest.TestCase):
                          {"ABC-USDT", "XYZ-USDT"})
         self.assertEqual(self.state["volume_long_last_scan"]["matched"], 0)
 
+    def test_missing_tunnel_direction_is_rejected_without_exception(self):
+        ranking = ["ABC-USDT"] + [f"OTHER-{i}" for i in range(199)]
+        sample = bars("LONG")
+        sample[-1]["v"] = 94
+        def confirmed(insts, close):
+            return {"ABC-USDT": sample}
+        incomplete = {"status": "VALID", "entry_allowed": True,
+                      "reason": "MISSING_TUNNEL_DIRECTION"}
+        with patch.dict("os.environ", {"LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES": "false"}):
+            with patch.object(live, "volume_price_tunnel_from_bars",
+                              return_value=incomplete):
+                with patch.object(live, "_open_one") as open_order:
+                    live.run(self.bot, self.state, ranking, {}, self.instruments, T, confirmed)
+                    open_order.assert_not_called()
+        rejected = self.state["volume_long_last_scan"]["rejections"]
+        self.assertIn(("ABC-USDT", "VOLUME_TUNNEL_UNAVAILABLE"),
+                      [(row["inst"], row["reason"]) for row in rejected])
+
     def test_full_top200_scan_attempts_strongest_volume_first(self):
         weak = bars("LONG")
         weak[-1]["v"] = 92
@@ -576,15 +600,15 @@ class Broker(unittest.TestCase):
                          ["XYZ-USDT", "ABC-USDT"])
         self.assertEqual(scan["entries"], [])
 
-    def test_live_accepts_90_to_below_100_percent_of_prior_20_only(self):
-        # Last signal candle's prior 20 bars average 98 (one red at vol60).
-        # All setups pass the original red/green and increasing-volume rules.
+    def test_removed_90_to_100_percent_gate_keeps_ma20_ceiling(self):
+        # Prior MA20 = 98; no minimum 90% gate remains, but original
+        # per-candle <= MA20 qualification stays in force.
         scenarios = (
-            ("LOW-USDT", 88, "LONG"),       # 88/98 = 89.8%: reject
-            ("MIN-USDT", 88.2, "SHORT"),     # 88.2/98 = 90%: accept
-            ("MID-USDT", 94, "LONG"),       # 94/98 = 95.9%: accept
-            ("UPPER-USDT", 98, "SHORT"),     # 98/98 = 100%: reject
-            ("ABOVE-USDT", 101, "LONG"),    # 101/98 > 100%: reject
+            ("LOW-USDT", 88, "LONG"),       # 88/98 < 90%: now accepted
+            ("MIN-USDT", 88.2, "SHORT"),     # exactly 90%: accepted
+            ("MID-USDT", 94, "LONG"),       # between 90% and 100%: accepted
+            ("UPPER-USDT", 98, "SHORT"),     # equal to MA20: accepted
+            ("ABOVE-USDT", 101, "LONG"),    # greater than MA20: still rejected
         )
         ranking = [name for name,_,_ in scenarios] + [f"OTHER-{i}-USDT" for i in range(195)]
         observed = []
@@ -601,14 +625,15 @@ class Broker(unittest.TestCase):
         with patch.dict("os.environ", {"LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES":"false"}):
             with patch.object(live, "_open_one", side_effect=observe):
                 live.run(self.bot,self.state,ranking,{},self.instruments,T,confirmed)
-        self.assertEqual([x[0] for x in observed],["MID-USDT","MIN-USDT"])
-        self.assertTrue(all(.9<=x[1]<1.0 for x in observed))
+        self.assertEqual([x[0] for x in observed],
+                         ["UPPER-USDT", "MID-USDT", "MIN-USDT", "LOW-USDT"])
+        self.assertLess(observed[-1][1], .90)
+        self.assertEqual(observed[0][1], 1.0)
         scan=self.state["volume_long_last_scan"]
-        self.assertEqual(scan["matched"],2)
-        self.assertEqual(scan["volume_entry_strength_min_inclusive"],.90)
-        self.assertEqual(scan["volume_entry_strength_max_exclusive"],1.0)
+        self.assertEqual(scan["matched"],4)
+        self.assertEqual(scan["volume_entry_strength_range_filter"], "DISABLED")
         self.assertEqual([x["inst"] for x in scan["candidates"]],
-                         ["MID-USDT","MIN-USDT"])
+                         ["UPPER-USDT", "MID-USDT", "MIN-USDT", "LOW-USDT"])
 
     def test_long_only_entry_gates_filter_rank_and_nonfalling_volume_mean(self):
         ranking = ["GOOD-LONG", "RISING-LONG", "GOOD-SHORT"] + [
@@ -643,13 +668,14 @@ class Broker(unittest.TestCase):
                 live.run(self.bot, self.state, ranking, {}, self.instruments,
                          T, confirmed)
         self.assertEqual(observed, [
-            ("GOOD-LONG", "LONG", 1), ("GOOD-SHORT", "SHORT", 3)])
+            ("GOOD-LONG", "LONG", 1), ("GOOD-SHORT", "SHORT", 3),
+            ("RANK51-LONG", "LONG", 51)])
         scan = self.state["volume_long_last_scan"]
-        self.assertEqual(scan["long_entry_rank_range_inclusive"], [1, 50])
+        self.assertEqual(scan["long_entry_rank_range_inclusive"], [1, 200])
         self.assertTrue(scan["long_requires_falling_prior_20bar_mean"])
         reasons = {x["inst"]: x["reason"] for x in scan["rejections"]}
         self.assertEqual(reasons["RISING-LONG"], "LONG_VOLUME_MA20_NOT_DECLINING")
-        self.assertEqual(reasons["RANK51-LONG"], "LONG_RANK_OUTSIDE_TOP50")
+        self.assertNotIn("RANK51-LONG", reasons)
 
     def test_short_quote_filters_block_before_any_order_post(self):
         sig = self.signal("XYZ-USDT", "SHORT")
