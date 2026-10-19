@@ -371,6 +371,32 @@ def long_entry_extra_rejection(sig, rank):
     return None
 
 
+SHORT_ENTRY_MIN_ADVERSE_GAP_PCT = Decimal("0.05")
+SHORT_ENTRY_MAX_SPREAD_PCT = Decimal("0.05")
+
+
+def short_entry_extra_rejection(side, quote):
+    """SHORT-only entry quote gates, with unchanged LONG and exits.
+
+    On SHORT positive adverse_gap_pct means bid below the signal close.
+    The quote is checked for freshness and maximum adverse gap upstream.
+    """
+    if side != "SHORT":
+        return None
+    try:
+        gap = Decimal(str(quote["adverse_gap_pct"]))
+        spread = Decimal(str(quote["spread_pct"]))
+    except (KeyError, TypeError, ValueError, ArithmeticError):
+        return "SHORT_QUOTE_METRICS_UNAVAILABLE"
+    if not gap.is_finite() or not spread.is_finite() or spread < 0:
+        return "SHORT_QUOTE_METRICS_UNAVAILABLE"
+    if gap < SHORT_ENTRY_MIN_ADVERSE_GAP_PCT:
+        return "SHORT_ADVERSE_GAP_BELOW_005PCT"
+    if spread > SHORT_ENTRY_MAX_SPREAD_PCT:
+        return "SHORT_SPREAD_ABOVE_005PCT"
+    return None
+
+
 def prioritize_volume_signals(matches):
     """Strongest qualified 5m signal volume / its own previous MA20 first.
 
@@ -687,6 +713,15 @@ def _open_one(bot, state, sig, instruments):
     target = min(MAX_PER_COIN_USDT, spendable)
     quote = bot.checked_preorder_quote(inst, side, sig["close"],
                                       enforce_adverse_gap=True)
+    quote_rejection = short_entry_extra_rejection(side, quote)
+    if quote_rejection:
+        # Reject before market order POST; broker protection stays untouched.
+        sig["preorder_rejection"] = quote_rejection
+        sig["pre_order_quote"] = quote
+        print(f"{STRATEGY}: SHORT {inst} blocked: {quote_rejection} "
+              f"(adverse_gap={quote.get('adverse_gap_pct')}%, "
+              f"spread={quote.get('spread_pct')}%)")
+        return False
     sized = bot.size_for_notional(bot.d(quote["expected_fill"]), meta, target)
     if not sized:
         print(f"{STRATEGY}: no valid size for {inst} with cap {target}")
@@ -890,6 +925,8 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
     scan={"strategy":STRATEGY,"selection_priority":"SIGNAL_VOLUME_DIV_PREVIOUS_20_BAR_MEAN_DESC",
           "volume_entry_strength_min_inclusive":ENTRY_VOLUME_STRENGTH_MIN,
           "volume_entry_strength_max_exclusive":ENTRY_VOLUME_STRENGTH_MAX,
+          "short_entry_min_adverse_gap_pct_inclusive":float(SHORT_ENTRY_MIN_ADVERSE_GAP_PCT),
+          "short_entry_max_spread_pct_inclusive":float(SHORT_ENTRY_MAX_SPREAD_PCT),
           "signal_close_ms":int(expected_close_ms),
           "top200_count":len(top200),"status":"PENDING",
           "scanned_confirmed":0,"matched":0,"candidates":[],
@@ -1072,6 +1109,12 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                     if (pending.get(sig["inst"]) or {}).get("status")!="TRACKED":
                         scan["status"]="ORDER_FILL_UNCERTAIN_BLOCK"
                         break
+                elif sig.get("preorder_rejection"):
+                    scan["rejections"].append({
+                        "inst": sig["inst"], "side": "SHORT",
+                        "reason": sig["preorder_rejection"],
+                        "pre_order_quote": sig.get("pre_order_quote"),
+                    })
             except Exception as exc:
                 attempts=state.get("volume_long_order_attempts") or {}
                 if (attempts.get(sig["inst"]) or {}).get("status") in (
