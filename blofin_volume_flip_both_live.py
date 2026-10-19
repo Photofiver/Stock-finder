@@ -555,10 +555,10 @@ def _open_one(bot, state, sig, instruments):
         print(f"{STRATEGY}: insufficient free bankroll for {inst}: {spendable}")
         return False
 
-    # Split remaining capital across at least two slots when feasible.
-    target = min(MAX_PER_COIN_USDT, spendable/Decimal("2"))
-    if target < MIN_PER_COIN_USDT:
-        target = min(MAX_PER_COIN_USDT, spendable)
+    # User-requested 20 USDT per trade: allocate up to 20 to the first
+    # qualifying signal, never exceed shared bankroll, actual exchange funds,
+    # per-position ceiling, or the 0.50 USDT cash buffer.
+    target = min(MAX_PER_COIN_USDT, spendable)
     quote = bot.checked_preorder_quote(inst, side, sig["close"],
                                       enforce_adverse_gap=True)
     sized = bot.size_for_notional(bot.d(quote["expected_fill"]), meta, target)
