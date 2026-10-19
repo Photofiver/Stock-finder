@@ -1,4 +1,4 @@
-"""READ-ONLY replay of new LIVE volume price tunnel on real old JSON trades.
+"""READ-ONLY replay of adaptive LIVE volume price tunnel on real old JSON trades.
 
 Original trade RESULTS and fills come only from blofin_live_state.json.
 Historical confirmed 5m OHLCV is read from PUBLIC BloFin candle API only,
