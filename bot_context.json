@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-19T20:11:37.590172+00:00",
+  "generated_utc": "2026-10-19T23:48:05.483223+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -11,36 +11,10 @@
   ],
   "last_known_state": {
     "bankroll_start_usdt": "20",
-    "current_bankroll_estimated_usdt": "18.963269825120201",
-    "fees_usdt": -7.98650329182,
-    "gross_realized_pnl_usdt": -8.33949417536011,
+    "current_bankroll_estimated_usdt": "18.927712585120203",
+    "fees_usdt": -8.03126053182,
+    "gross_realized_pnl_usdt": -8.33029417536011,
     "last_12_trades": [
-      {
-        "closed_utc": "2026-10-19T15:56:13.864000+00:00",
-        "exit_reason": "external close",
-        "gross_pnl_usdt": 0.091542,
-        "inst": "JASMY-USDT",
-        "net_pnl_usdt": 0.0683385996,
-        "opened_utc": "2026-10-19T15:36:01.035000+00:00",
-        "order_book_confirmed": null,
-        "order_book_directional_pct": null,
-        "rank": 89,
-        "result": "WIN",
-        "side": "SHORT"
-      },
-      {
-        "closed_utc": "2026-10-19T16:12:02.825000+00:00",
-        "exit_reason": "external close",
-        "gross_pnl_usdt": -0.09,
-        "inst": "ATH-USDT",
-        "net_pnl_usdt": -0.11315736,
-        "opened_utc": "2026-10-19T16:01:03.564000+00:00",
-        "order_book_confirmed": null,
-        "order_book_directional_pct": null,
-        "rank": 184,
-        "result": "LOSS",
-        "side": "SHORT"
-      },
       {
         "closed_utc": "2026-10-19T16:35:11.829000+00:00",
         "exit_reason": "external close",
@@ -170,10 +144,36 @@
         "rank": 184,
         "result": "LOSS",
         "side": "LONG"
+      },
+      {
+        "closed_utc": "2026-10-19T20:49:05.694000+00:00",
+        "exit_reason": "external close",
+        "gross_pnl_usdt": -0.086,
+        "inst": "FLOCK-USDT",
+        "net_pnl_usdt": -0.10869884,
+        "opened_utc": "2026-10-19T20:11:03.052000+00:00",
+        "order_book_confirmed": null,
+        "order_book_directional_pct": null,
+        "rank": 84,
+        "result": "LOSS",
+        "side": "SHORT"
+      },
+      {
+        "closed_utc": "2026-10-19T21:09:26.724000+00:00",
+        "exit_reason": "external close",
+        "gross_pnl_usdt": 0.0952,
+        "inst": "PHA-USDT",
+        "net_pnl_usdt": 0.0731416,
+        "opened_utc": "2026-10-19T21:06:07.742000+00:00",
+        "order_book_confirmed": null,
+        "order_book_directional_pct": null,
+        "rank": 1,
+        "result": "WIN",
+        "side": "LONG"
       }
     ],
-    "last_live_scan_utc": "2026-10-19T20:10:00+00:00",
-    "last_run_utc": "2026-10-19T20:11:07.006000+00:00",
+    "last_live_scan_utc": "2026-10-19T23:45:00+00:00",
+    "last_run_utc": "2026-10-19T23:46:27.763000+00:00",
     "last_scan_rejections": [
       {
         "inst": "HUMA-USDT",
@@ -263,22 +263,15 @@
     "last_scan_status": "RANK_NOT_ALLOWED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
-      "losses": 316,
-      "total": 523,
+      "losses": 317,
+      "total": 525,
       "unverified": 4,
-      "wins": 203
+      "wins": 204
     },
-    "net_realized_pnl_usdt": -16.325997467180112,
-    "open_positions": [
-      {
-        "hold_policy": "VOLUME_FLIP_BOTH_NO_TPSL",
-        "inst": "FLOCK-USDT",
-        "opened_utc": "2026-10-19T20:11:03.052000+00:00",
-        "side": "SHORT"
-      }
-    ],
+    "net_realized_pnl_usdt": -16.36155470718011,
+    "open_positions": [],
     "risk_stop_triggered": false,
-    "trade_history_records": 517
+    "trade_history_records": 519
   },
   "live_strategy": {
     "additional_entry_filters": [
@@ -355,12 +348,12 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-19T20:11:07.006000+00:00",
+    "latest_live_run_utc": "2026-10-19T23:46:27.763000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
     "source_sha256": {
-      ".github/workflows/blofin_live_signal_watch.yml": "a9f9eb9c5452f9e1281de6f9482b9497700e14e4a90dda0976d969c7522c1469",
+      ".github/workflows/blofin_live_signal_watch.yml": "b340ce3b67a575e11fbc0cf0c2ed7cda22919c5cb0c38e8103cd913b0670a41d",
       "blofin_fast_scan_events_writer.py": "ada7e432a5003fc8e316794516256815e771f8f7441e566f7b4386c7b5b4651c",
       "blofin_live_hourly.py": "ddd5d282fa56ff7be99c5a83708d2b7fa5332b63f54ebdd649e05c178c1c54e2",
       "blofin_live_signal_watch.py": "99c93c557a648af88346ed9af6fb30b4ef69bd6842aac17a15576551e96fb870",
