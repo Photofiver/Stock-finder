@@ -67,6 +67,32 @@ class Setups(unittest.TestCase):
         s=live.entry_signal(self.bot,bars("SHORT"),T)
         self.assertEqual(s["side"],"SHORT")
         self.assertEqual(s["signal_volume"],80)
+    def test_volume_strength_beats_price_rank_for_long_and_short(self):
+        weak = bars("LONG")
+        weak[-1]["v"] = 70
+        strong = bars("SHORT")
+        strong[-1]["v"] = 96
+        low = live.entry_signal(self.bot, weak, T)
+        high = live.entry_signal(self.bot, strong, T)
+        self.assertEqual(low["side"], "LONG")
+        self.assertEqual(high["side"], "SHORT")
+        self.assertLess(low["volume_strength_20"], high["volume_strength_20"])
+        for signal, coin, rank in ((low, "LOWRANK-USDT", 1),
+                                   (high, "HIGHRANK-USDT", 178)):
+            signal.update(inst=coin, rank=rank)
+            self.assertAlmostEqual(signal["volume_strength_20"],
+                                   signal["signal_volume"]/signal["signal_mean20_prev"])
+        selected = live.prioritize_volume_signals([low, high])
+        self.assertEqual([s["inst"] for s in selected],
+                         ["HIGHRANK-USDT", "LOWRANK-USDT"])
+        self.assertEqual([s["rank"] for s in selected], [178, 1])
+        self.assertEqual([s["side"] for s in selected], ["SHORT", "LONG"])
+
+    def test_equal_volume_strength_has_stable_tie_break(self):
+        a = {"inst":"COIN-A","rank":42,"volume_strength_20":0.8}
+        b = {"inst":"COIN-B","rank":5,"volume_strength_20":0.8}
+        self.assertEqual(live.prioritize_volume_signals([a,b]), [b,a])
+
     def test_block_if_volume_above_mean20(self):
         b=bars("LONG");b[-1]["v"]=120
         self.assertIsNone(live.entry_signal(self.bot,b,T))
@@ -185,6 +211,32 @@ class Broker(unittest.TestCase):
         s=live.entry_signal(self.bot,bars(side),T)
         s.update(inst=coin,rank=1)
         return s
+    def test_full_top200_scan_attempts_strongest_volume_first(self):
+        weak = bars("LONG")
+        weak[-1]["v"] = 70
+        strong = bars("SHORT")
+        strong[-1]["v"] = 96
+        ranking = ["ABC-USDT", "XYZ-USDT"] + [f"OTHER-{i}-USDT" for i in range(198)]
+        seen = []
+        def confirmed(insts, close):
+            self.assertEqual(close, T)
+            return {"ABC-USDT":weak, "XYZ-USDT":strong}
+        def observe(bot, state, sig, instruments):
+            seen.append((sig["inst"], sig["rank"], sig["volume_strength_20"]))
+            return False
+        with patch.dict("os.environ", {"LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES":"false"}):
+            with patch.object(live, "_open_one", side_effect=observe):
+                live.run(self.bot, self.state, ranking, {}, self.instruments, T, confirmed)
+        self.assertEqual([coin for coin, rank, strength in seen],
+                         ["XYZ-USDT", "ABC-USDT"])
+        self.assertEqual([rank for coin, rank, strength in seen], [2, 1])
+        scan = self.state["volume_long_last_scan"]
+        self.assertEqual(scan["matched"], 2)
+        self.assertEqual(scan["selection_priority"], "SIGNAL_VOLUME_DIV_PREVIOUS_20_BAR_MEAN_DESC")
+        self.assertEqual([x["inst"] for x in scan["candidates"]],
+                         ["XYZ-USDT", "ABC-USDT"])
+        self.assertEqual(scan["entries"], [])
+
     @patch("blofin_trade_charts.capture_chart",side_effect=RuntimeError("no rendering in offline tests"))
     def test_buy_long_sell_short_each_one_per_coin_tpsl(self,chart):
         self.assertTrue(live._open_one(self.bot,self.state,self.signal("ABC-USDT","LONG"),self.instruments))
