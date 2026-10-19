@@ -25,8 +25,6 @@ SL_PCT = Decimal("0.005")
 TP_POLICY = "TP055"
 SL_POLICY = "SL05"
 TRIGGER_TYPE = "mark"  # Match unrealized PnL displayed by BloFin.
-ENTRY_VOLUME_STRENGTH_MIN = 0.90  # inclusive; volume / prior 20-bar mean
-ENTRY_VOLUME_STRENGTH_MAX = 1.00  # exclusive; do not enter at or above mean
 LEGACY_HOLD_POLICY = "VOLUME_REV_SHORT_LONG"
 FIVE = 300_000
 VOL_MIN = 3.0
@@ -1167,8 +1165,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
     scan={"strategy":STRATEGY,"selection_priority":"SIGNAL_VOLUME_DIV_PREVIOUS_20_BAR_MEAN_DESC",
           "entry_volume_trend_filter":"DAY_UK_DOMINANT_COLOUR_VOLUME",
           "entry_price_tunnel_filter":"STRAIGHT_COLOUR_VOLUME_PRICE_TUNNEL_20BAR_INSIDE",
-          "volume_entry_strength_min_inclusive":ENTRY_VOLUME_STRENGTH_MIN,
-          "volume_entry_strength_max_exclusive":ENTRY_VOLUME_STRENGTH_MAX,
+          "volume_entry_strength_range_filter":"DISABLED",
           "long_entry_rank_range_inclusive":[1,LONG_ENTRY_MAX_RANK],
           "long_requires_falling_prior_20bar_mean":True,
           "short_entry_min_adverse_gap_pct_inclusive":float(SHORT_ENTRY_MIN_ADVERSE_GAP_PCT),
@@ -1347,11 +1344,9 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
             bars=confirmed.get(inst)
             if not bars or int(bot.bar_close_ms(bars[-1]))!=expected_close_ms:continue
             sig=entry_signal(bot,bars,expected_close_ms)
-            # Entry-only filter: 90% <= signal 5m volume / PRIOR 20-bar
-            # average < 100%. Does not alter exits or protective TP/SL.
-            if (sig is not None and
-                    ENTRY_VOLUME_STRENGTH_MIN <= sig["volume_strength_20"]
-                    < ENTRY_VOLUME_STRENGTH_MAX):
+            # No 90-100% MA20 signal-volume range gate. Other volume,
+            # daily-trend, tunnel and broker-risk rules are unchanged.
+            if sig is not None:
                 long_rejection = long_entry_extra_rejection(sig, rank)
                 if long_rejection:
                     scan["rejections"].append({
