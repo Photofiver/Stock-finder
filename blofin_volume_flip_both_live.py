@@ -575,19 +575,34 @@ def volume_price_tunnel_from_bars(bars, expected_close_ms, side):
     touching = reference_upper == reference_lower
     reversed_on_signal = (previous_upper >= previous_lower and inverted)
     trend_direction = ("LONG" if side == "SHORT" else "SHORT") if inverted else side
-    upper = max(reference_upper, reference_lower)
-    lower = min(reference_upper, reference_lower)
-    inside = (not touching and lower <= signal[3] <= upper)
-    # When the two straight lines cross, a CLOSED volume-flip signal may
-    # confirm a price move through the new boundary in the new direction.
+
+    # Rebuild the geometry for the NEW direction after a crossover.
+    # A green upper boundary always joins GREEN candle HIGHS for LONG,
+    # never the green candle LOWS used by the former SHORT channel.
+    upper_colour = "GREEN" if trend_direction == "LONG" else "RED"
+    lower_colour = "RED" if trend_direction == "LONG" else "GREEN"
+    upper_anchors = strongest[upper_colour]
+    lower_anchors = strongest[lower_colour]
+    upper = straight_at(upper_anchors, "high", timestamp)
+    lower = straight_at(lower_anchors, "low", timestamp)
+    current_previous_upper = straight_at(upper_anchors, "high", timestamp - FIVE)
+    current_previous_lower = straight_at(lower_anchors, "low", timestamp - FIVE)
+    ordered = upper > lower and all(
+        math.isfinite(x) and x > 0
+        for x in (upper, lower, current_previous_upper, current_previous_lower))
+    inside = ordered and lower <= signal[3] <= upper
+    # A reversal can also confirm a directional price breakout; volume flip
+    # and the existing LIVE risk/entry gates still have to agree.
     confirmed_reversal_breakout = (
-        reversed_on_signal and
+        ordered and reversed_on_signal and
         ((trend_direction == "LONG" and signal[3] > upper) or
          (trend_direction == "SHORT" and signal[3] < lower))
     )
     eligible_price = inside or confirmed_reversal_breakout
     if touching:
         reason = "LINES_TOUCH_TREND_UNDECIDED"
+    elif not ordered:
+        reason = "NEW_DIRECTION_TUNNEL_CROSSED"
     elif inverted:
         reason = "PRICE_LINES_CROSSED_TREND_REVERSED"
     elif inside:
@@ -603,22 +618,20 @@ def volume_price_tunnel_from_bars(bars, expected_close_ms, side):
         "tunnel_direction": trend_direction if not touching else "NEUTRAL",
         "colour_order_changed": inverted,
         "crossing_on_signal": reversed_on_signal,
-        "upper_color": reference_lower_colour if inverted else reference_upper_colour,
-        "lower_color": reference_upper_colour if inverted else reference_lower_colour,
+        "upper_color": upper_colour,
+        "lower_color": lower_colour,
         "upper_price": upper,
         "lower_price": lower,
-        "previous_upper_price": previous_upper,
-        "previous_lower_price": previous_lower,
+        "previous_upper_price": current_previous_upper,
+        "previous_lower_price": current_previous_lower,
         "reference_upper_price": reference_upper,
         "reference_lower_price": reference_lower,
         "previous_close_price": previous[3],
         "signal_close_price": signal[3],
-        "upper_anchors": reference_lower_anchors if inverted else reference_upper_anchors,
-        "lower_anchors": reference_upper_anchors if inverted else reference_lower_anchors,
-        "upper_slope_per_5m": (
-            reference_lower - previous_lower if inverted else reference_upper - previous_upper),
-        "lower_slope_per_5m": (
-            reference_upper - previous_upper if inverted else reference_lower - previous_lower),
+        "upper_anchors": upper_anchors,
+        "lower_anchors": lower_anchors,
+        "upper_slope_per_5m": upper - current_previous_upper,
+        "lower_slope_per_5m": lower - current_previous_lower,
         "entry_allowed": not touching and eligible_price,
         "breakout_confirmed": confirmed_reversal_breakout,
         "anchor_selection": "TOP_2_VOLUME_BARS_PER_COLOUR_CHRONOLOGICAL",
