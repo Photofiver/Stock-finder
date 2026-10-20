@@ -936,5 +936,51 @@ class EmergencyProtectionRegression(unittest.TestCase):
         bot._run_for_tracked_position.assert_not_called()
         self.assertNotIn("exit_pending",state["positions"]["ARKM-USDT"])
 
+class PrivateGet429Recovery(unittest.TestCase):
+    """No LIVE orders: authenticated GET backoff must never duplicate a trade."""
+
+    def test_private_get_429_recovers_with_new_signature(self):
+        from unittest.mock import Mock
+        blocked = Mock(status_code=429, headers={"Retry-After": "0"})
+        ok = Mock(status_code=200, headers={})
+        ok.json.return_value = {"code": "0", "data": [{"instId": "MOCK-USDT"}]}
+        with patch.object(hourly.requests, "get", side_effect=[blocked, ok]) as req:
+            with patch.object(hourly, "sign", side_effect=[
+                    {"ACCESS-NONCE": "first"}, {"ACCESS-NONCE": "second"}]) as sign:
+                with patch.object(hourly.time, "sleep") as wait:
+                    hourly._private_get_last_at = 0.0
+                    result = hourly.private_request(
+                        "GET", "/api/v1/account/positions")
+        self.assertEqual(result, [{"instId": "MOCK-USDT"}])
+        self.assertEqual(req.call_count, 2)
+        self.assertEqual(sign.call_count, 2)
+        self.assertTrue(wait.called)
+
+    def test_private_get_429_exhausted_raises(self):
+        from unittest.mock import Mock
+        import requests
+        blocked = Mock(status_code=429, headers={})
+        blocked.raise_for_status.side_effect = requests.HTTPError("429 Too Many Requests")
+        with patch.object(hourly.requests, "get", return_value=blocked) as req:
+            with patch.object(hourly.time, "sleep"):
+                hourly._private_get_last_at = 0.0
+                with self.assertRaises(requests.HTTPError):
+                    hourly.private_request("GET", "/api/v1/account/positions")
+        self.assertEqual(req.call_count, hourly.PRIVATE_GET_429_ATTEMPTS)
+
+    def test_private_post_429_never_retried(self):
+        from unittest.mock import Mock
+        import requests
+        blocked = Mock(status_code=429)
+        blocked.raise_for_status.side_effect = requests.HTTPError("429 Too Many Requests")
+        with patch.object(hourly.requests, "request", return_value=blocked) as req:
+            with patch.object(hourly.time, "sleep") as wait:
+                with self.assertRaises(requests.HTTPError):
+                    hourly.private_request("POST", "/api/v1/trade/order",
+                                           body={"instId": "MOCK-USDT"})
+        req.assert_called_once()
+        wait.assert_not_called()
+
+
 if __name__=="__main__":
     unittest.main()
