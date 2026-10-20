@@ -42,37 +42,6 @@ MAX_PER_COIN_USDT = Decimal("5")
 MIN_PER_COIN_USDT = Decimal("5")
 CASH_BUFFER_USDT = Decimal("0.50")
 AGE_MAX_MS = 120_000
-MARK_SAFETY_TICKS = Decimal("2")
-
-
-def _fresh_mark_price(bot, inst):
-    """Broker Mark used for TP/SL; stale or missing quotes fail closed."""
-    rows = bot.market_get("/api/v1/market/mark-price", {"instId": inst})
-    row = next((r for r in (rows or []) if isinstance(r, dict)
-                and r.get("instId") == inst), None)
-    if row is None:
-        raise RuntimeError(f"{inst}: missing broker Mark price")
-    mark = bot.d(row.get("markPrice") or "0")
-    ts = int(row.get("ts") or 0)
-    age = int(bot.now_ms()) - ts
-    if not (mark.is_finite() and mark > 0 and ts > 0 and -5000 <= age <= 15000):
-        raise RuntimeError(f"{inst}: invalid or stale Mark (age={age}ms)")
-    return mark
-
-
-def _mark_tpsl_valid(side, tp, sl, mark, tick):
-    """Require at least two full price ticks between Mark and TP/SL."""
-    margin = tick * MARK_SAFETY_TICKS
-    if side == "LONG":
-        return sl + margin < mark < tp - margin
-    if side == "SHORT":
-        return tp + margin < mark < sl - margin
-    return False
-
-
-
-
-
 def _protection_prices(bot, pos, meta):
     """Tick-align protected prices; freeze tunnel lines at signal close.
 
@@ -195,17 +164,6 @@ def _ensure_protection(bot,state,pos,meta):
         except Exception as exc:
             pos["protection_error"]=str(exc)[:250]
         pos["protection_status"]="TPSL_UNCERTAIN_NEEDS_BROKER_CONFIRMATION"
-        bot.save_state(state)
-        return False
-    # The exchange triggers TP/SL on Mark, not the previous 5m close.
-    try:
-        mark = _fresh_mark_price(bot, inst)
-        tick = bot.d((meta or {}).get("tickSize") or "0")
-        if not _mark_tpsl_valid(pos["side"], tp, sl, mark, tick):
-            raise RuntimeError(f"Mark {mark} too close/outside TP {tp} or SL {sl}")
-    except Exception as exc:
-        pos["protection_status"]="TPSL_UNCERTAIN_NEEDS_BROKER_CONFIRMATION"
-        pos["protection_error"]=f"PRE_TPSL_MARK_CHECK: {type(exc).__name__}: {exc}"[:250]
         bot.save_state(state)
         return False
     client=("voltp055"+uuid.uuid4().hex)[:32]
@@ -1056,18 +1014,6 @@ def _open_one(bot, state, sig, instruments):
     except (KeyError, ValueError, TypeError, ArithmeticError, RuntimeError) as exc:
         sig["preorder_rejection"] = "TUNNEL_TPSL_UNTRADEABLE"
         sig["preorder_tpsl_error"] = f"{type(exc).__name__}: {exc}"[:200]
-        return False
-    # Validate against a fresh MARK before placing a real market order.
-    try:
-        mark = _fresh_mark_price(bot, inst)
-        tick = bot.d(meta.get("tickSize") or "0")
-        tp, sl = _protection_prices(bot, tunnel_pos, meta)
-        if not _mark_tpsl_valid(side, tp, sl, mark, tick):
-            raise RuntimeError(f"Mark {mark} too close to TP {tp} or SL {sl}")
-    except Exception as exc:
-        sig["preorder_rejection"]="MARK_TPSL_NOT_SAFE"
-        sig["preorder_tpsl_error"]=f"{type(exc).__name__}: {exc}"[:200]
-        print(f"{STRATEGY}: BLOCK PRE-ENTRY {inst}: {exc}")
         return False
     sized = bot.size_for_notional(bot.d(quote["expected_fill"]), meta, target)
     if not sized:
