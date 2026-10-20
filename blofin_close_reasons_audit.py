@@ -9,7 +9,141 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import blofin_live_hourly as bot
+import base64
+import hashlib
+import hmac
+import time
+import uuid
+from urllib.parse import urlencode, quote
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError
+
+REPO = os.environ.get("GITHUB_REPOSITORY", "Photofiver/Stock-finder")
+GH_TOKEN = os.environ.get("GH_TOKEN", "").strip()
+BLOFIN_KEY = os.environ.get("BLOFIN_API_KEY", "").strip()
+BLOFIN_SECRET = os.environ.get("BLOFIN_SECRET_KEY", "").strip()
+BLOFIN_PASSPHRASE = os.environ.get("BLOFIN_PASSPHRASE", "").strip()
+NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "").strip()
+
+
+def _request_json(url, method="GET", data=None, headers=None):
+    req = Request(url, data=data, method=method, headers=headers or {})
+    with urlopen(req, timeout=35) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _gh_headers(raw=False):
+    return {
+        "Authorization": "Bearer " + GH_TOKEN,
+        "Accept": ("application/vnd.github.raw+json" if raw
+                   else "application/vnd.github+json"),
+        "User-Agent": "BloFinCloseReasonAudit/1.0",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+
+def _gh_url(path):
+    return ("https://api.github.com/repos/" + REPO +
+            "/contents/" + quote(path, safe="/"))
+
+
+def load_remote(path):
+    # GitHub raw media type handles large (>1 MB) trading state files.
+    req = Request(_gh_url(path) + "?ref=main", headers=_gh_headers(True))
+    with urlopen(req, timeout=45) as response:
+        body = response.read()
+    doc = json.loads(body.decode("utf-8"))
+    if isinstance(doc, dict) and "content" in doc and "encoding" in doc:
+        doc = json.loads(base64.b64decode(doc["content"]).decode("utf-8"))
+    return doc
+
+
+def get_report():
+    try:
+        result = _request_json(_gh_url("blofin_close_reasons.json") + "?ref=main",
+                               headers=_gh_headers())
+    except HTTPError as exc:
+        if exc.code == 404:
+            return {}, None
+        raise
+    if not isinstance(result, dict) or "sha" not in result:
+        raise RuntimeError("Expected GitHub contents response")
+    data = base64.b64decode(result["content"]).decode("utf-8")
+    return json.loads(data), result["sha"]
+
+
+def save_report(data):
+    url = _gh_url("blofin_close_reasons.json")
+    # Optimistic retry: LIVE scans can commit while this read-only audit runs.
+    for attempt in range(3):
+        latest, sha = get_report()
+        merged = dict(latest)
+        merged.update(data)
+        payload = {
+            "message": "Save verified BloFin closing-order evidence",
+            "branch": "main",
+            "content": base64.b64encode(
+                (json.dumps(merged, indent=2, ensure_ascii=False) + "\n").encode()
+            ).decode(),
+        }
+        if sha:
+            payload["sha"] = sha
+        try:
+            _request_json(url, method="PUT",
+                data=json.dumps(payload).encode(),
+                headers={**_gh_headers(), "Content-Type": "application/json"})
+            return True
+        except HTTPError as exc:
+            if exc.code not in (409, 422) or attempt == 2:
+                raise
+            time.sleep(2)
+    return False
+
+
+def private_get(method, path, params=None):
+    if method != "GET" or path != "/api/v1/trade/orders-history":
+        raise RuntimeError("READ_ONLY_BROKER_AUDIT_BLOCKED")
+    query = urlencode(params or {})
+    request_path = path + ("?" + query if query else "")
+    for attempt in range(3):
+        timestamp = str(int(time.time() * 1000))
+        nonce = str(uuid.uuid4())
+        prehash = request_path + "GET" + timestamp + nonce
+        hex_digest = hmac.new(BLOFIN_SECRET.encode(), prehash.encode(),
+                              hashlib.sha256).hexdigest().encode()
+        headers = {
+            "ACCESS-KEY": BLOFIN_KEY,
+            "ACCESS-SIGN": base64.b64encode(hex_digest).decode(),
+            "ACCESS-TIMESTAMP": timestamp,
+            "ACCESS-NONCE": nonce,
+            "ACCESS-PASSPHRASE": BLOFIN_PASSPHRASE,
+            "Accept": "application/json",
+        }
+        try:
+            payload = _request_json(
+                "https://openapi.blofin.com" + request_path, headers=headers)
+            if str(payload.get("code")) != "0":
+                raise RuntimeError("BloFin response " + str(payload.get("code")))
+            return payload.get("data") or []
+        except HTTPError as exc:
+            if exc.code != 429 or attempt == 2:
+                raise
+            time.sleep(2 * (attempt + 1))
+    return []
+
+
+def notify(message):
+    if not NTFY_TOPIC:
+        return
+    try:
+        req = Request("https://ntfy.sh/" + NTFY_TOPIC,
+            method="POST", data=message.encode("utf-8"),
+            headers={"Title": "BloFin VERIFIED CLOSE CAUSE"})
+        with urlopen(req, timeout=8):
+            pass
+    except Exception as exc:
+        print("NOTIFY_FAILURE:", type(exc).__name__)
+
 
 STATE = Path("blofin_live_state.json")
 AUDIT = Path("blofin_close_reasons.json")
@@ -51,7 +185,7 @@ def classify(trade, orders):
             continue
         category = str(order.get("orderCategory") or "").lower()
         if category not in ("tp", "sl", "normal", "full_liquidation",
-                            "partial_liquidation", "adl"):
+                            "partial_liquidation", "liquidation", "adl"):
             continue
         candidates.append(order)
 
@@ -139,17 +273,16 @@ def audit(state, existing, request, notifier=None):
 
 
 def main():
-    state = json.loads(STATE.read_text(encoding="utf-8"))
-    existing = json.loads(AUDIT.read_text(encoding="utf-8")) if AUDIT.exists() else {}
-    records, processed = audit(state, existing, bot.private_request, bot.notify)
-    if records != existing:
-        temp = AUDIT.with_suffix(".json.tmp")
-        temp.write_text(json.dumps(records, indent=2, ensure_ascii=False) + "\n",
-                        encoding="utf-8")
-        temp.replace(AUDIT)
+    if not GH_TOKEN or not all((BLOFIN_KEY, BLOFIN_SECRET, BLOFIN_PASSPHRASE)):
+        raise RuntimeError("GitHub or BloFin API credentials unavailable")
+    state = load_remote("blofin_live_state.json")
+    old, _ = get_report()
+    current, processed = audit(state, old, private_get, notify)
+    if current != old:
+        save_report(current)
     print("BLOFIN_CLOSE_REASON_AUDIT checked=", processed,
-          "total=", len(records),
-          "verified=", sum(r.get("status") == "verified" for r in records.values()))
+          "total=", len(current),
+          "verified=", sum(r.get("status") == "verified" for r in current.values()))
 
 
 if __name__ == "__main__":
