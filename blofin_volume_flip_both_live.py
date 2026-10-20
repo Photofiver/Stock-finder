@@ -38,7 +38,7 @@ VOL_MAX_EXCLUSIVE = 4.0
 BTC15_MAX = 0.062055813
 COIN15_MIN = -0.10322961
 MAX_POSITIONS = 4  # additional to per-coin uniqueness; existing account cap
-MAX_PER_COIN_USDT = Decimal("20")
+MAX_PER_COIN_USDT = Decimal("5")
 MIN_PER_COIN_USDT = Decimal("5")
 CASH_BUFFER_USDT = Decimal("0.50")
 AGE_MAX_MS = 120_000
@@ -967,7 +967,7 @@ def _open_one(bot, state, sig, instruments):
         return False
 
     # Reserve capital across all tracked/account positions. Do NOT count the
-    # same 25 USDT bankroll anew for every independent symbol.
+    # full shared bankroll anew for every independent symbol.
     bankroll = bot.current_live_bankroll(state)
     committed = sum(
         (bot.d(p.get("notional_usdt") or "0") for p in tracked.values()),
@@ -980,9 +980,9 @@ def _open_one(bot, state, sig, instruments):
         print(f"{STRATEGY}: insufficient free bankroll for {inst}: {spendable}")
         return False
 
-    # User-requested 20 USDT per trade: allocate up to 20 to the first
-    # qualifying signal, never exceed shared bankroll, actual exchange funds,
-    # per-position ceiling, or the 0.50 USDT cash buffer.
+    # Shared test capital: up to 20 USDT total across four positions.
+    # Each new order uses at most 5 USDT while respecting exchange funds,
+    # the shared cap, and the cash buffer.
     target = min(MAX_PER_COIN_USDT, spendable)
     quote = bot.checked_preorder_quote(inst, side, sig["close"],
                                       enforce_adverse_gap=True)
