@@ -1508,6 +1508,34 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
             if candle is None or candle[4] <= 0:
                 continue
             side = tunnel["tunnel_direction"]
+            # A valid four-pivot price tunnel is not sufficient on its own:
+            # the established UK-day green/red Volume-bar trend must agree.
+            trend_data = confirmed_trends.get(inst)
+            if trend_data is None:
+                scan["volume_trend_backfill_attempts"] += 1
+                try:
+                    trend_data = _bootstrap_volume_trend_history(
+                        bot, inst, expected_close_ms, volume_trends.get(inst))
+                    if trend_data is not None:
+                        volume_trends[inst] = trend_data
+                        confirmed_trends[inst] = trend_data
+                        scan["volume_trend_backfill_successes"] += 1
+                except Exception as exc:
+                    scan["rejections"].append({
+                        "inst": inst, "rank": rank, "side": side,
+                        "reason": "VOLUME_TREND_HISTORY_UNAVAILABLE",
+                        "error": f"{type(exc).__name__}: {exc}"[:220],
+                    })
+            trend_direction = (trend_data or {}).get("trend", "UNKNOWN")
+            if trend_direction != side:
+                scan["rejections"].append({
+                    "inst": inst, "rank": rank, "side": side,
+                    "reason": ("VOLUME_TREND_UNKNOWN"
+                               if trend_direction == "UNKNOWN"
+                               else "VOLUME_TREND_OPPOSES_ENTRY"),
+                    "volume_trend": trend_direction,
+                })
+                continue
             mean20 = _previous20_mean(rows, expected_close_ms-FIVE)
             strength = candle[4]/mean20 if mean20 and mean20 > 0 else 0.0
             sig = {
@@ -1518,6 +1546,9 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                 "close": candle[3], "signal_volume": candle[4],
                 "volume_strength_20": strength,
                 "volume_ratio": strength, "signal_mean20_prev": mean20,
+                "volume_trend_direction": trend_direction,
+                "volume_trend_peak": trend_data["peak_volume"],
+                "volume_trend_started_close_ms": trend_data["trend_started_close_ms"],
                 "pivot_tunnel_entry": True,
                 "pivot_tunnel_info": {
                     "last_confirmed_high": tunnel["last_confirmed_high"],
@@ -1530,7 +1561,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
             matches.append(sig)
         matches = prioritize_volume_signals(matches)
         scan["selection_priority"] = "PIVOT_FOURTH_CONFIRM_CLOSE_VOLUME_STRENGTH_TIE_RANK"
-        scan["entry_volume_trend_filter"] = "NOT_APPLIED_TO_PIVOT"
+        scan["entry_volume_trend_filter"] = "DAY_UK_DOMINANT_COLOUR_VOLUME"
         scan["matched"] = len(matches)
         scan["candidates"] = matches[:20]
         scan["status"] = "NO_MATCH" if not matches else "MATCHES_NO_ENTRY"
