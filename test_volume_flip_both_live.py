@@ -769,14 +769,66 @@ class Broker(unittest.TestCase):
         self.assertEqual(pos["protection_status"],"TP055_SL05_MARK_ACTIVE")
 
 
-    def test_new_tpsl_uses_mark_trigger_both_directions(self):
+    def test_tunnel_tpsl_uses_last_trade_price_both_directions(self):
         self.assertTrue(live._open_one(self.bot,self.state,self.signal("ABC-USDT","LONG"),self.instruments))
         self.assertTrue(live._open_one(self.bot,self.state,self.signal("XYZ-USDT","SHORT"),self.instruments))
         for coin in ("ABC-USDT","XYZ-USDT"):
             record=self.bot.exchange_tpsl[coin]
-            self.assertEqual(record["tpTriggerPriceType"],"mark")
-            self.assertEqual(record["slTriggerPriceType"],"mark")
-            self.assertEqual(self.state["positions"][coin]["protection_status"],"TUNNEL_LINES_MARK_ACTIVE")
+            self.assertEqual(record["tpTriggerPriceType"],"last")
+            self.assertEqual(record["slTriggerPriceType"],"last")
+            self.assertEqual(self.state["positions"][coin]["protection_status"],"TUNNEL_LINES_LAST_ACTIVE")
+
+    def test_old_mark_tunnel_amended_to_last_without_moving_boundaries(self):
+        pos={"strategy":live.STRATEGY,"inst":"ABC-USDT","side":"LONG",
+             "reference_entry":"100","tp":"101.0","sl":"99.0",
+             "tp_sl_mode":live.TUNNEL_TPSL_MODE,
+             "tunnel_tp_line":"101.0","tunnel_sl_line":"99.0",
+             "tpsl_id":"old-mark"}
+        self.state["positions"]["ABC-USDT"]=pos
+        self.bot.exchange_tpsl["ABC-USDT"]={
+            "state":"live","tpslId":"old-mark",
+            "tpTriggerPrice":"101.0","slTriggerPrice":"99.0",
+            "tpTriggerPriceType":"mark","slTriggerPriceType":"mark"}
+        self.assertTrue(live._ensure_protection(
+            self.bot,self.state,pos,self.instruments["ABC-USDT"]))
+        self.assertEqual(self.bot.amend_calls,1)
+        self.assertEqual(len(self.bot.posted),1)
+        self.assertEqual(self.bot.posted[0][1],"/api/v1/trade/amend-tpsl")
+        self.assertEqual(self.bot.posted[0][2]["newTpTriggerPriceType"],"last")
+        self.assertEqual(self.bot.posted[0][2]["newSlTriggerPriceType"],"last")
+        self.assertEqual(pos["tp"],"101.0")
+        self.assertEqual(pos["sl"],"99.0")
+        self.assertEqual(pos["tpsl_id"],"old-mark")
+        self.assertEqual(pos["protection_status"],"TUNNEL_LINES_LAST_ACTIVE")
+
+    def test_uncertain_mark_to_last_preserves_live_tunnel_order(self):
+        pos={"strategy":live.STRATEGY,"inst":"ABC-USDT","side":"LONG",
+             "reference_entry":"100","tp":"101.0","sl":"99.0",
+             "tp_sl_mode":live.TUNNEL_TPSL_MODE,
+             "tunnel_tp_line":"101.0","tunnel_sl_line":"99.0",
+             "tpsl_id":"old-mark"}
+        self.state["positions"]["ABC-USDT"]=pos
+        self.bot.exchange_tpsl["ABC-USDT"]={
+            "state":"live","tpslId":"old-mark",
+            "tpTriggerPrice":"101.0","slTriggerPrice":"99.0",
+            "tpTriggerPriceType":"mark","slTriggerPriceType":"mark"}
+        self.bot.defer_amend=True
+        self.bot.amend_uncertain=True
+        self.assertTrue(live._ensure_protection(
+            self.bot,self.state,pos,self.instruments["ABC-USDT"]))
+        self.assertTrue(pos["trigger_migration_deferred"])
+        self.assertEqual(pos["protection_status"],
+                         "TUNNEL_MARK_STILL_ACTIVE_AMEND_UNVERIFIED")
+        self.assertEqual(self.bot.amend_calls,1)
+        self.assertTrue(live._ensure_protection(
+            self.bot,self.state,pos,self.instruments["ABC-USDT"]))
+        self.assertEqual(self.bot.amend_calls,1)  # never repeat ambiguous POST
+        self.bot.exchange_tpsl["ABC-USDT"].update(
+            tpTriggerPriceType="last",slTriggerPriceType="last")
+        self.assertTrue(live._ensure_protection(
+            self.bot,self.state,pos,self.instruments["ABC-USDT"]))
+        self.assertFalse(pos.get("trigger_migration_deferred",False))
+        self.assertEqual(pos["protection_status"],"TUNNEL_LINES_LAST_ACTIVE")
 
     def test_existing_live_last_order_amended_without_cancel(self):
         pos={"strategy":live.STRATEGY,"inst":"ABC-USDT","side":"LONG",
