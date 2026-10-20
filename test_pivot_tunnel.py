@@ -26,7 +26,7 @@ class TestTunnel(unittest.TestCase):
         self.assertEqual(result["tunnel_direction"],"SHORT")
         self.assertEqual(result["fourth_confirmed_close_ms"],10*FIVE)
         self.assertFalse(evaluate_tunnel(rows,9*FIVE)["entry_allowed"])
-        rows[10*FIVE]=(8,9,7,8,130)
+        rows[10*FIVE]=(8,13,7,8,130)
         self.assertFalse(evaluate_tunnel(rows,11*FIVE)["entry_allowed"])
     def test_long_four_points(self):
         result=evaluate_tunnel(make_rows(reverse=True),10*FIVE)
