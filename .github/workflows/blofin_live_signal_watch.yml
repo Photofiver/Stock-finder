@@ -72,6 +72,9 @@ jobs:
             echo "Scheduled run started after boundary; checking immediately"
           fi
 
+      - name: Verify four-pivot tunnel candle rules
+        run: python -m unittest -q test_pivot_tunnel.py
+
       - name: Scan 5m LIVE signal and execute AUTO after revalidation
         env:
           BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
@@ -86,6 +89,7 @@ jobs:
           LIVE_VOLUME_REVERSE_LONG: 'false'
           LIVE_VOLUME_FLIP_BOTH: 'true'
           LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES: 'false'
+          LIVE_PIVOT_TUNNEL_ENABLED: 'true'
           LIVE_CANDLE_CONFIRM_WORKERS: '16'
           LIVE_SIGNAL_MAX_AGE_MS: '180000'
           LIVE_MAX_BANKROLL_USDT: '25.00'
