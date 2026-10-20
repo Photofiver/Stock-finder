@@ -30,7 +30,7 @@ TP_PCT = Decimal("0.0055")
 SL_PCT = Decimal("0.005")
 TP_POLICY = "TP055"
 SL_POLICY = "SL05"
-TRIGGER_TYPE = "mark"  # Match unrealized PnL displayed by BloFin.
+TRIGGER_TYPE = "last"  # Tunnel candles use last traded price, not mark-price PnL.
 LEGACY_HOLD_POLICY = "VOLUME_REV_SHORT_LONG"
 FIVE = 300_000
 VOL_MIN = 3.0
@@ -88,8 +88,10 @@ def _protection_prices(bot, pos, meta):
 
 
 def _ensure_mark_trigger(bot, state, pos, tp, sl):
-    """Verify broker OCO and safely amend existing LAST triggers to MARK."""
+    """Verify OCO and amend old MARK tunnel triggers to candle-aligned LAST."""
     inst=pos["inst"]
+    desired = (TRIGGER_TYPE if pos.get("tp_sl_mode") == TUNNEL_TPSL_MODE
+               else "mark")  # Preserve legacy / non-tunnel protections.
     try:
         detail=bot.private_request("GET","/api/v1/trade/order-tpsl-detail",
                     params={"instId":inst,"tpslId":str(pos["tpsl_id"])}) or {}
@@ -102,16 +104,17 @@ def _ensure_mark_trigger(bot, state, pos, tp, sl):
             raise RuntimeError("Active broker TP/SL is missing or differs from tracked levels")
         types=(str(detail.get("tpTriggerPriceType") or "").lower(),
                str(detail.get("slTriggerPriceType") or "").lower())
-        if types==(TRIGGER_TYPE,TRIGGER_TYPE):
-            pos.update(tp_trigger_type=TRIGGER_TYPE,sl_trigger_type=TRIGGER_TYPE,
-                       protection_status=("TUNNEL_LINES_MARK_ACTIVE"
+        if types==(desired,desired):
+            pos.update(tp_trigger_type=desired,sl_trigger_type=desired,
+                       protection_status=("TUNNEL_LINES_LAST_ACTIVE"
                                           if pos.get("tp_sl_mode") == TUNNEL_TPSL_MODE
                                           else "TP055_SL05_MARK_ACTIVE"))
+            pos.pop("trigger_migration_deferred",None)
             pos.pop("mark_amend_request_id",None)
             pos.pop("protection_error",None)
             bot.save_state(state)
             return True
-        if types!=("last","last"):
+        if types not in (("last","last"),("mark","mark")):
             raise RuntimeError("Unexpected broker TP/SL trigger types: "+str(types))
         if pos.get("mark_amend_request_id"):
             raise RuntimeError("Prior mark-trigger amendment is awaiting broker confirmation")
@@ -121,7 +124,7 @@ def _ensure_mark_trigger(bot, state, pos, tp, sl):
         bot.save_state(state)
         result=bot.private_request("POST","/api/v1/trade/amend-tpsl",body={
             "instId":inst,"tpslId":str(pos["tpsl_id"]),"requestId":request_id,
-            "newTpTriggerPriceType":TRIGGER_TYPE,"newSlTriggerPriceType":TRIGGER_TYPE
+            "newTpTriggerPriceType":desired,"newSlTriggerPriceType":desired
         })
         row=result[0] if isinstance(result,list) and result else (result or {})
         if str(row.get("code","0"))!="0":
@@ -129,8 +132,29 @@ def _ensure_mark_trigger(bot, state, pos, tp, sl):
         # Broker acknowledgement alone is insufficient; verify on next read.
         return _ensure_mark_trigger(bot,state,pos,tp,sl)
     except Exception as exc:
-        pos["protection_status"]="TPSL_MARK_VERIFICATION_PENDING"
+        pos["protection_status"]="TPSL_TRIGGER_VERIFICATION_PENDING"
         pos["protection_error"]=f"{type(exc).__name__}: {exc}"[:250]
+        # If MARK remains live at exactly the original tunnel boundaries,
+        # do not emergency-liquidate a protected position because an AMEND
+        # failed. Mark the migration deferred and pause NEW entries.
+        if desired == "last":
+            try:
+                check=bot.private_request("GET","/api/v1/trade/order-tpsl-detail",
+                    params={"instId":inst,"tpslId":str(pos["tpsl_id"])}) or {}
+                if isinstance(check,list):
+                    check=check[0] if check else {}
+                if (str(check.get("state") or "").lower()=="live"
+                    and str(check.get("tpslId") or "")==str(pos["tpsl_id"])
+                    and bot.d(check.get("tpTriggerPrice") or "0")==tp
+                    and bot.d(check.get("slTriggerPrice") or "0")==sl
+                    and str(check.get("tpTriggerPriceType") or "").lower()=="mark"
+                    and str(check.get("slTriggerPriceType") or "").lower()=="mark"):
+                    pos["trigger_migration_deferred"]=True
+                    pos["protection_status"]="TUNNEL_MARK_STILL_ACTIVE_AMEND_UNVERIFIED"
+                    bot.save_state(state)
+                    return True
+            except Exception:
+                pass
         bot.save_state(state)
         return False
 
@@ -177,8 +201,10 @@ def _ensure_protection(bot,state,pos,meta):
             "instId":inst,"marginMode":bot.MARGIN_MODE,"positionSide":"net",
             "side":"sell" if pos["side"]=="LONG" else "buy",
             "tpTriggerPrice":bot.clean_decimal(tp),"tpOrderPrice":"-1",
-            "tpTriggerPriceType":TRIGGER_TYPE,"slTriggerPrice":bot.clean_decimal(sl),
-            "slOrderPrice":"-1","slTriggerPriceType":TRIGGER_TYPE,
+            "tpTriggerPriceType":(TRIGGER_TYPE if pos.get("tp_sl_mode")==TUNNEL_TPSL_MODE else "mark"),
+            "slTriggerPrice":bot.clean_decimal(sl),
+            "slOrderPrice":"-1",
+            "slTriggerPriceType":(TRIGGER_TYPE if pos.get("tp_sl_mode")==TUNNEL_TPSL_MODE else "mark"),
             "size":"-1","reduceOnly":"true","clientOrderId":client,
         })
         row=response[0] if isinstance(response,list) and response else (response or {})
@@ -1132,7 +1158,7 @@ def _open_one(bot, state, sig, instruments):
     bot.notify(
         f"OPEN {side} {inst} | rank {sig['rank']}/200 | vol ratio {sig['volume_ratio'] or 0:.2f}x "
         f"| 1x isolated, notional {pos['notional_usdt']} USDT | "
-        f"TP {pos['tp']} / SL {pos['sl']} (Mark, {pos.get('tp_sl_mode')}) | " +
+        f"TP {pos['tp']} / SL {pos['sl']} (Last Price, {pos.get('tp_sl_mode')}) | " +
         ("EXIT: broker TP/SL or CLOSED 5m breaks last confirmed swing."
          if sig.get("pivot_tunnel_entry") else
          "EXIT: broker TP/SL or opposite CLOSED 5m volume > ENTRY candle volume."),
@@ -1332,6 +1358,12 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                 pos["protection_error"]=f"{type(exc).__name__}: {exc}"[:250]
                 bot.save_state(state)
             if protected:
+                if pos.get("trigger_migration_deferred"):
+                    # Old MARK OCO is still active; block NEW trading until
+                    # the live exchange confirms conversion to LAST.
+                    unprotected.append(inst)
+                    scan["rejections"].append({
+                        "inst":inst,"reason":"TRIGGER_LAST_AMEND_UNVERIFIED"})
                 attempt=(state.get("volume_long_order_attempts") or {}).get(inst)
                 if attempt and attempt.get("status") in ("PROTECTING","PROTECTION_UNCERTAIN"):
                     attempt["status"]="TRACKED"
