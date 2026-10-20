@@ -42,6 +42,7 @@ def trusted_tunnel_for_legacy_scan_tests(bars, close_ms, side):
     """Isolate previous volume/quote/rank tests from the new tunnel rule."""
     return {"status": "VALID", "reason": "PRICE_INSIDE_STRAIGHT_TUNNEL",
             "entry_allowed": True, "breakout_confirmed": False,
+            "upper_price": 101.0, "lower_price": 99.0,
             "tunnel_direction": side, "colour_order_changed": False,
             "side": side}
 
@@ -505,6 +506,8 @@ class Broker(unittest.TestCase):
     def signal(self,coin,side):
         s=live.entry_signal(self.bot,bars(side),T)
         s.update(inst=coin,rank=1)
+        s["volume_price_tunnel"] = trusted_tunnel_for_legacy_scan_tests(
+            bars(side), T, side)
         return s
     def test_live_trend_rejects_opposite_entry_and_logs_reason(self):
         ranking=["LONG-USDT","SHORT-USDT"]+[f"OTHER-{i}" for i in range(198)]
@@ -713,13 +716,46 @@ class Broker(unittest.TestCase):
                           "/api/v1/trade/order","/api/v1/trade/order-tpsl"])
         a=self.state["positions"]["ABC-USDT"]
         b=self.state["positions"]["XYZ-USDT"]
-        self.assertEqual((a["tp"],a["sl"]),("100.55","99.50"))
-        self.assertEqual((b["tp"],b["sl"]),("99.45","100.50"))
-        self.assertEqual((a["tp_policy"],b["sl_policy"]),("TP055","SL05"))
+        self.assertEqual((a["tp"],a["sl"]),("101.0","99.0"))
+        self.assertEqual((b["tp"],b["sl"]),("99.0","101.0"))
+        self.assertEqual((a["tp_policy"],b["sl_policy"]),("TUNNEL_LINE","TUNNEL_LINE"))
+        self.assertEqual(a["tp_sl_mode"], live.TUNNEL_TPSL_MODE)
+        self.assertEqual(b["tp_sl_mode"], live.TUNNEL_TPSL_MODE)
         self.assertEqual(self.bot.posted[1][2]["side"],"sell")
         self.assertEqual(self.bot.posted[3][2]["side"],"buy")
         self.assertFalse(live._open_one(self.bot,self.state,self.signal("ABC-USDT","LONG"),self.instruments))
         self.assertLessEqual(sum(Decimal(p["notional_usdt"]) for p in self.state["positions"].values()),Decimal("25"))
+    def test_tunnel_line_prices_for_new_long_and_short_round_to_ticks(self):
+        # No artificial distance or reward/risk restriction; prices are
+        # the saved straight-line boundaries at the signal close.
+        long_pos={"side":"LONG", "reference_entry":"0.04412",
+                  "tp_sl_mode":live.TUNNEL_TPSL_MODE,
+                  "tunnel_tp_line":"0.04761", "tunnel_sl_line":"0.0441146666666"}
+        short_pos={"side":"SHORT", "reference_entry":"0.04412",
+                   "tp_sl_mode":live.TUNNEL_TPSL_MODE,
+                   "tunnel_tp_line":"0.043901", "tunnel_sl_line":"0.045002"}
+        meta={"tickSize":"0.00001"}
+        self.assertEqual(tuple(map(str,live._protection_prices(self.bot,long_pos,meta))),
+                         ("0.04761","0.04411"))
+        self.assertEqual(tuple(map(str,live._protection_prices(self.bot,short_pos,meta))),
+                         ("0.04390","0.04501"))
+
+    def test_invalid_or_missing_tunnel_targets_block_before_order(self):
+        for invalid in (
+            {"status":"VALID","tunnel_direction":"LONG","entry_allowed":True,
+             "upper_price":100.0,"lower_price":99.0},
+            {"status":"VALID","tunnel_direction":"LONG","entry_allowed":True,
+             "upper_price":101.0,"lower_price":100.0},
+            {"status":"VALID","tunnel_direction":"LONG","entry_allowed":True},
+        ):
+            sig=self.signal("ABC-USDT","LONG")
+            sig["volume_price_tunnel"]=invalid
+            self.assertFalse(live._open_one(self.bot,self.state,sig,self.instruments))
+            self.assertIn(sig["preorder_rejection"],
+                          ("TUNNEL_TPSL_UNTRADEABLE", "TUNNEL_TPSL_NOT_VALID"))
+            self.assertEqual(self.bot.posted, [])
+            self.assertFalse(self.state["positions"])
+
     def test_existing_position_protected_once(self):
         pos={"inst":"ABC-USDT","side":"LONG","strategy":live.STRATEGY,
              "reference_entry":"100","tp":"","sl":""}
@@ -739,7 +775,7 @@ class Broker(unittest.TestCase):
             record=self.bot.exchange_tpsl[coin]
             self.assertEqual(record["tpTriggerPriceType"],"mark")
             self.assertEqual(record["slTriggerPriceType"],"mark")
-            self.assertEqual(self.state["positions"][coin]["protection_status"],"TP055_SL05_MARK_ACTIVE")
+            self.assertEqual(self.state["positions"][coin]["protection_status"],"TUNNEL_LINES_MARK_ACTIVE")
 
     def test_existing_live_last_order_amended_without_cancel(self):
         pos={"strategy":live.STRATEGY,"inst":"ABC-USDT","side":"LONG",
