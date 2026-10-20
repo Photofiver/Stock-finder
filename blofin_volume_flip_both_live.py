@@ -1134,7 +1134,7 @@ def _open_one(bot, state, sig, instruments):
     bot.notify(
         f"OPEN {side} {inst} | rank {sig['rank']}/200 | vol ratio {sig['volume_ratio'] or 0:.2f}x "
         f"| 1x isolated, notional {pos['notional_usdt']} USDT | "
-        f"TP {pos['tp']} / SL {pos['sl']} (Mark, {pos.get('tp_sl_mode')}) | "
+        f"TP {pos['tp']} / SL {pos['sl']} (Mark, {pos.get('tp_sl_mode')}) | " +
         ("EXIT: broker TP/SL or CLOSED 5m breaks last confirmed swing."
          if sig.get("pivot_tunnel_entry") else
          "EXIT: broker TP/SL or opposite CLOSED 5m volume > ENTRY candle volume."),
