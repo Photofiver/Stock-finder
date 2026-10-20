@@ -982,7 +982,7 @@ def _open_one(bot, state, sig, instruments):
     # the shared cap, and the cash buffer.
     target = min(MAX_PER_COIN_USDT, spendable)
     quote = bot.checked_preorder_quote(inst, side, sig["close"],
-                                      enforce_adverse_gap=True)
+                                      enforce_adverse_gap=False)
     quote_rejection = short_entry_extra_rejection(side, quote)
     if quote_rejection:
         # Reject before market order POST; broker protection stays untouched.
