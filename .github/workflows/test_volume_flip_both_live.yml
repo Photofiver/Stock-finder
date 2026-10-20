@@ -3,6 +3,8 @@ on:
   push:
     paths:
       - 'blofin_volume_flip_both_live.py'
+      - 'blofin_pivot_tunnel.py'
+      - 'test_pivot_tunnel.py'
       - 'test_volume_flip_both_live.py'
       - 'test_volume_flip_exit_429_recovery.py'
       - 'test_volume_candle_audit.py'
@@ -22,6 +24,8 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             blofin_volume_flip_both_live.py
+            blofin_pivot_tunnel.py
+            test_pivot_tunnel.py
             test_volume_flip_both_live.py
             test_volume_flip_exit_429_recovery.py
             test_volume_candle_audit.py
@@ -43,4 +47,4 @@ jobs:
         env:
           BLOFIN_LIVE_ENABLED: 'false'
           LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES: 'true'
-        run: python -m unittest -v test_volume_flip_both_live test_volume_flip_exit_429_recovery test_volume_candle_audit test_price_movement_audit
+        run: python -m unittest -v test_volume_flip_both_live test_volume_flip_exit_429_recovery test_volume_candle_audit test_price_movement_audit test_pivot_tunnel
