@@ -1,0 +1,57 @@
+name: BloFin LIVE close reasons (read-only)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/blofin_close_reasons.yml'
+  schedule:
+    # One minute after each LIVE 5m boundary, independently of the trader.
+    - cron: '4,9,14,19,24,29,34,39,44,49,54,59 * * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: blofin-close-reasons-readonly
+  cancel-in-progress: false
+
+jobs:
+  close-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Check closing-order classifier without placing trades
+        run: python -m unittest -q test_blofin_close_reasons.py
+      - name: Audit actual BloFin close orders (GET only) and save evidence
+        env:
+          BLOFIN_API_KEY: ${{ secrets.BLOFIN_API_KEY }}
+          BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
+          BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
+          BLOFIN_LIVE_ENABLED: 'false'
+          LIVE_ENTRY_STRATEGY: 'VOLUME_FLIP_BOTH'
+          LIVE_SIGNAL_MINUTES: '5'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main --depth=1
+          git reset --hard origin/main
+          python blofin_close_reasons_audit.py
+          if [ -f blofin_close_reasons.json ]; then
+            git add blofin_close_reasons.json
+          fi
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record verified BloFin external close causes'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
