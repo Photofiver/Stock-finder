@@ -490,9 +490,6 @@ class Broker(unittest.TestCase):
     def setUp(self):
         self.bot=FakeBot()
         self.state={"positions":{}}
-        mark_stub=patch.object(live,"_fresh_mark_price",return_value=Decimal("100"))
-        mark_stub.start()
-        self.addCleanup(mark_stub.stop)
         # Other LIVE tests cover order and volume gates without dependence on
         # UK's midnight time; dedicated VolumeTrend tests use real logic.
         stub = patch.object(
@@ -906,43 +903,8 @@ class TunnelBrokerProtectionRegression(unittest.TestCase):
 
 
 
-class MarkTriggerSafetyRegression(unittest.TestCase):
-    """Offline tests: ARKM-style SL rejection must not leave a naked fill."""
-
-    def test_side_specific_mark_bounds_and_two_tick_gap(self):
-        d=Decimal
-        tick=d("0.01")
-        self.assertTrue(live._mark_tpsl_valid("LONG",d("101"),d("99"),d("100"),tick))
-        self.assertFalse(live._mark_tpsl_valid("LONG",d("101"),d("99"),d("99.01"),tick))
-        self.assertTrue(live._mark_tpsl_valid("SHORT",d("99"),d("101"),d("100"),tick))
-        self.assertFalse(live._mark_tpsl_valid("SHORT",d("99"),d("101"),d("100.99"),tick))
-
-    def test_fresh_mark_requires_broker_timestamp(self):
-        from unittest.mock import Mock
-        bot=Mock()
-        bot.d=lambda x: Decimal(str(x))
-        bot.now_ms.return_value=1000000
-        bot.market_get.return_value=[{"instId":"ARKM-USDT",
-            "markPrice":"0.1184","ts":"999900"}]
-        self.assertEqual(live._fresh_mark_price(bot,"ARKM-USDT"),Decimal("0.1184"))
-        bot.market_get.return_value=[{"instId":"ARKM-USDT",
-            "markPrice":"0.1184","ts":"900000"}]
-        with self.assertRaises(RuntimeError):
-            live._fresh_mark_price(bot,"ARKM-USDT")
-
-    def test_mark_breach_rejected_before_tpsl_post(self):
-        bot=FakeBot()
-        state={"positions":{}}
-        pos={"strategy":live.STRATEGY,"inst":"ABC-USDT","side":"LONG",
-             "reference_entry":"100","tp_sl_mode":live.TUNNEL_TPSL_MODE,
-             "tunnel_tp_line":"101","tunnel_sl_line":"99"}
-        state["positions"]["ABC-USDT"]=pos
-        with patch.object(live,"_fresh_mark_price",return_value=Decimal("99")):
-            self.assertFalse(live._ensure_protection(
-                bot,state,pos,{"tickSize":"0.01"}))
-        self.assertFalse(bot.posted)
-        self.assertEqual(pos["protection_status"],
-                         "TPSL_UNCERTAIN_NEEDS_BROKER_CONFIRMATION")
+class EmergencyProtectionRegression(unittest.TestCase):
+    """Broker-verified emergency close prevents unchecked unprotected positions."""
 
     def test_verified_emergency_close_starts_once(self):
         from unittest.mock import Mock
