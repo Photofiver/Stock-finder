@@ -15,11 +15,13 @@ Existing legacy red-volume LONG positions retain their original exit.
 import math
 import os
 import uuid
+from blofin_pivot_tunnel import evaluate_tunnel, pivot_exit_transition
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 
 STRATEGY = "VOLUME_FLIP_BOTH_5M_V1"
+PIVOT_ENABLED = os.getenv("LIVE_PIVOT_TUNNEL_ENABLED", "false").strip().lower() == "true"
 LEGACY_STRATEGY = "REV_SHORT_20W_LONG_VOLUME_V1"
 HOLD_POLICY = "VOLUME_FLIP_BOTH_NO_TPSL"
 TUNNEL_TPSL_MODE = "TUNNEL_LINES_AT_ENTRY"
@@ -1057,7 +1059,9 @@ def _open_one(bot, state, sig, instruments):
         "signal_age_ms":now-int(sig["signal_close_ms"]),
         "signal_rank":int(sig["rank"]),
         "signal_snapshot":dict(sig,pre_order_quote=quote),
-        "strategy":STRATEGY,"hold_policy":HOLD_POLICY,
+        "strategy":STRATEGY,
+        "hold_policy":("PIVOT_5M_CLOSE_BREAK" if sig.get("pivot_tunnel_entry") else HOLD_POLICY),
+        "pivot_tunnel":sig.get("pivot_tunnel_info"),
         "last_same_volume":sig["signal_volume"],
         "last_checked_signal_close_ms":int(sig["signal_close_ms"]),
         "order_id":str(row.get("orderId") or ""),
@@ -1071,7 +1075,8 @@ def _open_one(bot, state, sig, instruments):
         "tunnel_tp_line":str(frozen_tp),
         "tunnel_sl_line":str(frozen_sl),
         "tunnel_reference_close_ms":int(sig["signal_close_ms"]),
-        "risk_profile":"1X_VOLUME_FLIP_TUNNEL_LINES",
+        "risk_profile":("1X_PIVOT_TUNNEL_LINES" if sig.get("pivot_tunnel_entry")
+                        else "1X_VOLUME_FLIP_TUNNEL_LINES"),
         "protection_status":"AWAITING_VERIFIED_FILL",
         "code_commit":bot.CODE_COMMIT,
     }
@@ -1130,7 +1135,9 @@ def _open_one(bot, state, sig, instruments):
         f"OPEN {side} {inst} | rank {sig['rank']}/200 | vol ratio {sig['volume_ratio'] or 0:.2f}x "
         f"| 1x isolated, notional {pos['notional_usdt']} USDT | "
         f"TP {pos['tp']} / SL {pos['sl']} (Mark, {pos.get('tp_sl_mode')}) | "
-        "EXIT: broker TP/SL or opposite CLOSED 5m volume > ENTRY candle volume.",
+        ("EXIT: broker TP/SL or CLOSED 5m breaks last confirmed swing."
+         if sig.get("pivot_tunnel_entry") else
+         "EXIT: broker TP/SL or opposite CLOSED 5m volume > ENTRY candle volume."),
         "BloFin LIVE both sides volume flip",
         attachment_path=pos.get("entry_chart"),
     )
@@ -1235,7 +1242,9 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         return
     scan={"strategy":STRATEGY,"selection_priority":"SIGNAL_VOLUME_DIV_PREVIOUS_20_BAR_MEAN_DESC",
           "entry_volume_trend_filter":"DAY_UK_DOMINANT_COLOUR_VOLUME",
-          "entry_price_tunnel_filter":"STRAIGHT_COLOUR_VOLUME_PRICE_TUNNEL_20BAR_INSIDE",
+          "entry_price_tunnel_filter":("FOUR_CONFIRMED_PRICE_PIVOTS"
+                                      if PIVOT_ENABLED else
+                                      "STRAIGHT_COLOUR_VOLUME_PRICE_TUNNEL_20BAR_INSIDE"),
           "volume_entry_strength_range_filter":"DISABLED",
           "long_entry_rank_range_inclusive":[1,LONG_ENTRY_MAX_RANK],
           "long_requires_falling_prior_20bar_mean":True,
@@ -1252,6 +1261,14 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
     active = bot.get_tracked_positions(state)
     broker = bot.get_open_positions()
     broker_set={str(p.get("instId")) for p in broker}
+    # An exchange-side TP/SL may have already flattened a pivot-tunnel trade.
+    # Re-arm only after a fresh four-point configuration; never reuse old pivots.
+    pivot_open = state.setdefault("pivot_tunnel_live_positions", {})
+    pivot_restart = state.setdefault("pivot_tunnel_restart_after", {})
+    for old_inst in list(pivot_open):
+        if old_inst not in active and old_inst not in broker_set:
+            pivot_restart[old_inst] = int(expected_close_ms)
+            del pivot_open[old_inst]
     unprotected=[]
     # Upgrade already-open V1 positions using their actual filled entry price.
     for inst,pos in list(active.items()):
@@ -1338,7 +1355,9 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
             _audit_confirmed_volume_candles(pos, bars, expected_close_ms)
     for inst,pos in list(active.items()):
         legacy = pos.get("strategy")==LEGACY_STRATEGY and pos.get("hold_policy")==LEGACY_HOLD_POLICY
-        if not legacy and not (pos.get("strategy")==STRATEGY and pos.get("hold_policy")==HOLD_POLICY):
+        if not legacy and not (pos.get("strategy")==STRATEGY
+                               and (pos.get("hold_policy")==HOLD_POLICY
+                                    or pos.get("pivot_tunnel"))):
             continue
         if pos.get("exit_pending"):
             continue
@@ -1350,11 +1369,19 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         if not bars or int(bot.bar_close_ms(bars[-1])) != expected_close_ms:
             scan["rejections"].append({"inst":inst,"reason":"NO_CONFIRMED_EXIT_CANDLE"})
             continue
-        should_close,new_volume=(legacy_exit_transition(pos,bars,expected_close_ms)
-                                 if legacy else exit_transition(pos,bars,expected_close_ms))
+        if pos.get("pivot_tunnel"):
+            should_close = pivot_exit_transition(
+                pos["pivot_tunnel"], _by_ts(bars, expected_close_ms),
+                expected_close_ms, pos["side"])
+            new_volume = pos.get("last_same_volume")
+        else:
+            should_close,new_volume=(legacy_exit_transition(pos,bars,expected_close_ms)
+                                     if legacy else exit_transition(pos,bars,expected_close_ms))
         pos["last_red_volume" if legacy else "last_same_volume"]=new_volume
         pos["last_checked_signal_close_ms"]=int(expected_close_ms)
         if should_close:
+            if pos.get("pivot_tunnel"):
+                pivot_restart[inst] = int(expected_close_ms)
             # Archive the EXACT confirmed trigger bar BEFORE submitting close.
             # In 429 recovery, this remains the original trigger candle;
             # a later broker fill must not overwrite the historic trigger.
@@ -1380,7 +1407,9 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
             try:
                 bot._run_for_tracked_position(
                     state,inst,bot.close_tracked_position,
-                    ("LEGACY VOLUME: GREEN vol > last RED" if legacy else
+                    ("PIVOT TUNNEL EXIT: 5m close beyond confirmed swing"
+                     if pos.get("pivot_tunnel") else
+                     "LEGACY VOLUME: GREEN vol > last RED" if legacy else
                      "VOLUME EXIT: opposite candle vol > opening signal candle vol"))
                 if inst in bot.get_tracked_positions(state):
                     bot.get_tracked_positions(state)[inst]["exit_pending"]="AWAITING_BROKER_FLAT"
@@ -1407,6 +1436,84 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         scan["status"]="STALE_5M_SCAN"
     elif bot.risk_stop_active(state):
         scan["status"]="BLOCKED_10PCT_DRAWDOWN"
+
+    elif PIVOT_ENABLED:
+        # New entry only on the exact CLOSED 5m bar which confirms point 4.
+        # Do not require a coincidental volume flip or flip an old position.
+        matches = []
+        for rank, inst in enumerate(top200, 1):
+            if inst in bot.get_tracked_positions(state) or inst in broker_set:
+                continue
+            bars = confirmed.get(inst)
+            if not bars or int(bot.bar_close_ms(bars[-1])) != expected_close_ms:
+                continue
+            rows = _by_ts(bars, expected_close_ms)
+            tunnel = evaluate_tunnel(
+                rows, expected_close_ms, int(pivot_restart.get(inst) or 0))
+            if not tunnel["entry_allowed"]:
+                continue
+            candle = rows.get(expected_close_ms-FIVE)
+            if candle is None or candle[4] <= 0:
+                continue
+            side = tunnel["tunnel_direction"]
+            mean20 = _previous20_mean(rows, expected_close_ms-FIVE)
+            strength = candle[4]/mean20 if mean20 and mean20 > 0 else 0.0
+            sig = {
+                "inst": inst, "rank": rank, "side": side,
+                "strategy": "PIVOT_TUNNEL_5M",
+                "signal_close_ms": int(expected_close_ms),
+                "signal_candle_ts": int(expected_close_ms-FIVE),
+                "close": candle[3], "signal_volume": candle[4],
+                "volume_strength_20": strength,
+                "volume_ratio": strength, "signal_mean20_prev": mean20,
+                "pivot_tunnel_entry": True,
+                "pivot_tunnel_info": {
+                    "last_confirmed_high": tunnel["last_confirmed_high"],
+                    "last_confirmed_low": tunnel["last_confirmed_low"],
+                    "setup_confirm_close_ms": tunnel["fourth_confirmed_close_ms"],
+                },
+                "volume_price_tunnel": tunnel,
+                **_readonly_entry_indicators(bars, expected_close_ms, side, candle[3]),
+            }
+            matches.append(sig)
+        matches = prioritize_volume_signals(matches)
+        scan["selection_priority"] = "PIVOT_FOURTH_CONFIRM_CLOSE_VOLUME_STRENGTH_TIE_RANK"
+        scan["entry_volume_trend_filter"] = "NOT_APPLIED_TO_PIVOT"
+        scan["matched"] = len(matches)
+        scan["candidates"] = matches[:20]
+        scan["status"] = "NO_MATCH" if not matches else "MATCHES_NO_ENTRY"
+        for sig in matches:
+            if scan["status"].startswith("UNCERTAIN"):
+                break
+            try:
+                if _open_one(bot, state, sig, instruments):
+                    scan["entries"].append(sig["inst"])
+                    scan["status"] = "ORDER_ATTEMPTED"
+                    pivot_open[sig["inst"]] = int(sig["signal_close_ms"])
+                    pending = state.get("volume_long_order_attempts") or {}
+                    if (pending.get(sig["inst"]) or {}).get("status") != "TRACKED":
+                        scan["status"] = "ORDER_FILL_UNCERTAIN_BLOCK"
+                        break
+                elif sig.get("preorder_rejection"):
+                    scan["rejections"].append({
+                        "inst": sig["inst"], "side": sig["side"],
+                        "reason": sig["preorder_rejection"],
+                        "pre_order_quote": sig.get("pre_order_quote"),
+                    })
+            except Exception as exc:
+                attempts = state.get("volume_long_order_attempts") or {}
+                if (attempts.get(sig["inst"]) or {}).get("status") in (
+                    "POST_STARTED", "UNCERTAIN", "BROKER_ACCEPTED", "UNCERTAIN_FILL"):
+                    scan["status"] = "UNCERTAIN_ORDER_BLOCK"
+                    scan["rejections"].append({
+                        "inst": sig["inst"], "reason": "BROKER_ORDER_UNCERTAIN",
+                        "error": str(exc)[:240]})
+                    bot.notify(f"CRITICAL: {sig['inst']} order uncertain: {exc}",
+                               "BloFin LIVE pivot tunnel safety")
+                    break
+                scan["rejections"].append({
+                    "inst": sig["inst"], "reason": "PREORDER_REJECTION",
+                    "error": str(exc)[:240]})
     else:
         matches=[]
         for rank,inst in enumerate(top200,1):
