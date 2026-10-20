@@ -490,6 +490,9 @@ class Broker(unittest.TestCase):
     def setUp(self):
         self.bot=FakeBot()
         self.state={"positions":{}}
+        mark_stub=patch.object(live,"_fresh_mark_price",return_value=Decimal("100"))
+        mark_stub.start()
+        self.addCleanup(mark_stub.stop)
         # Other LIVE tests cover order and volume gates without dependence on
         # UK's midnight time; dedicated VolumeTrend tests use real logic.
         stub = patch.object(
@@ -703,8 +706,8 @@ class Broker(unittest.TestCase):
     def test_buy_long_sell_short_each_one_per_coin_tpsl(self,chart):
         self.assertTrue(live._open_one(self.bot,self.state,self.signal("ABC-USDT","LONG"),self.instruments))
         self.assertTrue(live._open_one(self.bot,self.state,self.signal("XYZ-USDT","SHORT"),self.instruments))
-        # First position targets 20 USDT, not half the bankroll.
-        self.assertEqual(self.state["positions"]["ABC-USDT"]["notional_usdt"],"20.00")
+        # Test account uses 20 USDT in total; at most 5 USDT per trade.
+        self.assertEqual(self.state["positions"]["ABC-USDT"]["notional_usdt"],"5.00")
         # Remaining available capital is capped by the shared bankroll.
         self.assertEqual(self.state["positions"]["XYZ-USDT"]["notional_usdt"],"5.00")
         self.assertEqual(self.state["positions"]["ABC-USDT"]["side"],"LONG")
@@ -725,7 +728,7 @@ class Broker(unittest.TestCase):
         self.assertEqual(self.bot.posted[1][2]["side"],"sell")
         self.assertEqual(self.bot.posted[3][2]["side"],"buy")
         self.assertFalse(live._open_one(self.bot,self.state,self.signal("ABC-USDT","LONG"),self.instruments))
-        self.assertLessEqual(sum(Decimal(p["notional_usdt"]) for p in self.state["positions"].values()),Decimal("25"))
+        self.assertLessEqual(sum(Decimal(p["notional_usdt"]) for p in self.state["positions"].values()),Decimal("20"))
     def test_tunnel_line_prices_for_new_long_and_short_round_to_ticks(self):
         # No artificial distance or reward/risk restriction; prices are
         # the saved straight-line boundaries at the signal close.
