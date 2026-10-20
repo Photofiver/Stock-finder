@@ -905,5 +905,74 @@ class TunnelBrokerProtectionRegression(unittest.TestCase):
                          "TUNNEL_LINE")
 
 
+
+class MarkTriggerSafetyRegression(unittest.TestCase):
+    """Offline tests: ARKM-style SL rejection must not leave a naked fill."""
+
+    def test_side_specific_mark_bounds_and_two_tick_gap(self):
+        d=Decimal
+        tick=d("0.01")
+        self.assertTrue(live._mark_tpsl_valid("LONG",d("101"),d("99"),d("100"),tick))
+        self.assertFalse(live._mark_tpsl_valid("LONG",d("101"),d("99"),d("99.01"),tick))
+        self.assertTrue(live._mark_tpsl_valid("SHORT",d("99"),d("101"),d("100"),tick))
+        self.assertFalse(live._mark_tpsl_valid("SHORT",d("99"),d("101"),d("100.99"),tick))
+
+    def test_fresh_mark_requires_broker_timestamp(self):
+        from unittest.mock import Mock
+        bot=Mock()
+        bot.d=lambda x: Decimal(str(x))
+        bot.now_ms.return_value=1000000
+        bot.market_get.return_value=[{"instId":"ARKM-USDT",
+            "markPrice":"0.1184","ts":"999900"}]
+        self.assertEqual(live._fresh_mark_price(bot,"ARKM-USDT"),Decimal("0.1184"))
+        bot.market_get.return_value=[{"instId":"ARKM-USDT",
+            "markPrice":"0.1184","ts":"900000"}]
+        with self.assertRaises(RuntimeError):
+            live._fresh_mark_price(bot,"ARKM-USDT")
+
+    def test_mark_breach_rejected_before_tpsl_post(self):
+        bot=FakeBot()
+        state={"positions":{}}
+        pos={"strategy":live.STRATEGY,"inst":"ABC-USDT","side":"LONG",
+             "reference_entry":"100","tp_sl_mode":live.TUNNEL_TPSL_MODE,
+             "tunnel_tp_line":"101","tunnel_sl_line":"99"}
+        state["positions"]["ABC-USDT"]=pos
+        with patch.object(live,"_fresh_mark_price",return_value=Decimal("99")):
+            self.assertFalse(live._ensure_protection(
+                bot,state,pos,{"tickSize":"0.01"}))
+        self.assertFalse(bot.posted)
+        self.assertEqual(pos["protection_status"],
+                         "TPSL_UNCERTAIN_NEEDS_BROKER_CONFIRMATION")
+
+    def test_verified_emergency_close_starts_once(self):
+        from unittest.mock import Mock
+        state={"positions":{"ARKM-USDT":{"inst":"ARKM-USDT","side":"LONG",
+            "opened_ms":1000,"filled_size":"42"}}}
+        bot=Mock()
+        bot.get_tracked_positions.side_effect=lambda st: st["positions"]
+        bot.d=lambda value: Decimal(str(value))
+        bot.now_ms.return_value=123456
+        bot.get_open_positions.return_value=[{"instId":"ARKM-USDT",
+            "positions":"42","marginMode":"isolated","positionSide":"net"}]
+        self.assertTrue(live._emergency_close_unprotected(bot,state,"ARKM-USDT"))
+        self.assertEqual(bot._run_for_tracked_position.call_count,1)
+        self.assertEqual(state["positions"]["ARKM-USDT"]["exit_pending"],
+                         "AWAITING_BROKER_FLAT")
+        self.assertFalse(live._emergency_close_unprotected(bot,state,"ARKM-USDT"))
+        self.assertEqual(bot._run_for_tracked_position.call_count,1)
+
+    def test_emergency_close_never_touches_unverified_broker_position(self):
+        from unittest.mock import Mock
+        state={"positions":{"ARKM-USDT":{"inst":"ARKM-USDT","side":"LONG",
+            "opened_ms":1000,"filled_size":"42"}}}
+        bot=Mock()
+        bot.get_tracked_positions.side_effect=lambda st: st["positions"]
+        bot.d=lambda value: Decimal(str(value))
+        bot.get_open_positions.return_value=[{"instId":"ARKM-USDT",
+            "positions":"-42","marginMode":"isolated","positionSide":"net"}]
+        self.assertFalse(live._emergency_close_unprotected(bot,state,"ARKM-USDT"))
+        bot._run_for_tracked_position.assert_not_called()
+        self.assertNotIn("exit_pending",state["positions"]["ARKM-USDT"])
+
 if __name__=="__main__":
     unittest.main()
