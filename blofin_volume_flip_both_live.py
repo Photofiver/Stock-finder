@@ -42,6 +42,34 @@ MAX_PER_COIN_USDT = Decimal("5")
 MIN_PER_COIN_USDT = Decimal("5")
 CASH_BUFFER_USDT = Decimal("0.50")
 AGE_MAX_MS = 120_000
+MARK_SAFETY_TICKS = Decimal("2")
+
+
+def _fresh_mark_price(bot, inst):
+    """Broker Mark used for TP/SL; stale or missing quotes fail closed."""
+    rows = bot.market_get("/api/v1/market/mark-price", {"instId": inst})
+    row = next((r for r in (rows or []) if isinstance(r, dict)
+                and r.get("instId") == inst), None)
+    if row is None:
+        raise RuntimeError(f"{inst}: missing broker Mark price")
+    mark = bot.d(row.get("markPrice") or "0")
+    ts = int(row.get("ts") or 0)
+    age = int(bot.now_ms()) - ts
+    if not (mark.is_finite() and mark > 0 and ts > 0 and -5000 <= age <= 15000):
+        raise RuntimeError(f"{inst}: invalid or stale Mark (age={age}ms)")
+    return mark
+
+
+def _mark_tpsl_valid(side, tp, sl, mark, tick):
+    """Require at least two full price ticks between Mark and TP/SL."""
+    margin = tick * MARK_SAFETY_TICKS
+    if side == "LONG":
+        return sl + margin < mark < tp - margin
+    if side == "SHORT":
+        return tp + margin < mark < sl - margin
+    return False
+
+
 
 
 
@@ -167,6 +195,17 @@ def _ensure_protection(bot,state,pos,meta):
         except Exception as exc:
             pos["protection_error"]=str(exc)[:250]
         pos["protection_status"]="TPSL_UNCERTAIN_NEEDS_BROKER_CONFIRMATION"
+        bot.save_state(state)
+        return False
+    # The exchange triggers TP/SL on Mark, not the previous 5m close.
+    try:
+        mark = _fresh_mark_price(bot, inst)
+        tick = bot.d((meta or {}).get("tickSize") or "0")
+        if not _mark_tpsl_valid(pos["side"], tp, sl, mark, tick):
+            raise RuntimeError(f"Mark {mark} too close/outside TP {tp} or SL {sl}")
+    except Exception as exc:
+        pos["protection_status"]="TPSL_UNCERTAIN_NEEDS_BROKER_CONFIRMATION"
+        pos["protection_error"]=f"PRE_TPSL_MARK_CHECK: {type(exc).__name__}: {exc}"[:250]
         bot.save_state(state)
         return False
     client=("voltp055"+uuid.uuid4().hex)[:32]
@@ -1018,6 +1057,18 @@ def _open_one(bot, state, sig, instruments):
         sig["preorder_rejection"] = "TUNNEL_TPSL_UNTRADEABLE"
         sig["preorder_tpsl_error"] = f"{type(exc).__name__}: {exc}"[:200]
         return False
+    # Validate against a fresh MARK before placing a real market order.
+    try:
+        mark = _fresh_mark_price(bot, inst)
+        tick = bot.d(meta.get("tickSize") or "0")
+        tp, sl = _protection_prices(bot, tunnel_pos, meta)
+        if not _mark_tpsl_valid(side, tp, sl, mark, tick):
+            raise RuntimeError(f"Mark {mark} too close to TP {tp} or SL {sl}")
+    except Exception as exc:
+        sig["preorder_rejection"]="MARK_TPSL_NOT_SAFE"
+        sig["preorder_tpsl_error"]=f"{type(exc).__name__}: {exc}"[:200]
+        print(f"{STRATEGY}: BLOCK PRE-ENTRY {inst}: {exc}")
+        return False
     sized = bot.size_for_notional(bot.d(quote["expected_fill"]), meta, target)
     if not sized:
         print(f"{STRATEGY}: no valid size for {inst} with cap {target}")
@@ -1120,8 +1171,9 @@ def _open_one(bot, state, sig, instruments):
     if not _ensure_protection(bot,state,pos,meta):
         attempt["status"]="PROTECTION_UNCERTAIN"
         bot.save_state(state)
-        bot.notify(f"CRITICAL {side} {inst}: broker TP/SL "
-                   "not verified at BloFin; no additional entries until confirmed.",
+        _emergency_close_unprotected(bot, state, inst)
+        bot.notify(f"CRITICAL {side} {inst}: TP/SL unverified; "
+                   "emergency broker-verified close attempted.",
                    "BloFin LIVE TPSL SAFETY")
         return True
     attempt["status"]="TRACKED"
@@ -1143,6 +1195,59 @@ def _open_one(bot, state, sig, instruments):
     )
     return True
 
+
+
+def _emergency_close_unprotected(bot, state, inst, broker_rows=None):
+    """Close a verified bot-owned unprotected fill; never an unknown position."""
+    pos = bot.get_tracked_positions(state).get(inst)
+    if not pos or pos.get("exit_pending"):
+        return False
+    try:
+        rows = broker_rows if broker_rows is not None else bot.get_open_positions()
+        matches = [r for r in rows if str(r.get("instId") or "") == inst]
+        if len(matches) != 1:
+            raise RuntimeError("Broker position absent or ambiguous")
+        row = matches[0]
+        signed = bot.d(row.get("positions") or "0")
+        original = bot.d(pos.get("filled_size") or "0")
+        if not (signed.is_finite() and original.is_finite() and original > 0
+                and signed != 0 and abs(signed) <= original):
+            raise RuntimeError("Position size not verified")
+        if ((signed > 0) != (pos.get("side") == "LONG")
+                or str(row.get("marginMode") or "").lower() != "isolated"
+                or str(row.get("positionSide") or "").lower() != "net"):
+            raise RuntimeError("Broker position identity mismatch")
+        created = int(row.get("createTime") or 0)
+        if created and created > int(pos.get("opened_ms") or 0) + 120000:
+            raise RuntimeError("Broker position was reopened")
+    except Exception as exc:
+        pos["emergency_close_error"]=str(exc)[:240]
+        bot.save_state(state)
+        bot.notify(f"CRITICAL {inst}: TP/SL unverified; safe close requires "
+                   f"reconciliation: {exc}", "BloFin LIVE TPSL SAFETY")
+        return False
+    pos["exit_pending"]="POST_STARTED"
+    pos["exit_retry_count"]=0
+    pos["exit_retry_next_ms"]=int(bot.now_ms())+60000
+    bot.save_state(state)
+    try:
+        bot._run_for_tracked_position(
+            state, inst, bot.close_tracked_position,
+            "EMERGENCY CLOSE: exchange TP/SL rejected or unverified")
+        remaining=bot.get_tracked_positions(state).get(inst)
+        if remaining:
+            remaining["exit_pending"]="AWAITING_BROKER_FLAT"
+        bot.save_state(state)
+        return True
+    except Exception as exc:
+        remaining=bot.get_tracked_positions(state).get(inst)
+        if remaining:
+            remaining["exit_pending"]="UNCERTAIN_CLOSE"
+            remaining["emergency_close_error"]=str(exc)[:240]
+        bot.save_state(state)
+        bot.notify(f"CRITICAL {inst}: emergency close uncertain; broker "
+                   f"reconciliation required: {exc}", "BloFin LIVE TPSL SAFETY")
+        return False
 
 
 def _reconcile_pending_volume_closes(bot, state, broker_rows, scan):
@@ -1287,6 +1392,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                     bot.save_state(state)
             else:
                 unprotected.append(inst)
+                _emergency_close_unprotected(bot, state, inst, broker)
                 bot.notify(f"CRITICAL {inst}: broker TP/SL not verified; "
                            "no additional entries until resolved.",
                            "BloFin LIVE TPSL SAFETY")
