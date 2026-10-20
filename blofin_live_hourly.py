@@ -2127,10 +2127,14 @@ def cancel_tracked_tpsl(state):
         # HOLD60 positions keep broker-side TP +1% / SL -1% protection active.
         return False
 
-    # Managed LIVE positions intentionally keep their broker-side TP/SL protection.
+    # Preserve broker protection for every managed strategy with explicit
+    # TP/SL, including the fixed-at-entry straight volume tunnel.
+    # The tunnel policy is not a "volume flip only" position: cancelling its
+    # broker OCO would leave an unprotected LIVE position until the next bar.
     if (
-        pos.get("tp_policy") in ("TP1", "TP_GROSS1", "TP055")
-        or pos.get("sl_policy") in ("SL1", "SL05")
+        pos.get("tp_policy") in ("TP1", "TP_GROSS1", "TP055", "TUNNEL_LINE")
+        or pos.get("sl_policy") in ("SL1", "SL05", "TUNNEL_LINE")
+        or pos.get("tp_sl_mode") == "TUNNEL_LINES_AT_ENTRY"
         or str(pos.get("risk_profile") or "").endswith(("SL10", "SL1", "SL05"))
     ):
         return False
