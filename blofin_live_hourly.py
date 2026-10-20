@@ -198,14 +198,45 @@ def sign(method, request_path, body_str=""):
     }
 
 
+# Rate-limit PRIVATE reads across a single scan, and retry HTTP 429 only
+# for idempotent GETs. Never retry an order/cancel/close POST: its fill may be
+# unknown even if the HTTP response failed.
+PRIVATE_GET_INTERVAL_SEC = 0.25
+PRIVATE_GET_429_ATTEMPTS = 4
+_private_get_last_at = 0.0
+
+
 def private_request(method, path, params=None, body=None):
     method = method.upper()
     if method == "GET":
+        global _private_get_last_at
         qs = urlencode(params or {})
         request_path = path + (f"?{qs}" if qs else "")
-        headers = sign(method, request_path)
-        response = requests.get(BASE + request_path, headers=headers, timeout=HTTP_TIMEOUT)
+        for attempt in range(PRIVATE_GET_429_ATTEMPTS):
+            gap = PRIVATE_GET_INTERVAL_SEC - (time.monotonic() - _private_get_last_at)
+            if gap > 0:
+                time.sleep(gap)
+            # Sign each request again: a reused signature/timestamp can expire.
+            headers = sign(method, request_path)
+            _private_get_last_at = time.monotonic()
+            response = requests.get(
+                BASE + request_path, headers=headers, timeout=HTTP_TIMEOUT)
+            if response.status_code == 429 and attempt < PRIVATE_GET_429_ATTEMPTS - 1:
+                try:
+                    retry_after = float(response.headers.get("Retry-After", 0))
+                except (ValueError, TypeError, AttributeError):
+                    retry_after = 0.0
+                if not 0 <= retry_after <= 8:
+                    retry_after = 0.0
+                delay = max(min(8.0, 1.5 * (2 ** attempt)), retry_after)
+                print(f"BloFin private GET rate limited ({path}); "
+                      f"retry {attempt + 1}/{PRIVATE_GET_429_ATTEMPTS - 1} "
+                      f"after {delay:.1f}s")
+                time.sleep(delay)
+                continue
+            break
     else:
+        # A non-idempotent request is sent EXACTLY ONCE.
         body_str = json.dumps(body or {}, separators=(",", ":"), ensure_ascii=False)
         headers = sign(method, path, body_str)
         response = requests.request(
@@ -215,6 +246,7 @@ def private_request(method, path, params=None, body=None):
             data=body_str.encode("utf-8"),
             timeout=HTTP_TIMEOUT,
         )
+    # If GET still returns 429, raise rather than pretending the account is flat.
     response.raise_for_status()
     payload = response.json()
     if str(payload.get("code")) != "0":
