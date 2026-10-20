@@ -25,6 +25,12 @@ jobs:
         with:
           ref: main
           fetch-depth: 1
+          # Only top-level code and state; skip large chart archives.
+          sparse-checkout: |
+            /*
+            !/*/
+            /.github/
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
