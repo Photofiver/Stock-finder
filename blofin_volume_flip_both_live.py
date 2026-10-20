@@ -6,7 +6,9 @@ Qualified means each candle volume <= its own prior 20-bar mean.
 Exit on any CLOSED opposite-color candle volume > the OPENING signal
 candle volume, WITHOUT a volume-average filter; next 5m scan.
 
-No BTC/price/DI/3-4x filters. Broker TP +0.55%, SL -0.50% for both sides.
+No BTC/price/DI/3-4x filters. For NEW entries, broker TP and SL are
+the two straight volume-tunnel price lines fixed at the entry signal.
+Existing positions retain their previously confirmed TP/SL policy.
 Existing legacy red-volume LONG positions retain their original exit.
 1x isolated, up to four different coins, shared bankroll and risk gate.
 """
@@ -20,6 +22,8 @@ from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 STRATEGY = "VOLUME_FLIP_BOTH_5M_V1"
 LEGACY_STRATEGY = "REV_SHORT_20W_LONG_VOLUME_V1"
 HOLD_POLICY = "VOLUME_FLIP_BOTH_NO_TPSL"
+TUNNEL_TPSL_MODE = "TUNNEL_LINES_AT_ENTRY"
+EMERGENCY_TPSL_MODE = "EMERGENCY_FIXED_AFTER_FILL"
 TP_PCT = Decimal("0.0055")
 SL_PCT = Decimal("0.005")
 TP_POLICY = "TP055"
@@ -40,11 +44,34 @@ AGE_MAX_MS = 120_000
 
 
 def _protection_prices(bot, pos, meta):
-    """Tick-aligned triggers from actual broker fill; do not exceed -0.50% SL."""
+    """Tick-align protected prices; freeze tunnel lines at signal close.
+
+    Existing positions continue using their original fixed TP/SL.
+    Rounding moves TUNNEL targets to the first tradable tick on or just
+    beyond the selected boundary, without inventing a price threshold.
+    """
     entry=bot.d(pos.get("reference_entry") or "0")
     tick=bot.d((meta or {}).get("tickSize") or "0")
     if entry<=0 or tick<=0 or not entry.is_finite() or not tick.is_finite():
         raise RuntimeError("Verified entry and tickSize are required for TP/SL")
+    if pos.get("tp_sl_mode") == TUNNEL_TPSL_MODE:
+        tp_line = bot.d(pos.get("tunnel_tp_line") or "0")
+        sl_line = bot.d(pos.get("tunnel_sl_line") or "0")
+        if not all(x.is_finite() and x > 0 for x in (tp_line, sl_line)):
+            raise RuntimeError("Tunnel TP/SL boundaries missing or invalid")
+        if pos["side"] == "LONG":
+            tp = (tp_line / tick).to_integral_value(rounding=ROUND_CEILING) * tick
+            sl = (sl_line / tick).to_integral_value(rounding=ROUND_FLOOR) * tick
+            valid = sl < entry < tp
+        elif pos["side"] == "SHORT":
+            tp = (tp_line / tick).to_integral_value(rounding=ROUND_FLOOR) * tick
+            sl = (sl_line / tick).to_integral_value(rounding=ROUND_CEILING) * tick
+            valid = tp < entry < sl
+        else:
+            raise RuntimeError("Unknown side")
+        if not valid:
+            raise RuntimeError("Tunnel TP/SL not on the correct side of entry")
+        return tp, sl
     if pos["side"]=="LONG":
         tp=((entry*(1+TP_PCT)/tick).to_integral_value(rounding=ROUND_CEILING))*tick
         sl=((entry*(1-SL_PCT)/tick).to_integral_value(rounding=ROUND_CEILING))*tick
@@ -78,7 +105,9 @@ def _ensure_mark_trigger(bot, state, pos, tp, sl):
                str(detail.get("slTriggerPriceType") or "").lower())
         if types==(TRIGGER_TYPE,TRIGGER_TYPE):
             pos.update(tp_trigger_type=TRIGGER_TYPE,sl_trigger_type=TRIGGER_TYPE,
-                       protection_status="TP055_SL05_MARK_ACTIVE")
+                       protection_status=("TUNNEL_LINES_MARK_ACTIVE"
+                                          if pos.get("tp_sl_mode") == TUNNEL_TPSL_MODE
+                                          else "TP055_SL05_MARK_ACTIVE"))
             pos.pop("mark_amend_request_id",None)
             pos.pop("protection_error",None)
             bot.save_state(state)
@@ -128,8 +157,9 @@ def _ensure_protection(bot,state,pos,meta):
                     and bot.d(detail.get("tpTriggerPrice") or "0")==tp
                     and bot.d(detail.get("slTriggerPrice") or "0")==sl):
                 pos.update(tpsl_id=str(detail["tpslId"]),tp=bot.clean_decimal(tp),
-                           sl=bot.clean_decimal(sl),tp_policy=TP_POLICY,
-                           sl_policy=SL_POLICY)
+                           sl=bot.clean_decimal(sl),
+                           tp_policy=("TUNNEL_LINE" if pos.get("tp_sl_mode") == TUNNEL_TPSL_MODE else TP_POLICY),
+                           sl_policy=("TUNNEL_LINE" if pos.get("tp_sl_mode") == TUNNEL_TPSL_MODE else SL_POLICY))
                 bot.save_state(state)
                 return _ensure_mark_trigger(bot,state,pos,tp,sl)
         except Exception as exc:
@@ -140,7 +170,8 @@ def _ensure_protection(bot,state,pos,meta):
     client=("voltp055"+uuid.uuid4().hex)[:32]
     pos.update(tpsl_client_order_id=client,protection_status="TPSL_POST_STARTED",
                tp=bot.clean_decimal(tp),sl=bot.clean_decimal(sl),
-               tp_policy=TP_POLICY,sl_policy=SL_POLICY)
+               tp_policy=("TUNNEL_LINE" if pos.get("tp_sl_mode") == TUNNEL_TPSL_MODE else TP_POLICY),
+               sl_policy=("TUNNEL_LINE" if pos.get("tp_sl_mode") == TUNNEL_TPSL_MODE else SL_POLICY))
     bot.save_state(state)
     try:
         response=bot.private_request("POST","/api/v1/trade/order-tpsl",body={
@@ -962,6 +993,29 @@ def _open_one(bot, state, sig, instruments):
               f"(adverse_gap={quote.get('adverse_gap_pct')}%, "
               f"spread={quote.get('spread_pct')}%)")
         return False
+    # Reject invalid/non-tradable tunnel targets BEFORE any market order.
+    # If the fill unexpectedly crosses a line, protect that filled position
+    # with the existing fixed emergency levels rather than leaving it naked.
+    tunnel = sig.get("volume_price_tunnel") or {}
+    if (tunnel.get("status") != "VALID"
+            or tunnel.get("tunnel_direction") != side
+            or not tunnel.get("entry_allowed")):
+        sig["preorder_rejection"] = "TUNNEL_TPSL_NOT_VALID"
+        return False
+    try:
+        frozen_tp = tunnel["upper_price"] if side == "LONG" else tunnel["lower_price"]
+        frozen_sl = tunnel["lower_price"] if side == "LONG" else tunnel["upper_price"]
+        tunnel_pos = {
+            "side":side, "reference_entry":str(quote["expected_fill"]),
+            "tp_sl_mode":TUNNEL_TPSL_MODE,
+            "tunnel_tp_line":str(frozen_tp),
+            "tunnel_sl_line":str(frozen_sl),
+        }
+        _protection_prices(bot,tunnel_pos,meta)
+    except (KeyError, ValueError, TypeError, ArithmeticError, RuntimeError) as exc:
+        sig["preorder_rejection"] = "TUNNEL_TPSL_UNTRADEABLE"
+        sig["preorder_tpsl_error"] = f"{type(exc).__name__}: {exc}"[:200]
+        return False
     sized = bot.size_for_notional(bot.d(quote["expected_fill"]), meta, target)
     if not sized:
         print(f"{STRATEGY}: no valid size for {inst} with cap {target}")
@@ -1012,8 +1066,12 @@ def _open_one(bot, state, sig, instruments):
         "reference_entry":"",
         "filled_size":"",
         "notional_usdt":bot.clean_decimal(expected_notional),
-        "tp":"","sl":"","tp_policy":"NONE","sl_policy":"NONE",
-        "risk_profile":"1X_VOLUME_FLIP_TP055_SL05",
+        "tp":"","sl":"","tp_policy":"TUNNEL_LINE","sl_policy":"TUNNEL_LINE",
+        "tp_sl_mode":TUNNEL_TPSL_MODE,
+        "tunnel_tp_line":str(frozen_tp),
+        "tunnel_sl_line":str(frozen_sl),
+        "tunnel_reference_close_ms":int(sig["signal_close_ms"]),
+        "risk_profile":"1X_VOLUME_FLIP_TUNNEL_LINES",
         "protection_status":"AWAITING_VERIFIED_FILL",
         "code_commit":bot.CODE_COMMIT,
     }
@@ -1041,10 +1099,23 @@ def _open_one(bot, state, sig, instruments):
     )
     attempt["status"]="PROTECTING"
     bot.save_state(state)
+    # Fill may differ from the checked quote. Do not place a broker TP/SL
+    # on the wrong side of the actual fill. Existing 0.55/0.50 levels
+    # remain the emergency protection in this exceptional case only.
+    try:
+        _protection_prices(bot,pos,meta)
+    except (ValueError, TypeError, ArithmeticError, RuntimeError) as exc:
+        pos["tp_sl_mode"] = EMERGENCY_TPSL_MODE
+        pos["risk_profile"] = "1X_EMERGENCY_FIXED_AFTER_TUNNEL_FILL"
+        pos["tunnel_protection_fallback"] = f"{type(exc).__name__}: {exc}"[:200]
+        bot.save_state(state)
+        bot.notify(f"WARNING {side} {inst}: actual fill crossed tunnel TP/SL; "
+                   "using emergency fixed broker TP +0.55% / SL -0.50%.",
+                   "BloFin LIVE tunnel fill protection")
     if not _ensure_protection(bot,state,pos,meta):
         attempt["status"]="PROTECTION_UNCERTAIN"
         bot.save_state(state)
-        bot.notify(f"CRITICAL {side} {inst}: TP +0.55% / SL -0.50% "
+        bot.notify(f"CRITICAL {side} {inst}: broker TP/SL "
                    "not verified at BloFin; no additional entries until confirmed.",
                    "BloFin LIVE TPSL SAFETY")
         return True
@@ -1058,7 +1129,7 @@ def _open_one(bot, state, sig, instruments):
     bot.notify(
         f"OPEN {side} {inst} | rank {sig['rank']}/200 | vol ratio {sig['volume_ratio'] or 0:.2f}x "
         f"| 1x isolated, notional {pos['notional_usdt']} USDT | "
-        f"TP +0.55% {pos['tp']} (Mark) | SL -0.50% {pos['sl']} (Mark) | "
+        f"TP {pos['tp']} / SL {pos['sl']} (Mark, {pos.get('tp_sl_mode')}) | "
         "EXIT: broker TP/SL or opposite CLOSED 5m volume > ENTRY candle volume.",
         "BloFin LIVE both sides volume flip",
         attachment_path=pos.get("entry_chart"),
@@ -1199,7 +1270,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                     bot.save_state(state)
             else:
                 unprotected.append(inst)
-                bot.notify(f"CRITICAL {inst}: TP/SL 0.55/0.50 not verified; "
+                bot.notify(f"CRITICAL {inst}: broker TP/SL not verified; "
                            "no additional entries until resolved.",
                            "BloFin LIVE TPSL SAFETY")
     # Clear protection uncertainty only after the broker reports a flat position.
