@@ -3,6 +3,7 @@ import unittest
 from decimal import Decimal
 from unittest.mock import patch
 import blofin_volume_flip_both_live as live
+import blofin_live_hourly as hourly
 import test_reverse_short_long_live as prior
 
 F=live.FIVE
@@ -850,6 +851,56 @@ class Broker(unittest.TestCase):
             live.run(self.bot,self.state,rank,{},self.instruments,T,confirm)
         self.assertEqual(self.state["positions"]["LEGACY-USDT"]["tp"],"105")
         self.assertEqual(self.state["positions"]["LEGACY-USDT"]["sl"],"99")
+
+class TunnelBrokerProtectionRegression(unittest.TestCase):
+    """LIVE state sync must never cancel a tunnel-protected broker OCO."""
+
+    def test_cancel_tpsl_keeps_both_tunnel_sides(self):
+        for side in ("LONG", "SHORT"):
+            with self.subTest(side=side):
+                pos = {
+                    "inst": "XTZ-USDT", "side": side,
+                    "strategy": live.STRATEGY,
+                    "hold_policy": live.HOLD_POLICY,
+                    "tp_policy": "TUNNEL_LINE", "sl_policy": "TUNNEL_LINE",
+                    "tp_sl_mode": live.TUNNEL_TPSL_MODE,
+                    "tpsl_id": "live-oco-id",
+                    "tpsl_client_order_id": "live-client-id",
+                    "tp": "101", "sl": "99",
+                    "protection_status": "TUNNEL_LINES_MARK_ACTIVE",
+                }
+                state = {"position": pos}
+                with patch.object(hourly, "private_request") as broker:
+                    self.assertFalse(hourly.cancel_tracked_tpsl(state))
+                    broker.assert_not_called()
+                self.assertEqual(pos["tpsl_id"], "live-oco-id")
+                self.assertEqual(pos["tp"], "101")
+                self.assertEqual(pos["sl"], "99")
+                self.assertEqual(pos["protection_status"],
+                                 "TUNNEL_LINES_MARK_ACTIVE")
+
+    def test_sync_all_positions_does_not_cancel_tunnel_tpsl(self):
+        pos = {
+            "inst": "XTZ-USDT", "side": "LONG",
+            "strategy": live.STRATEGY,
+            "hold_policy": live.HOLD_POLICY,
+            "tp_policy": "TUNNEL_LINE", "sl_policy": "TUNNEL_LINE",
+            "tp_sl_mode": live.TUNNEL_TPSL_MODE,
+            "tpsl_id": "live-oco-id", "tpsl_client_order_id": "client",
+            "tp": "101", "sl": "99",
+            "protection_status": "TUNNEL_LINES_MARK_ACTIVE",
+        }
+        state = {"positions": {"XTZ-USDT": pos}}
+        with patch.object(hourly, "get_open_positions",
+                          return_value=[{"instId": "XTZ-USDT"}]):
+            with patch.object(hourly, "private_request") as broker:
+                hourly.sync_all_tracked_positions(state)
+                broker.assert_not_called()
+        self.assertEqual(state["positions"]["XTZ-USDT"]["tpsl_id"],
+                         "live-oco-id")
+        self.assertEqual(state["positions"]["XTZ-USDT"]["tp_policy"],
+                         "TUNNEL_LINE")
+
 
 if __name__=="__main__":
     unittest.main()
