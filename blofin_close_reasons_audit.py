@@ -105,7 +105,12 @@ def private_get(method, path, params=None):
         raise RuntimeError("READ_ONLY_BROKER_AUDIT_BLOCKED")
     query = urlencode(params or {})
     request_path = path + ("?" + query if query else "")
+    global _last_private_get_at
     for attempt in range(3):
+        # Keep read-only audit from exhausting BloFin's private GET quota.
+        gap = MIN_GET_GAP_SEC - (time.monotonic() - _last_private_get_at)
+        if gap > 0:
+            time.sleep(gap)
         timestamp = str(int(time.time() * 1000))
         nonce = str(uuid.uuid4())
         prehash = request_path + "GET" + timestamp + nonce
@@ -120,6 +125,7 @@ def private_get(method, path, params=None):
             "Accept": "application/json",
         }
         try:
+            _last_private_get_at = time.monotonic()
             payload = _request_json(
                 "https://openapi.blofin.com" + request_path, headers=headers)
             if str(payload.get("code")) != "0":
@@ -149,8 +155,10 @@ STATE = Path("blofin_live_state.json")
 AUDIT = Path("blofin_close_reasons.json")
 UK = ZoneInfo("Europe/London")
 WINDOW_MS = 120_000
-MAX_TRADES_PER_RUN = 4
-MAX_ATTEMPTS = 4
+MAX_TRADES_PER_RUN = 100
+MAX_ATTEMPTS = 8
+MIN_GET_GAP_SEC = 1.0
+_last_private_get_at = 0.0
 
 
 def integer(value):
@@ -226,6 +234,9 @@ def inspect(trade, request):
         if not isinstance(rows, list):
             return {"status": "unresolved", "reason": "INVALID_BROKER_RESPONSE"}
         return classify(trade, rows)
+    except HTTPError as exc:
+        return {"status": "unresolved",
+                "reason": "BROKER_API_HTTP_" + str(exc.code)}
     except Exception as exc:
         return {"status": "unresolved",
                 "reason": "BROKER_API_" + type(exc).__name__}
@@ -261,7 +272,10 @@ def audit(state, existing, request, notifier=None):
         result["pnl_usdt"] = trade.get("net_pnl_usdt")
         records[key] = result
         processed += 1
-        if notifier and (result["status"] == "verified"
+        # Backfill old history silently: only alert on genuinely recent exits.
+        recently_closed = (0 <= int(time.time() * 1000) - result["closed_ms"]
+                           <= 15 * 60_000)
+        if notifier and recently_closed and (result["status"] == "verified"
                          or result["attempts"] == MAX_ATTEMPTS):
             notifier(
                 f"{result['coin']} {result['side']} | {result['closed_uk']} UK | "
