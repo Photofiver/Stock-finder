@@ -432,7 +432,9 @@ def long_entry_extra_rejection(sig, rank):
 
 
 SHORT_ENTRY_MIN_ADVERSE_GAP_PCT = Decimal("0.05")
-SHORT_ENTRY_MAX_SPREAD_PCT = Decimal("0.05")
+SHORT_ENTRY_MAX_SPREAD_PCT = Decimal(
+    os.getenv("BLOFIN_SHORT_ENTRY_MAX_SPREAD_PCT", "0.05")
+)
 
 
 def short_entry_extra_rejection(side, quote):
@@ -452,7 +454,7 @@ def short_entry_extra_rejection(side, quote):
         return "SHORT_QUOTE_METRICS_UNAVAILABLE"
     if gap < SHORT_ENTRY_MIN_ADVERSE_GAP_PCT:
         return "SHORT_ADVERSE_GAP_BELOW_005PCT"
-    if spread > SHORT_ENTRY_MAX_SPREAD_PCT:
+    if SHORT_ENTRY_MAX_SPREAD_PCT > 0 and spread > SHORT_ENTRY_MAX_SPREAD_PCT:
         return "SHORT_SPREAD_ABOVE_005PCT"
     return None
 
