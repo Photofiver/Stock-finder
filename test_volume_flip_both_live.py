@@ -681,13 +681,13 @@ class Broker(unittest.TestCase):
         self.assertEqual(reasons["RISING-LONG"], "LONG_VOLUME_MA20_NOT_DECLINING")
         self.assertNotIn("RANK51-LONG", reasons)
 
-    def test_pivot_long_filter_blocks_before_order_and_records_reason(self):
+    def test_pivot_long_tp_distance_still_blocks_before_order(self):
         sig = self.signal("ABC-USDT", "LONG")
         sig["pivot_tunnel_entry"] = True
         sig["sma10"] = 100
         with patch.object(live, "PIVOT_ENABLED", True):
             self.assertFalse(live._open_one(self.bot, self.state, sig, self.instruments))
-        self.assertEqual(sig["preorder_rejection"], "LONG_MA10_GAP_BELOW_045")
+        self.assertEqual(sig["preorder_rejection"], "LONG_TP_GAP_ABOVE_060")
         self.assertEqual(self.bot.posted, [])
         self.assertEqual(self.state["positions"], {})
         self.assertNotIn("volume_long_order_attempts", self.state)
@@ -696,7 +696,8 @@ class Broker(unittest.TestCase):
     def test_pivot_long_filter_pass_preserves_line_protection_and_capital(self, chart):
         sig = self.signal("ABC-USDT", "LONG")
         sig["pivot_tunnel_entry"] = True
-        sig["sma10"] = 99
+        sig["sma10"] = 101  # Price is BELOW MA10; this must no longer block.
+        sig["indicator_status"] = "INSUFFICIENT_CONFIRMED_HISTORY"  # Read-only.
         sig["volume_price_tunnel"].update(upper_price=100.5, lower_price=99.5)
         with patch.object(live, "PIVOT_ENABLED", True):
             self.assertTrue(live._open_one(self.bot, self.state, sig, self.instruments))
