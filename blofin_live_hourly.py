@@ -1970,6 +1970,21 @@ def history_result_ready(hist):
     return all(str(hist.get(key) if hist.get(key) is not None else "").strip() != "" for key in required)
 
 
+def _fetch_peak_1m_candles(inst, limit):
+    """One best-effort public read, max five seconds; never change LIVE order flow."""
+    response = requests.get(
+        BASE + "/api/v1/market/candles",
+        params={"instId": inst, "bar": "1m", "limit": str(limit)},
+        headers={"Accept": "application/json", "User-Agent": USER_AGENT},
+        timeout=5,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if str(payload.get("code", "0")) != "0":
+        raise RuntimeError(f"BloFin candle API: {payload.get('msg') or payload.get('code')}")
+    return payload.get("data") or []
+
+
 def record_closed(state, reason_hint=None):
     pos = state.get("position")
     if not pos:
@@ -2074,6 +2089,19 @@ def record_closed(state, reason_hint=None):
         except (TypeError, ValueError, ArithmeticError, ZeroDivisionError) as exc:
             price_movement["exit_price_error"] = str(exc)[:180]
 
+    # Research-only price/profit peak during the verified holding period.
+    # Do not let public candle API errors prevent a real close from being logged.
+    try:
+        from blofin_trade_peak import summarize_position_peak
+        peak_position = summarize_position_peak(
+            pos, hist, _fetch_peak_1m_candles
+        )
+    except Exception as exc:
+        peak_position = {
+            "available": False,
+            "reason": f"peak calculation failed: {type(exc).__name__}: {exc}"[:180],
+        }
+
     history = state.setdefault("trade_history", [])
     history.append({
         "entry_chart": str(pos.get("entry_chart") or ""),
@@ -2101,6 +2129,17 @@ def record_closed(state, reason_hint=None):
         "gross_pnl_usdt": float(gross_pnl),
         "fee_usdt": float(fee),
         "net_pnl_usdt": float(net_pnl),
+        "peak_profit_pct_before_exit": peak_position.get("peak_profit_pct_before_exit"),
+        "peak_profit_usdt_before_exit_gross_approx": peak_position.get(
+            "peak_profit_usdt_before_exit_gross_approx"
+        ),
+        "peak_favorable_coin_price_before_exit": peak_position.get(
+            "peak_favorable_coin_price"
+        ),
+        "highest_coin_price_observed_before_exit": peak_position.get(
+            "highest_coin_price_observed"
+        ),
+        "peak_position_before_exit": peak_position,
         "reason": reason,
         "history_id": str(hist.get("historyId") or ""),
         "signal_snapshot": pos.get("signal_snapshot") or {},
