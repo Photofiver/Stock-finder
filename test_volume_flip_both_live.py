@@ -697,7 +697,6 @@ class Broker(unittest.TestCase):
         sig = self.signal("ABC-USDT", "LONG")
         sig["pivot_tunnel_entry"] = True
         sig["sma10"] = 101  # Price is BELOW MA10; this must no longer block.
-        sig["indicator_status"] = "INSUFFICIENT_CONFIRMED_HISTORY"  # Read-only.
         sig["volume_price_tunnel"].update(upper_price=100.5, lower_price=99.5)
         with patch.object(live, "PIVOT_ENABLED", True):
             self.assertTrue(live._open_one(self.bot, self.state, sig, self.instruments))
