@@ -1,7 +1,7 @@
 """LIVE volume flip on CLOSED 5m BloFin candles.
 
-Active pivot mode: NEW LONG entries only, with pre-order MA10 >= +0.45%,
-TP-line distance <= 0.60%, and SL-line distance >= 0.10%. Existing exits
+Active pivot mode: NEW LONG entries only, with pre-order
+TP-line distance <= 0.60% and SL-line distance >= 0.10%; no MA10 entry gate. Existing exits
 and legacy non-pivot mode are unchanged.
 
 LONG: qualified GREEN after qualified RED, green volume > prior red.
@@ -969,34 +969,25 @@ def _audit_confirmed_volume_candles(pos, bars, expected_close_ms):
 
 
 def pivot_long_entry_filter(sig, quote):
-    """Selected LONG-only variant; inspect frozen lines, never move TP/SL."""
-    audit = {"rule": "LONG_MA045_TP060_SL010_V1", "allowed": False,
-             "min_ma10_gap_pct": 0.45, "max_tp_gap_pct": 0.60,
-             "min_sl_gap_pct": 0.10}
+    """Check frozen LONG TP/SL line distances; MA10 does not gate entry."""
+    audit = {"rule": "LONG_TP060_SL010_NO_MA10_V2", "allowed": False,
+             "max_tp_gap_pct": 0.60, "min_sl_gap_pct": 0.10}
     if sig.get("side") != "LONG":
         return dict(audit, reason="PIVOT_LONG_ONLY")
     try:
-        if (sig.get("indicator_status") != "OK"
-                or sig.get("indicator_timeframe") != "5m"
-                or int(sig["indicator_signal_close_ms"]) != int(sig["signal_close_ms"])):
-            return dict(audit, reason="LONG_FILTER_INDICATORS_UNAVAILABLE")
         tunnel = sig["volume_price_tunnel"]
         price = Decimal(str(quote["expected_fill"]))
-        ma10 = Decimal(str(sig["sma10"]))
         tp = Decimal(str(tunnel["upper_price"]))
         sl = Decimal(str(tunnel["lower_price"]))
-        if not all(x.is_finite() and x > 0 for x in (price, ma10, tp, sl)):
+        if not all(x.is_finite() and x > 0 for x in (price, tp, sl)):
             return dict(audit, reason="LONG_FILTER_INVALID_PRICES")
         if not sl < price < tp:
             return dict(audit, reason="LONG_FILTER_PRICE_OUTSIDE_TUNNEL")
-        audit.update(expected_fill=str(price), sma10=str(ma10),
+        audit.update(expected_fill=str(price),
                      tp_line=str(tp), sl_line=str(sl),
-                     ma10_gap_pct=float((price-ma10)/ma10*100),
                      tp_gap_pct=float((tp-price)/price*100),
                      sl_gap_pct=float((price-sl)/price*100))
-        # Decimal multiplication keeps all three inclusive limits exact.
-        if price < ma10 * Decimal("1.0045"):
-            return dict(audit, reason="LONG_MA10_GAP_BELOW_045")
+        # Keep both TP/SL limits inclusive; MA10 is not an entry constraint.
         if tp > price * Decimal("1.006"):
             return dict(audit, reason="LONG_TP_GAP_ABOVE_060")
         if sl > price * Decimal("0.999"):
