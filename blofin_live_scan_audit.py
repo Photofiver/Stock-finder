@@ -3,6 +3,7 @@
 This script does not place orders, modify the LIVE bot, or read private API keys.
 """
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -724,6 +725,64 @@ def nearest_volume_shadow(history):
     return True
 
 
+def current_audit_diagnostic(state, diagnostic, signal_close_ms, cache):
+    """Build a read-only snapshot for strategies that do not run legacy diagnostics."""
+    items = diagnostic.get("instruments") or []
+    event = state.get("volume_long_last_scan") or {}
+    current_event = int(event.get("signal_close_ms") or 0) == signal_close_ms
+    stale = not items or any(
+        int(item.get("close_ms") or 0) != signal_close_ms for item in items
+    )
+    if not current_event and not stale:
+        return diagnostic
+    universe = list(dict.fromkeys(
+        state.get("last_top200") or state.get("last_top7")
+        or [item.get("inst") for item in items if item.get("inst")]
+    ))
+    if not universe:
+        return {"instruments": []}
+    # Audit runs after LIVE execution; this never sends orders or saves LIVE state.
+    with ThreadPoolExecutor(max_workers=min(8, len(universe))) as pool:
+        list(pool.map(lambda inst: fetch_cached(inst, cache), universe))
+    return {
+        "generated_at_ms": bot.now_ms(),
+        "strategy": event.get("strategy") if current_event else "MARKET_SNAPSHOT",
+        "result": event.get("status") if current_event else "READ_ONLY_SNAPSHOT",
+        "source": "EXACT_CLOSED_CANDLE",
+        "top7": universe,
+        "instruments": [
+            {"inst": inst, "rank": rank, "close_ms": signal_close_ms}
+            for rank, inst in enumerate(universe, 1)
+        ],
+    }
+
+
+def invalidate_mismatched_candles(history):
+    """Quarantine invalid bases and derived returns without inventing old prices."""
+    changed = False
+    for scan in history.get("scans", []):
+        invalid = False
+        for row in scan.get("instruments", []):
+            if (row.get("candle") and int(row.get("signal_close_ms") or 0)
+                    != int(scan.get("signal_close_ms") or 0)):
+                row["invalid_original_record"] = dict(row)
+                for key in ("candle", "rsi14", "indicators_at_signal", "adx14",
+                            "obv_delta_5", "obv_rising_5", "short_adx40_obv5",
+                            "macd", "sma10_20", "rsi14_sma14_cross",
+                            "chart_patterns", "short", "long"):
+                    row[key] = None
+                row["data_error"] = "CANDLE_TIMESTAMP_MISMATCH"
+                row["next_candle_review"] = {"status": "NO_BASE"}
+                changed = invalid = True
+        if invalid:
+            scan["data_integrity"] = "INVALID_CANDLES_QUARANTINED"
+            scan[COMPARISON_KEY] = {"status": "NO_BASE"}
+            scan.pop("nearest_volume_shadow", None)
+    if changed:
+        history.pop("nearest_volume_shadow_summary", None)
+    return changed
+
+
 def record_current_scan(history, cache):
     state = bot.load_state()
     diagnostic = state.get("last_diagnostic") or {}
@@ -761,6 +820,7 @@ def record_current_scan(history, cache):
         diagnostic = state.get("last_diagnostic") or {}
         diagnostic["result"] = sma_event.get("status") or "SMA_CROSS"
         diagnostic["strategy"] = f"SMA10_SMA20_{bot.SIGNAL_LABEL}"
+    diagnostic = current_audit_diagnostic(state, diagnostic, signal_close_ms, cache)
     items = diagnostic.get("instruments") or []
     if not items:
         print("AUDIT_NO_NEW_DIAGNOSTIC")
@@ -768,20 +828,27 @@ def record_current_scan(history, cache):
 
     instruments = []
     for item in items:
-        candle = item.get("candle") or {}
+        candle = {}
         inst = item.get("inst")
         adx14, obv_delta_5 = None, None
         indicators_at_signal = None
         indicator_error = None
         sma_snapshot = None
         rsi_average_snapshot = None
-        if inst and candle.get("close"):
+        if inst:
             bars = fetch_cached(inst, cache)
             if isinstance(bars, Exception):
                 indicator_error = str(bars)
             else:
                 closed_bars = [bar for bar in bars if bot.bar_close_ms(bar) <= signal_close_ms]
                 if closed_bars and bot.bar_close_ms(closed_bars[-1]) == signal_close_ms:
+                    current = closed_bars[-1]
+                    candle = {
+                        "color": bot.candle_color(current),
+                        "open": float(current["o"]), "high": float(current["h"]),
+                        "low": float(current["l"]), "close": float(current["c"]),
+                        "volume": float(current["v"]),
+                    }
                     indicators_at_signal = snapshot_indicators(closed_bars)
                     adx14 = indicators_at_signal["adx14"]
                     obv_delta_5 = indicators_at_signal["obv_delta_5"]
@@ -793,9 +860,9 @@ def record_current_scan(history, cache):
         instruments.append({
             "inst": inst,
             "rank": item.get("rank"),
-            "signal_close_ms": item.get("close_ms"),
+            "signal_close_ms": signal_close_ms if candle else None,
             "candle": candle,
-            "rsi14": item.get("rsi14"),
+            "rsi14": (indicators_at_signal or {}).get("rsi14"),
             "indicators_at_signal": indicators_at_signal,
             "adx14": adx14,
             "obv_delta_5": obv_delta_5,
@@ -820,7 +887,8 @@ def record_current_scan(history, cache):
         "captured_utc": utc_now(),
         "diagnostic_generated_at_ms": diagnostic.get("generated_at_ms"),
         "strategy_result": diagnostic.get("result"),
-        "strategy_name": diagnostic.get("strategy") if is_sma_scan else "LEGACY",
+        "strategy_name": diagnostic.get("strategy") or "LEGACY",
+        "candle_source": "EXACT_CLOSED_CANDLE",
         "sma10_20_live": sma_event if is_sma_scan else None,
         "sma10_20_rules": {
             "timeframe": bot.SIGNAL_LABEL,
@@ -852,7 +920,7 @@ def record_current_scan(history, cache):
             if int((state.get("last_pretrade_ranking") or {}).get("generated_at_ms") or 0)
             >= signal_close_ms else {"status": "UNAVAILABLE"}
         ),
-        "top7": state.get("last_top7") or diagnostic.get("top7"),
+        "top7": diagnostic.get("top7") or state.get("last_top7"),
         "instruments": instruments,
         "next_candle_review_complete": False,
         COMPARISON_KEY: {"status": "PENDING"},
@@ -869,7 +937,8 @@ def record_current_scan(history, cache):
 def main():
     history = load_history()
     cache = {}
-    updated = review_previous(history, cache)
+    updated = invalidate_mismatched_candles(history)
+    updated = review_previous(history, cache) or updated
     updated = record_current_scan(history, cache) or updated
     updated = refresh_real_live_trade_outcomes(history, bot.load_state()) or updated
     updated = backfill_first_touch(history) or updated
