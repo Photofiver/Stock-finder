@@ -72,13 +72,11 @@ class TestSelectedLongEntryFilter(unittest.TestCase):
     def test_each_filter_rejects_independently(self):
         from blofin_volume_flip_both_live import pivot_long_entry_filter
         for field, value, reason in [
-                ("sma10", "100.00001", "LONG_MA10_GAP_BELOW_045"),
                 ("upper_price", "101.05271", "LONG_TP_GAP_ABOVE_060"),
                 ("lower_price", "100.34956", "LONG_SL_GAP_BELOW_010")]:
             with self.subTest(field=field):
                 sig = self.signal()
-                target = sig if field == "sma10" else sig["volume_price_tunnel"]
-                target[field] = value
+                sig["volume_price_tunnel"][field] = value
                 result = pivot_long_entry_filter(sig, {"expected_fill": "100.45"})
                 self.assertFalse(result["allowed"])
                 self.assertEqual(result["reason"], reason)
@@ -89,19 +87,42 @@ class TestSelectedLongEntryFilter(unittest.TestCase):
         sig["close"] = "100.45"
         result = pivot_long_entry_filter(sig, {"expected_fill": "100.40"})
         self.assertFalse(result["allowed"])
-        self.assertEqual(result["reason"], "LONG_MA10_GAP_BELOW_045")
+        self.assertEqual(result["reason"], "LONG_TP_GAP_ABOVE_060")
+
+    def test_ma10_price_gate_removed_but_other_entry_filters_unchanged(self):
+        from blofin_volume_flip_both_live import pivot_long_entry_filter
+        for sma10 in ["100.00001", "101", None, "NaN", "Infinity", "0"]:
+            with self.subTest(sma10=sma10):
+                sig = self.signal()
+                sig["sma10"] = sma10
+                result = pivot_long_entry_filter(sig, {"expected_fill": "100.45"})
+                self.assertTrue(result["allowed"], result)
 
     def test_missing_stale_and_nonfinite_data_fail_closed(self):
         from blofin_volume_flip_both_live import pivot_long_entry_filter
-        for field, value in [("sma10", None), ("sma10", "NaN"),
-                             ("sma10", "Infinity"), ("sma10", "0"),
-                             ("indicator_signal_close_ms", 0),
-                             ("indicator_status", "UNAVAILABLE")]:
+        for field, value in [
+                ("indicator_signal_close_ms", 0),
+                ("indicator_status", "UNAVAILABLE"),
+                ("indicator_timeframe", "15m")]:
             with self.subTest(field=field, value=value):
                 sig = self.signal()
                 sig[field] = value
                 self.assertFalse(pivot_long_entry_filter(
                     sig, {"expected_fill": "100.45"})["allowed"])
+        for field, value in [
+                ("upper_price", None), ("upper_price", "NaN"),
+                ("upper_price", "Infinity"), ("upper_price", "0"),
+                ("lower_price", None), ("lower_price", "NaN"),
+                ("lower_price", "Infinity"), ("lower_price", "0")]:
+            with self.subTest(field=field, value=value):
+                sig = self.signal()
+                sig["volume_price_tunnel"][field] = value
+                self.assertFalse(pivot_long_entry_filter(
+                    sig, {"expected_fill": "100.45"})["allowed"])
+        for price in [None, "NaN", "Infinity", "0"]:
+            with self.subTest(expected_fill=price):
+                self.assertFalse(pivot_long_entry_filter(
+                    self.signal(), {"expected_fill": price})["allowed"])
         self.assertFalse(pivot_long_entry_filter(self.signal(), {})["allowed"])
 
     def test_new_short_blocked_before_any_bot_call(self):
