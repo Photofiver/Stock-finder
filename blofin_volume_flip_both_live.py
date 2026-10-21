@@ -975,6 +975,12 @@ def pivot_long_entry_filter(sig, quote):
     if sig.get("side") != "LONG":
         return dict(audit, reason="PIVOT_LONG_ONLY")
     try:
+        # Preserve the existing confirmed-indicator safety check. Only the
+        # MA10 price-distance entry threshold has been removed.
+        if (sig.get("indicator_status") != "OK"
+                or sig.get("indicator_timeframe") != "5m"
+                or int(sig["indicator_signal_close_ms"]) != int(sig["signal_close_ms"])):
+            return dict(audit, reason="LONG_FILTER_INDICATORS_UNAVAILABLE")
         tunnel = sig["volume_price_tunnel"]
         price = Decimal(str(quote["expected_fill"]))
         tp = Decimal(str(tunnel["upper_price"]))
