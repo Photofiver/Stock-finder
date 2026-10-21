@@ -2338,7 +2338,7 @@ def checked_preorder_quote(inst, side, signal_close_price, enforce_adverse_gap=T
             f"{inst} {side}: adverse price move {adverse_gap_pct:.3f}% "
             f"> {MAX_ADVERSE_ENTRY_GAP_PCT}% from signal close"
         )
-    if spread_pct > MAX_ENTRY_SPREAD_PCT:
+    if MAX_ENTRY_SPREAD_PCT > 0 and spread_pct > MAX_ENTRY_SPREAD_PCT:
         append_technical_event(
             "ENTRY_SPREAD_BLOCKED",
             "Too wide bid/ask spread before market order",
