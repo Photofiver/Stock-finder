@@ -1970,21 +1970,6 @@ def history_result_ready(hist):
     return all(str(hist.get(key) if hist.get(key) is not None else "").strip() != "" for key in required)
 
 
-def _fetch_peak_1m_candles(inst, limit):
-    """One best-effort public read, max five seconds; never change LIVE order flow."""
-    response = requests.get(
-        BASE + "/api/v1/market/candles",
-        params={"instId": inst, "bar": "1m", "limit": str(limit)},
-        headers={"Accept": "application/json", "User-Agent": USER_AGENT},
-        timeout=5,
-    )
-    response.raise_for_status()
-    payload = response.json()
-    if str(payload.get("code", "0")) != "0":
-        raise RuntimeError(f"BloFin candle API: {payload.get('msg') or payload.get('code')}")
-    return payload.get("data") or []
-
-
 def record_closed(state, reason_hint=None):
     pos = state.get("position")
     if not pos:
@@ -2093,8 +2078,9 @@ def record_closed(state, reason_hint=None):
     # Do not let public candle API errors prevent a real close from being logged.
     try:
         from blofin_trade_peak import summarize_position_peak
+        # Reuse confirmed candle audit; no extra BloFin API request on close.
         peak_position = summarize_position_peak(
-            pos, hist, _fetch_peak_1m_candles
+            pos, hist, lambda _inst, _limit: []
         )
     except Exception as exc:
         peak_position = {
