@@ -51,5 +51,68 @@ class TestTunnel(unittest.TestCase):
         rows[11*FIVE]=(8,12,5.0,5.9,100)
         self.assertTrue(pivot_exit_transition(position,rows,12*FIVE,"LONG"))
 
+
+class TestSelectedLongEntryFilter(unittest.TestCase):
+    def signal(self):
+        return {"side": "LONG", "signal_close_ms": 300000,
+                "indicator_signal_close_ms": 300000,
+                "indicator_status": "OK", "indicator_timeframe": "5m",
+                "sma10": "100", "volume_price_tunnel": {
+                    "upper_price": "101.0527", "lower_price": "100.34955"}}
+
+    def test_all_inclusive_boundaries_pass_without_moving_lines(self):
+        import copy
+        from blofin_volume_flip_both_live import pivot_long_entry_filter
+        sig = self.signal()
+        before = copy.deepcopy(sig)
+        result = pivot_long_entry_filter(sig, {"expected_fill": "100.45"})
+        self.assertTrue(result["allowed"], result)
+        self.assertEqual(sig, before)
+
+    def test_each_filter_rejects_independently(self):
+        from blofin_volume_flip_both_live import pivot_long_entry_filter
+        for field, value, reason in [
+                ("sma10", "100.00001", "LONG_MA10_GAP_BELOW_045"),
+                ("upper_price", "101.05271", "LONG_TP_GAP_ABOVE_060"),
+                ("lower_price", "100.34956", "LONG_SL_GAP_BELOW_010")]:
+            with self.subTest(field=field):
+                sig = self.signal()
+                target = sig if field == "sma10" else sig["volume_price_tunnel"]
+                target[field] = value
+                result = pivot_long_entry_filter(sig, {"expected_fill": "100.45"})
+                self.assertFalse(result["allowed"])
+                self.assertEqual(result["reason"], reason)
+
+    def test_uses_expected_fill_not_signal_close(self):
+        from blofin_volume_flip_both_live import pivot_long_entry_filter
+        sig = self.signal()
+        sig["close"] = "100.45"
+        result = pivot_long_entry_filter(sig, {"expected_fill": "100.40"})
+        self.assertFalse(result["allowed"])
+        self.assertEqual(result["reason"], "LONG_MA10_GAP_BELOW_045")
+
+    def test_missing_stale_and_nonfinite_data_fail_closed(self):
+        from blofin_volume_flip_both_live import pivot_long_entry_filter
+        for field, value in [("sma10", None), ("sma10", "NaN"),
+                             ("sma10", "Infinity"), ("sma10", "0"),
+                             ("indicator_signal_close_ms", 0),
+                             ("indicator_status", "UNAVAILABLE")]:
+            with self.subTest(field=field, value=value):
+                sig = self.signal()
+                sig[field] = value
+                self.assertFalse(pivot_long_entry_filter(
+                    sig, {"expected_fill": "100.45"})["allowed"])
+        self.assertFalse(pivot_long_entry_filter(self.signal(), {})["allowed"])
+
+    def test_new_short_blocked_before_any_bot_call(self):
+        from unittest.mock import Mock, patch
+        import blofin_volume_flip_both_live as live
+        bot = Mock()
+        with patch.object(live, "PIVOT_ENABLED", True):
+            sig = {"inst": "TEST-USDT", "side": "SHORT"}
+            self.assertFalse(live._open_one(bot, {}, sig, {}))
+        self.assertEqual(sig["preorder_rejection"], "PIVOT_LONG_ONLY")
+        self.assertEqual(bot.mock_calls, [])
+
 if __name__=="__main__":
     unittest.main()

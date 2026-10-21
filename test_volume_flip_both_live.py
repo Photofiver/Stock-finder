@@ -681,6 +681,32 @@ class Broker(unittest.TestCase):
         self.assertEqual(reasons["RISING-LONG"], "LONG_VOLUME_MA20_NOT_DECLINING")
         self.assertNotIn("RANK51-LONG", reasons)
 
+    def test_pivot_long_filter_blocks_before_order_and_records_reason(self):
+        sig = self.signal("ABC-USDT", "LONG")
+        sig["pivot_tunnel_entry"] = True
+        sig["sma10"] = 100
+        with patch.object(live, "PIVOT_ENABLED", True):
+            self.assertFalse(live._open_one(self.bot, self.state, sig, self.instruments))
+        self.assertEqual(sig["preorder_rejection"], "LONG_MA10_GAP_BELOW_045")
+        self.assertEqual(self.bot.posted, [])
+        self.assertEqual(self.state["positions"], {})
+        self.assertNotIn("volume_long_order_attempts", self.state)
+
+    @patch("blofin_trade_charts.capture_chart", side_effect=RuntimeError("offline"))
+    def test_pivot_long_filter_pass_preserves_line_protection_and_capital(self, chart):
+        sig = self.signal("ABC-USDT", "LONG")
+        sig["pivot_tunnel_entry"] = True
+        sig["sma10"] = 99
+        sig["volume_price_tunnel"].update(upper_price=100.5, lower_price=99.5)
+        with patch.object(live, "PIVOT_ENABLED", True):
+            self.assertTrue(live._open_one(self.bot, self.state, sig, self.instruments))
+        pos = self.state["positions"]["ABC-USDT"]
+        self.assertTrue(pos["signal_snapshot"]["pivot_long_entry_filter"]["allowed"])
+        self.assertEqual((Decimal(pos["tp"]), Decimal(pos["sl"])),
+                         (Decimal("100.5"), Decimal("99.5")))
+        self.assertLessEqual(Decimal(pos["notional_usdt"]), Decimal("5"))
+        self.assertEqual(self.bot.posted[0][2]["side"], "buy")
+
     def test_short_quote_filters_block_before_any_order_post(self):
         sig = self.signal("XYZ-USDT", "SHORT")
         for gap, spread, reason in [
