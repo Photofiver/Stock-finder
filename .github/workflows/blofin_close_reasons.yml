@@ -6,14 +6,15 @@ on:
     paths:
       - '.github/workflows/blofin_close_reasons.yml'
       - 'blofin_close_reasons_audit.py'
+      - 'blofin_close_bulk_backfill.py'
   schedule:
-    - cron: '4,9,14,19,24,29,34,39,44,49,54,59 * * * *'
+    - cron: '24,54 * * * *' # gentle batch checks, avoid BloFin firewall
 
 permissions:
   contents: write
 
 concurrency:
-  group: blofin-close-reasons-fast-v2
+  group: blofin-close-reasons-bulk-v3
   cancel-in-progress: false
 
 jobs:
@@ -30,7 +31,7 @@ jobs:
           python3 - <<'PY'
           import os, urllib.request, base64, json
           root = 'https://api.github.com/repos/' + os.environ['GITHUB_REPOSITORY'] + '/contents/'
-          for filename in ('blofin_close_reasons_audit.py', 'test_blofin_close_reasons.py'):
+          for filename in ('blofin_close_reasons_audit.py', 'blofin_close_bulk_backfill.py', 'test_blofin_close_bulk_backfill.py'):
               request = urllib.request.Request(root + filename + '?ref=main', headers={
                   'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
                   'Accept': 'application/vnd.github.raw+json',
@@ -51,7 +52,7 @@ jobs:
           PY
 
       - name: Verify closing order classification without trading
-        run: python3 -m unittest -q test_blofin_close_reasons.py
+        run: python3 -m unittest -q test_blofin_close_bulk_backfill.py
 
       - name: Check and save BloFin closing-order causes (only broker GET)
         env:
@@ -60,4 +61,4 @@ jobs:
           BLOFIN_SECRET_KEY: ${{ secrets.BLOFIN_SECRET_KEY }}
           BLOFIN_PASSPHRASE: ${{ secrets.BLOFIN_PASSPHRASE }}
           NTFY_TOPIC: 'blofin-nhd0jt7wspfnhtitdlaowk1n'
-        run: python3 blofin_close_reasons_audit.py
+        run: python3 blofin_close_bulk_backfill.py
