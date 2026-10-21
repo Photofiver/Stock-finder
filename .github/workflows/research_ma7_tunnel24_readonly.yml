@@ -1,0 +1,42 @@
+name: MA7 plus current tunnel same 24h read-only
+on:
+  push:
+    paths:
+      - 'research_ma7_tunnel24_readonly.py'
+      - '.github/workflows/research_ma7_tunnel24_readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            research_ma7_last24_readonly.py
+            research_ma7_tunnel24_readonly.py
+            blofin_pivot_tunnel.py
+            blofin_volume_flip_both_live.py
+            blofin_live_state.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Reuse the exact 200-coin universe of the previous test
+        run: |
+          git fetch --filter=blob:none --depth=1 origin 49d07754ee9da6217bed22f27fd1f338bd1fc30b
+          git show FETCH_HEAD:blofin_live_state.json > blofin_live_state.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.3
+      - run: python -u research_ma7_tunnel24_readonly.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ma7-tunnel24-results
+          path: |
+            ma7_tunnel24_results.json
+            ma7_tunnel24_candles.json.gz
+          retention-days: 10
