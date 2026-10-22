@@ -274,6 +274,47 @@ def _reconcile_pending_tunnel_sl(bot, state, pos):
     raise RuntimeError("Pending trailing SL: unexpected broker SL; do not overwrite")
 
 
+
+def _confirmed_entry_lower_anchors(bot, state, pos):
+    """Recover the two original confirmed lower anchors for older LIVE entries.
+
+    Historical positions saved only upper_anchors under pivot_tunnel.
+    Their exact lower anchors remain in the immutable entry signal snapshot.
+    Do not infer pivots from newer candles: verify timestamp, last pivot and
+    direction before adopting the stored entry-time geometry.
+    """
+    tunnel = pos.get("pivot_tunnel") or {}
+    anchors = tunnel.get("lower_anchors") or []
+    if len(anchors) == 2:
+        return anchors
+    snap = (pos.get("signal_snapshot") or {}).get("volume_price_tunnel") or {}
+    saved = snap.get("lower_anchors") or []
+    last = tunnel.get("last_confirmed_low") or {}
+    try:
+        if (snap.get("status") != "VALID"
+                or snap.get("tunnel_direction") != "LONG"
+                or int(snap.get("signal_close_ms") or 0) != int(pos.get("signal_close_ms") or 0)
+                or len(saved) != 2
+                or int(saved[0]["open_ms"]) >= int(saved[1]["open_ms"])
+                or int(saved[1]["open_ms"]) != int(last["open_ms"])
+                or bot.d(saved[1]["price"]) != bot.d(last["price"])
+                or int(saved[1]["confirmed_close_ms"]) != int(pos["signal_close_ms"])
+                or any(bot.d(a["price"]) <= 0 or
+                       int(a["confirmed_close_ms"]) > int(pos["signal_close_ms"])
+                       for a in saved)):
+            raise ValueError("entry anchor snapshot failed validation")
+    except (ValueError, KeyError, TypeError, ArithmeticError) as exc:
+        pos["sl_trail_error"] = f"MISSING_CONFIRMED_ENTRY_LOWER_ANCHORS: {exc}"[:220]
+        pos["last_sl_trail_status"] = "BLOCK_MISSING_LOWER_ANCHORS"
+        bot.save_state(state)
+        return []
+    tunnel["lower_anchors"] = [dict(saved[0]), dict(saved[1])]
+    pos["pivot_tunnel"] = tunnel
+    pos["last_sl_trail_status"] = "RECOVERED_ENTRY_LOWER_ANCHORS"
+    bot.save_state(state)
+    return tunnel["lower_anchors"]
+
+
 def _trail_confirmed_pivot_long_sl(bot, state, pos, meta, rows, close_ms, ticker):
     """Tighten existing broker SL along ENTRY's lower pivot line, never loosen.
 
@@ -287,8 +328,13 @@ def _trail_confirmed_pivot_long_sl(bot, state, pos, meta, rows, close_ms, ticker
     if close_ms <= int(pos.get("signal_close_ms") or 0):
         return None
     candle = rows.get(close_ms-FIVE)
-    anchors = (pos.get("pivot_tunnel") or {}).get("lower_anchors") or []
-    if not candle or len(anchors) != 2 or not meta:
+    if not candle:
+        return None
+    anchors = _confirmed_entry_lower_anchors(bot, state, pos)
+    if len(anchors) != 2:
+        return {"status":"BLOCK_MISSING_LOWER_ANCHORS"}
+    if not meta:
+        pos["last_sl_trail_status"] = "SKIP_MISSING_INSTRUMENT_META"
         return None
     try:
         left, right = anchors
@@ -304,6 +350,7 @@ def _trail_confirmed_pivot_long_sl(bot, state, pos, meta, rows, close_ms, ticker
         target = (raw/tick).to_integral_value(rounding=ROUND_FLOOR)*tick
         previous = bot.d(pos.get("sl") or "0")
         if not (target > previous > 0):
+            pos["last_sl_trail_status"] = "NO_HIGHER_SL_LINE_TICK"
             return None
         price_close = bot.d(candle[3])
         price_live = bot.d((ticker or {}).get("last") or "0")
@@ -1815,6 +1862,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                 "second_bounce_entry": True,
                 "pivot_tunnel_info": {
                     "upper_anchors": tunnel["upper_anchors"],
+                    "lower_anchors": tunnel["lower_anchors"],
                     "last_confirmed_high": tunnel["last_confirmed_high"],
                     "last_confirmed_low": tunnel["last_confirmed_low"],
                     "setup_confirm_close_ms": tunnel["fourth_confirmed_close_ms"],
