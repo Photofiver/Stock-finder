@@ -1060,5 +1060,155 @@ class PrivateGet429Recovery(unittest.TestCase):
         wait.assert_not_called()
 
 
+class EarlyTunnelTPNoChaseTests(unittest.TestCase):
+    """Offline regression: initial 0.05% TP can only tighten after entry."""
+
+    class Broker:
+        def __init__(self, tp, sl):
+            self.tp = str(tp)
+            self.sl = str(sl)
+            self.requests = []
+
+        @staticmethod
+        def d(value):
+            return Decimal(str(value))
+
+        @staticmethod
+        def clean_decimal(value):
+            return str(value)
+
+        def save_state(self, state):
+            pass
+
+        def private_request(self, method, path, body=None, params=None):
+            self.requests.append((method, path, body))
+            if method == "GET" and path == "/api/v1/trade/order-tpsl-detail":
+                return {
+                    "state": "live", "tpslId": "oco1",
+                    "tpTriggerPrice": self.tp, "slTriggerPrice": self.sl,
+                    "tpTriggerPriceType": "last", "slTriggerPriceType": "last",
+                }
+            if method == "POST" and path == "/api/v1/trade/amend-tpsl":
+                self.assert_price_only_tp(body)
+                self.tp = body["newTpTriggerPrice"]
+                return [{"code": "0", "tpslId": "oco1"}]
+            raise AssertionError("Unexpected broker request: " + method + " " + path)
+
+        @staticmethod
+        def assert_price_only_tp(body):
+            assert "newTpTriggerPrice" in body
+            assert "newSlTriggerPrice" not in body
+            assert body["newTpTriggerPriceType"] == "last"
+
+    @staticmethod
+    def prepare(side, first, second):
+        now = 9 * F
+        signal = 8 * F
+        anchors = [
+            {"open_ms": 5 * F, "price": first, "confirmed_close_ms": 6 * F},
+            {"open_ms": 7 * F, "price": second, "confirmed_close_ms": 8 * F},
+        ]
+        # The initial TP uses the signal-time line and remains active on
+        # the exchange until a risk-free, closer target can be confirmed.
+        line_at_entry = Decimal(str(second)) + (
+            Decimal(str(second)) - Decimal(str(first))) / 2
+        initial = live._early_tunnel_tp(
+            EarlyTunnelTPNoChaseTests.Broker("1", "1"), side,
+            line_at_entry, Decimal("0.01"))
+        sl = "95" if side == "LONG" else "105"
+        bot = EarlyTunnelTPNoChaseTests.Broker(initial, sl)
+        pos = {
+            "inst": "TEST-USDT", "side": side,
+            "tp_sl_mode": live.EARLY_TUNNEL_TP_MODE,
+            "tpsl_id": "oco1", "signal_close_ms": signal,
+            "tp": str(initial), "sl": sl,
+            "pivot_tunnel": {
+                "upper_anchors" if side == "LONG" else "lower_anchors": anchors,
+            },
+        }
+        return bot, pos, {now - F: (100, 100.2, 99.8, 100, 1)}, now
+
+    @staticmethod
+    def trail(bot, pos, bars, now):
+        return live._trail_confirmed_pivot_tp(
+            bot, {}, pos, {"tickSize": "0.01"}, bars, now,
+            {"last": "100"})
+
+    def test_initial_tp_is_005_percent_before_boundary(self):
+        bot = self.Broker("1", "1")
+        self.assertEqual(
+            live._early_tunnel_tp(bot, "LONG", "105", "0.01"),
+            Decimal("104.94"))
+        self.assertEqual(
+            live._early_tunnel_tp(bot, "SHORT", "95", "0.01"),
+            Decimal("95.05"))
+
+    def test_long_tp_moving_up_is_frozen(self):
+        bot, pos, bars, now = self.prepare("LONG", 101, 102)
+        original = pos["tp"]
+        self.assertIsNone(self.trail(bot, pos, bars, now))
+        self.assertEqual(pos["tp"], original)
+        self.assertEqual(bot.tp, original)
+        self.assertEqual(pos["last_tp_trail_status"], "SKIP_TP_WOULD_MOVE_FARTHER")
+        self.assertFalse(any(m == "POST" for m, _, _ in bot.requests))
+
+    def test_short_tp_moving_down_is_frozen(self):
+        bot, pos, bars, now = self.prepare("SHORT", 96, 95)
+        original = pos["tp"]
+        self.assertIsNone(self.trail(bot, pos, bars, now))
+        self.assertEqual(pos["tp"], original)
+        self.assertEqual(bot.tp, original)
+        self.assertEqual(pos["last_tp_trail_status"], "SKIP_TP_WOULD_MOVE_FARTHER")
+        self.assertFalse(any(m == "POST" for m, _, _ in bot.requests))
+
+    def test_long_tp_moving_down_is_verified_at_broker(self):
+        bot, pos, bars, now = self.prepare("LONG", 103, 102)
+        old = Decimal(pos["tp"])
+        result = self.trail(bot, pos, bars, now)
+        self.assertEqual(result["status"], "BROKER_VERIFIED")
+        self.assertLess(Decimal(pos["tp"]), old)
+        self.assertEqual(Decimal(pos["tp"]), Decimal(bot.tp))
+        self.assertEqual(pos["sl"], "95")
+        self.assertEqual(sum(m == "POST" for m, _, _ in bot.requests), 1)
+
+    def test_short_tp_moving_up_is_verified_at_broker(self):
+        bot, pos, bars, now = self.prepare("SHORT", 94, 95)
+        old = Decimal(pos["tp"])
+        result = self.trail(bot, pos, bars, now)
+        self.assertEqual(result["status"], "BROKER_VERIFIED")
+        self.assertGreater(Decimal(pos["tp"]), old)
+        self.assertEqual(Decimal(pos["tp"]), Decimal(bot.tp))
+        self.assertEqual(pos["sl"], "105")
+        self.assertEqual(sum(m == "POST" for m, _, _ in bot.requests), 1)
+
+    def test_definitely_rejected_sl_102040_unblocks_tp_without_changing_sl(self):
+        bot = self.Broker("104", "95")
+        pos = {
+            "inst": "TEST-USDT", "tpsl_id": "oco1", "sl": "95",
+            "tunnel_sl_pending": {
+                "old_sl": "95", "target_sl": "96", "close_ms": 10 * F},
+            "sl_trail_error": (
+                "AMEND_UNCERTAIN: BloFin API 102040 SL trigger price "
+                "should be higher than the latest trading price"),
+        }
+        self.assertTrue(live._reconcile_pending_tunnel_sl(bot, {}, pos))
+        self.assertNotIn("tunnel_sl_pending", pos)
+        self.assertEqual(pos["sl"], "95")
+        self.assertEqual(bot.sl, "95")
+        self.assertEqual([m for m, _, _ in bot.requests], ["GET"])
+
+    def test_unknown_sl_amend_result_keeps_pending_for_safety(self):
+        bot = self.Broker("104", "95")
+        pos = {
+            "inst": "TEST-USDT", "tpsl_id": "oco1", "sl": "95",
+            "tunnel_sl_pending": {
+                "old_sl": "95", "target_sl": "96", "close_ms": 10 * F},
+            "sl_trail_error": "AMEND_UNCERTAIN: network timeout",
+        }
+        self.assertFalse(live._reconcile_pending_tunnel_sl(bot, {}, pos))
+        self.assertIn("tunnel_sl_pending", pos)
+        self.assertEqual(pos["sl"], "95")
+
+
 if __name__=="__main__":
     unittest.main()
