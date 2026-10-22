@@ -167,11 +167,11 @@ class TestFortyEightBarTunnelLookback(unittest.TestCase):
                 for i in range(70)}
         # Old pivot at 19 is outside the last 48 bars [22..69].
         rows[19*FIVE] = (9.0, 15.0, 5.0, 9.0, 100)
-        # The pivot at 21 has its left, center and right within the window.
+        # The pivot at 25 has its left, center and right within the window.
         rows[25*FIVE] = (9.0, 16.0, 6.0, 9.0, 100)
         highs, lows = confirmed_pivots(rows, 70*FIVE)
         self.assertEqual([p["open_ms"] for p in highs], [25*FIVE])
-        self.assertEqual([p["open_ms"] for p in lows], [21*FIVE])
+        self.assertEqual([p["open_ms"] for p in lows], [25*FIVE])
         tunnel = evaluate_tunnel(rows, 70*FIVE)
         self.assertFalse(tunnel["entry_allowed"])
         self.assertEqual(tunnel["lookback_candles"], 48)
