@@ -1607,6 +1607,14 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                 rows, expected_close_ms, int(pivot_restart.get(inst) or 0))
             if not tunnel["entry_allowed"]:
                 continue
+            # Enter only on confirmation of the SECOND lower swing itself.
+            # A newly confirmed upper pivot alone is not a lower bounce.
+            lows=tunnel.get("lower_anchors") or []
+            if (len(lows)!=2 or
+                    int(lows[1].get("confirmed_close_ms") or 0)!=int(expected_close_ms)):
+                scan["rejections"].append({
+                    "inst":inst,"rank":rank,"reason":"WAIT_SECOND_LOWER_BOUNCE"})
+                continue
             candle = rows.get(expected_close_ms-FIVE)
             if candle is None or candle[4] <= 0:
                 continue
