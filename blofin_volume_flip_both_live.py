@@ -1838,11 +1838,27 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
             try:
                 if pos.get("tunnel_sl_pending"):
                     _reconcile_pending_tunnel_sl(bot,state,pos)
+                if pos.get("tunnel_tp_pending"):
+                    _reconcile_pending_tunnel_tp(bot,state,pos)
+                # An in-flight amend can already be live at the broker. Do
+                # not mistake its OLD local price for missing protection and
+                # emergency-close a still protected trade on a stale read.
+                if pos.get("tunnel_sl_pending") or pos.get("tunnel_tp_pending"):
+                    unprotected.append(inst)
+                    scan["rejections"].append({
+                        "inst":inst,"reason":"TPSL_AMEND_AWAITING_BROKER_VERIFICATION"})
+                    continue
                 protected=_ensure_protection(bot,state,pos,instruments.get(inst))
             except Exception as exc:
-                protected=False
                 pos["protection_error"]=f"{type(exc).__name__}: {exc}"[:250]
                 bot.save_state(state)
+                if pos.get("tunnel_sl_pending") or pos.get("tunnel_tp_pending"):
+                    unprotected.append(inst)
+                    scan["rejections"].append({
+                        "inst":inst,"reason":"TPSL_AMEND_BROKER_READ_UNCERTAIN",
+                        "error":pos["protection_error"]})
+                    continue
+                protected=False
             if protected:
                 if pos.get("trigger_migration_deferred"):
                     # Old MARK OCO is still active; block NEW trading until
