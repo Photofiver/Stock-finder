@@ -1,6 +1,6 @@
 """Offline safety tests for four confirmed 5m tunnel points."""
 import unittest
-from blofin_pivot_tunnel import FIVE, evaluate_tunnel, pivot_exit_transition
+from blofin_pivot_tunnel import FIVE, evaluate_tunnel, pivot_exit_transition, second_boundary_bounce
 
 RAW = [
     (11, 9), (12, 9.5), (15, 10), (12, 8), (11, 5),
@@ -134,6 +134,31 @@ class TestSelectedLongEntryFilter(unittest.TestCase):
             self.assertFalse(live._open_one(bot, {}, sig, {}))
         self.assertEqual(sig["preorder_rejection"], "PIVOT_LONG_ONLY")
         self.assertEqual(bot.mock_calls, [])
+
+class TestSecondUpperBounce(unittest.TestCase):
+    def test_two_confirmed_upper_touches_only(self):
+        rows = {}
+        for i in range(12):
+            rows[i*FIVE] = (9.5, 9.8, 9.0, 9.5, 100)
+        # Two upper pivots, each confirmed by its following closed bar.
+        rows[3*FIVE] = (9.5, 10.1, 9.0, 9.5, 100)
+        rows[4*FIVE] = (9.5, 9.8, 9.0, 9.5, 100)
+        rows[7*FIVE] = (9.5, 10.2, 9.0, 9.5, 100)
+        rows[8*FIVE] = (9.5, 9.8, 9.0, 9.5, 100)
+        pos = {
+            "side": "LONG", "opened_ms": 2*FIVE,
+            "pivot_tunnel": {"upper_anchors": [
+                {"open_ms": 0, "price": 10.0},
+                {"open_ms": FIVE, "price": 10.0},
+            ]},
+            "second_bounce_upper_count": 0,
+        }
+        self.assertFalse(second_boundary_bounce(pos, rows, 5*FIVE))
+        self.assertEqual(pos["second_bounce_upper_count"], 1)
+        self.assertFalse(second_boundary_bounce(pos, rows, 5*FIVE))
+        self.assertEqual(pos["second_bounce_upper_count"], 1)
+        self.assertTrue(second_boundary_bounce(pos, rows, 9*FIVE))
+        self.assertEqual(pos["second_bounce_upper_count"], 2)
 
 if __name__=="__main__":
     unittest.main()
