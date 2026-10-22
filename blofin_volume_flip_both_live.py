@@ -100,6 +100,8 @@ def _protection_prices(bot, pos, meta):
                   (tp_line / tick).to_integral_value(rounding=ROUND_FLOOR) * tick)
             sl = (sl_line / tick).to_integral_value(rounding=ROUND_CEILING) * tick
             valid = (0 < tp < sl) if pos.get("sl_trailing_active") else tp < entry < sl
+        else:
+            raise RuntimeError("Unknown side")
         # Existing broker TP wins for already-open positions; verify broker
         # matches this same tpslId rather than applying the discount twice.
         if pos.get("tp_sl_mode") == EARLY_TUNNEL_TP_MODE and pos.get("tpsl_id"):
@@ -107,8 +109,6 @@ def _protection_prices(bot, pos, meta):
             valid = ((tp > entry and tp > sl) if pos["side"] == "LONG"
                      else (tp < entry and tp < sl)) if not pos.get("sl_trailing_active") else (
                      tp > sl if pos["side"] == "LONG" else 0 < tp < sl)
-        else:
-            raise RuntimeError("Unknown side")
         if not valid:
             raise RuntimeError("Tunnel TP/SL not on the correct side of entry")
         if (pos.get("tp_sl_mode") == EARLY_TUNNEL_TP_MODE
