@@ -19,7 +19,7 @@ Existing legacy red-volume LONG positions retain their original exit.
 import math
 import os
 import uuid
-from blofin_pivot_tunnel import evaluate_tunnel, pivot_exit_transition
+from blofin_pivot_tunnel import evaluate_tunnel, pivot_exit_transition, second_boundary_bounce
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
@@ -29,6 +29,7 @@ PIVOT_ENABLED = os.getenv("LIVE_PIVOT_TUNNEL_ENABLED", "false").strip().lower() 
 LEGACY_STRATEGY = "REV_SHORT_20W_LONG_VOLUME_V1"
 HOLD_POLICY = "VOLUME_FLIP_BOTH_NO_TPSL"
 TUNNEL_TPSL_MODE = "TUNNEL_LINES_AT_ENTRY"
+SECOND_BOUNCE_SL_MODE = "SECOND_BOUNCE_SL_ONLY"
 EMERGENCY_TPSL_MODE = "EMERGENCY_FIXED_AFTER_FILL"
 TP_PCT = Decimal("0.0055")
 SL_PCT = Decimal("0.005")
@@ -75,6 +76,14 @@ def _protection_prices(bot, pos, meta):
         if not valid:
             raise RuntimeError("Tunnel TP/SL not on the correct side of entry")
         return tp, sl
+    if pos.get("tp_sl_mode") == SECOND_BOUNCE_SL_MODE:
+        sl_line = bot.d(pos.get("tunnel_sl_line") or "0")
+        if pos.get("side") != "LONG" or not sl_line.is_finite() or sl_line <= 0:
+            raise RuntimeError("Second bounce LONG requires a verified SL")
+        sl = (sl_line/tick).to_integral_value(rounding=ROUND_FLOOR)*tick
+        if not 0 < sl < entry:
+            raise RuntimeError("Second bounce SL not below entry")
+        return Decimal("0"), sl
     if pos["side"]=="LONG":
         tp=((entry*(1+TP_PCT)/tick).to_integral_value(rounding=ROUND_CEILING))*tick
         sl=((entry*(1-SL_PCT)/tick).to_integral_value(rounding=ROUND_CEILING))*tick
@@ -94,7 +103,7 @@ def _protection_prices(bot, pos, meta):
 def _ensure_mark_trigger(bot, state, pos, tp, sl):
     """Verify OCO and amend old MARK tunnel triggers to candle-aligned LAST."""
     inst=pos["inst"]
-    desired = (TRIGGER_TYPE if pos.get("tp_sl_mode") == TUNNEL_TPSL_MODE
+    desired = (TRIGGER_TYPE if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, SECOND_BOUNCE_SL_MODE)
                else "mark")  # Preserve legacy / non-tunnel protections.
     try:
         detail=bot.private_request("GET","/api/v1/trade/order-tpsl-detail",
@@ -108,7 +117,7 @@ def _ensure_mark_trigger(bot, state, pos, tp, sl):
             raise RuntimeError("Active broker TP/SL is missing or differs from tracked levels")
         types=(str(detail.get("tpTriggerPriceType") or "").lower(),
                str(detail.get("slTriggerPriceType") or "").lower())
-        if types==(desired,desired):
+        if types==(desired,desired) or (pos.get("tp_sl_mode")==SECOND_BOUNCE_SL_MODE and types[1]==desired):
             pos.update(tp_trigger_type=desired,sl_trigger_type=desired,
                        protection_status=("TUNNEL_LINES_LAST_ACTIVE"
                                           if pos.get("tp_sl_mode") == TUNNEL_TPSL_MODE
@@ -118,7 +127,7 @@ def _ensure_mark_trigger(bot, state, pos, tp, sl):
             pos.pop("protection_error",None)
             bot.save_state(state)
             return True
-        if types not in (("last","last"),("mark","mark")):
+        if types not in (("last","last"),("mark","mark"),("","last"),("","mark")):
             raise RuntimeError("Unexpected broker TP/SL trigger types: "+str(types))
         if pos.get("mark_amend_request_id"):
             raise RuntimeError("Prior mark-trigger amendment is awaiting broker confirmation")
@@ -201,16 +210,20 @@ def _ensure_protection(bot,state,pos,meta):
                sl_policy=("TUNNEL_LINE" if pos.get("tp_sl_mode") == TUNNEL_TPSL_MODE else SL_POLICY))
     bot.save_state(state)
     try:
-        response=bot.private_request("POST","/api/v1/trade/order-tpsl",body={
+        request_body={
             "instId":inst,"marginMode":bot.MARGIN_MODE,"positionSide":"net",
             "side":"sell" if pos["side"]=="LONG" else "buy",
             "tpTriggerPrice":bot.clean_decimal(tp),"tpOrderPrice":"-1",
-            "tpTriggerPriceType":(TRIGGER_TYPE if pos.get("tp_sl_mode")==TUNNEL_TPSL_MODE else "mark"),
+            "tpTriggerPriceType":(TRIGGER_TYPE if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, SECOND_BOUNCE_SL_MODE) else "mark"),
             "slTriggerPrice":bot.clean_decimal(sl),
             "slOrderPrice":"-1",
-            "slTriggerPriceType":(TRIGGER_TYPE if pos.get("tp_sl_mode")==TUNNEL_TPSL_MODE else "mark"),
+            "slTriggerPriceType":(TRIGGER_TYPE if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, SECOND_BOUNCE_SL_MODE) else "mark"),
             "size":"-1","reduceOnly":"true","clientOrderId":client,
-        })
+        }
+        if pos.get("tp_sl_mode") == SECOND_BOUNCE_SL_MODE:
+            for key in ("tpTriggerPrice","tpOrderPrice","tpTriggerPriceType"):
+                request_body.pop(key,None)
+        response=bot.private_request("POST","/api/v1/trade/order-tpsl",body=request_body)
         row=response[0] if isinstance(response,list) and response else (response or {})
         if str(row.get("code","0"))!="0" or not row.get("tpslId"):
             raise RuntimeError("BloFin TPSL not confirmed: "+str(row)[:200])
@@ -1077,7 +1090,7 @@ def _open_one(bot, state, sig, instruments):
         frozen_sl = tunnel["lower_price"] if side == "LONG" else tunnel["upper_price"]
         tunnel_pos = {
             "side":side, "reference_entry":str(quote["expected_fill"]),
-            "tp_sl_mode":TUNNEL_TPSL_MODE,
+            "tp_sl_mode":(SECOND_BOUNCE_SL_MODE if sig.get("second_bounce_entry") else TUNNEL_TPSL_MODE),
             "tunnel_tp_line":str(frozen_tp),
             "tunnel_sl_line":str(frozen_sl),
         }
@@ -1146,7 +1159,10 @@ def _open_one(bot, state, sig, instruments):
         "filled_size":"",
         "notional_usdt":bot.clean_decimal(expected_notional),
         "tp":"","sl":"","tp_policy":"TUNNEL_LINE","sl_policy":"TUNNEL_LINE",
-        "tp_sl_mode":TUNNEL_TPSL_MODE,
+        "tp_sl_mode":(SECOND_BOUNCE_SL_MODE if sig.get("second_bounce_entry") else TUNNEL_TPSL_MODE),
+        "second_bounce_exit": bool(sig.get("second_bounce_entry")),
+        "second_bounce_upper_count": 0,
+        "second_bounce_last_upper_pivot_ms": 0,
         "tunnel_tp_line":str(frozen_tp),
         "tunnel_sl_line":str(frozen_sl),
         "tunnel_reference_close_ms":int(sig["signal_close_ms"]),
@@ -1505,7 +1521,10 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         if not bars or int(bot.bar_close_ms(bars[-1])) != expected_close_ms:
             scan["rejections"].append({"inst":inst,"reason":"NO_CONFIRMED_EXIT_CANDLE"})
             continue
-        if pos.get("pivot_tunnel"):
+        if pos.get("second_bounce_exit"):
+            should_close = second_boundary_bounce(pos, _by_ts(bars,expected_close_ms),expected_close_ms)
+            new_volume = pos.get("last_same_volume")
+        elif pos.get("pivot_tunnel"):
             should_close = pivot_exit_transition(
                 pos["pivot_tunnel"], _by_ts(bars, expected_close_ms),
                 expected_close_ms, pos["side"])
@@ -1631,7 +1650,9 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                 "previous_opposite_volume": previous[4],
                 "volume_flip_confirmed": True,
                 "pivot_tunnel_entry": True,
+                "second_bounce_entry": True,
                 "pivot_tunnel_info": {
+                    "upper_anchors": tunnel["upper_anchors"],
                     "last_confirmed_high": tunnel["last_confirmed_high"],
                     "last_confirmed_low": tunnel["last_confirmed_low"],
                     "setup_confirm_close_ms": tunnel["fourth_confirmed_close_ms"],
