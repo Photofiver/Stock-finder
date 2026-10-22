@@ -576,5 +576,86 @@ class TestLivePivotTrailingStop(unittest.TestCase):
                 self.assertFalse(any(method=="POST" for method,_,_ in bot.calls))
 
 
+
+class TestPostTradeReviewsOffline(unittest.TestCase):
+    """Read-only report generation; never accesses BloFin or places orders."""
+
+    @staticmethod
+    def _closed_trade():
+        from datetime import datetime, timezone
+        t = int(datetime(2026, 10, 22, 16, 54, 34, tzinfo=timezone.utc).timestamp() * 1000)
+        return {
+            "inst": "INIT-USDT", "side": "SHORT", "history_id": "example118647381",
+            "opened_ms": t - 18*60*1000, "closed_ms": t,
+            "open_price": "0.12746", "close_price": "0.12792",
+            "sl": "0.12769", "tp": "0", "result": "LOSS",
+            "notional_usdt": "3.8", "gross_pnl_usdt": -0.0138,
+            "fee_usdt": -0.00459684, "net_pnl_usdt": -0.01839684,
+            "reason": "external close", "hold_minutes": 18.37,
+            "peak_position_before_exit": {
+                "available": True, "full_minute_coverage": True,
+                "peak_profit_pct_before_exit": 0.39228,
+                "peak_profit_usdt_before_exit_gross_approx": 0.015,
+                "peak_favorable_coin_price": 0.12696,
+                "peak_observed_at_ms_or_window_start": t - 8*60*1000,
+                "source": "confirmed_1m_full_candles_plus_verified_entry_exit_fills",
+            },
+        }
+
+    def test_short_peak_before_realized_loss_is_not_mislabeled_as_sl(self):
+        import blofin_trade_reviews as reviews
+        result = reviews.make_review(self._closed_trade())
+        self.assertTrue(result["had_gross_profit_before_net_loss"])
+        self.assertAlmostEqual(result["best_observed_gross_pct_approx"], 0.39228)
+        self.assertAlmostEqual(result["net_usdt"], -0.01839684)
+        self.assertGreater(result["observed_giveback_price_pct_points_approx"], 0.7)
+        self.assertIn("not", result["close_explanation"].lower())
+        self.assertNotIn("SL triggered", result["close_explanation"])
+        self.assertEqual(result["closed_uk"][:10], "2026-10-22")
+        self.assertIn("PROFIT->LOSS", reviews.short_summary(result))
+
+    def test_no_peak_does_not_invent_data(self):
+        import blofin_trade_reviews as reviews
+        row = self._closed_trade()
+        row["peak_position_before_exit"] = {"available": False}
+        result = reviews.make_review(row)
+        self.assertFalse(result["had_gross_profit_before_net_loss"])
+        self.assertIsNone(result["best_observed_gross_pct_approx"])
+        self.assertIsNone(result["observed_giveback_price_pct_points_approx"])
+
+    def test_daily_archive_is_idempotent_and_restorable(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        import blofin_trade_reviews as reviews
+        row = self._closed_trade()
+        report = reviews.make_review(row)
+        with tempfile.TemporaryDirectory() as tmp:
+            path, new = reviews.archive_review(report, tmp)
+            self.assertTrue(new)
+            same, again = reviews.archive_review(report, tmp)
+            self.assertEqual(same, path)
+            self.assertFalse(again)
+            self.assertEqual(len(Path(path).read_text(encoding="utf-8").splitlines()), 1)
+            state = {"trade_history": [row]}
+            with patch.object(reviews, "ARCHIVE_DIR", tmp):
+                sync = reviews.sync_daily_reviews(state, day="2026-10-22")
+                self.assertEqual(sync["updated_state_reviews"], 1)
+                self.assertEqual(sync["new_journal_rows"], 0)
+                self.assertIn("post_trade_review", row)
+                sync_again = reviews.sync_daily_reviews(state, day="2026-10-22")
+                self.assertEqual(sync_again["updated_state_reviews"], 0)
+                self.assertEqual(sync_again["new_journal_rows"], 0)
+            self.assertEqual(len(Path(path).read_text(encoding="utf-8").splitlines()), 1)
+
+    def test_uk_midnight_archive_uses_local_day(self):
+        import blofin_trade_reviews as reviews
+        row = self._closed_trade()
+        # 22 October at 23:30 UTC is already 23 October 00:30 in UK summer time.
+        from datetime import datetime, timezone
+        row["closed_ms"] = int(datetime(2026, 10, 22, 23, 30, tzinfo=timezone.utc).timestamp()*1000)
+        review = reviews.make_review(row)
+        self.assertEqual(review["closed_uk"][:10], "2026-10-23")
+
 if __name__=="__main__":
     unittest.main()
