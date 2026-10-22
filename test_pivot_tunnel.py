@@ -402,12 +402,14 @@ class TestLivePivotTrailingStop(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     _protection_prices(bot,p,{"tickSize":"0.01"})
 
-    def test_early_005_real_broker_tp_amend_and_raw_line_preserved(self):
+    def test_early_005_outward_projection_keeps_existing_broker_tp(self):
         from blofin_volume_flip_both_live import (
             _trail_confirmed_pivot_tp, EARLY_TUNNEL_TP_MODE)
-        for side, old_tp, expected_tp, sl in [
-            ("LONG","0.09605","0.09615","0.0947"),
-            ("SHORT","0.09455","0.09445","0.0959"),
+        # Both projected changes move AWAY from the entry; the exchange TP
+        # must remain fixed instead of chasing the projected tunnel line.
+        for side, old_tp, sl in [
+            ("LONG","0.09605","0.0947"),
+            ("SHORT","0.09455","0.0959"),
         ]:
             with self.subTest(side=side):
                 bot=self.FakeBot(live_tp=old_tp,live_sl=sl)
@@ -428,11 +430,15 @@ class TestLivePivotTrailingStop(unittest.TestCase):
                 rows={at-FIVE:(0.095,0.0955,0.0948,0.095,100)}
                 result=_trail_confirmed_pivot_tp(
                     bot,state,pos,{"tickSize":"0.00001"},rows,at,{"last":"0.095"})
-                self.assertEqual(result["status"],"BROKER_VERIFIED")
-                self.assertEqual(pos["tp"],expected_tp)
-                self.assertEqual(bot.live_tp,expected_tp)
+                self.assertIsNone(result)
+                self.assertEqual(pos["last_tp_trail_status"],
+                                 "SKIP_TP_WOULD_MOVE_FARTHER")
+                self.assertEqual(pos["tp"],old_tp)
+                self.assertEqual(bot.live_tp,old_tp)
                 self.assertEqual(bot.live_sl,sl)
                 self.assertEqual(bot.d(pos["tunnel_tp_line"]),
+                                 bot.d("0.0961" if side=="LONG" else "0.0945"))
+                self.assertEqual(bot.d(pos["tunnel_tp_projected"]),
                                  bot.d("0.0962" if side=="LONG" else "0.0944"))
                 self.assertNotIn("tunnel_tp_pending",pos)
 
