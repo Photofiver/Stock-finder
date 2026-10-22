@@ -176,5 +176,125 @@ class TestFortyEightBarTunnelLookback(unittest.TestCase):
         self.assertFalse(tunnel["entry_allowed"])
         self.assertEqual(tunnel["lookback_candles"], 48)
 
+
+class TestLivePivotTrailingStop(unittest.TestCase):
+    """Broker amendments are verified and never loosen an existing LONG SL."""
+
+    class FakeBot:
+        MARGIN_MODE = "isolated"
+        def __init__(self, live_sl="0.0947", delay_confirmation=False):
+            self.live_sl = live_sl
+            self.delay_confirmation = delay_confirmation
+            self.pending_sl = None
+            self.calls = []
+            self.saved = 0
+
+        def d(self, x):
+            from decimal import Decimal
+            return Decimal(str(x))
+
+        def clean_decimal(self, x):
+            return str(x)
+
+        def save_state(self, state):
+            self.saved += 1
+
+        def private_request(self, method, path, params=None, body=None):
+            self.calls.append((method, path, body))
+            if path == "/api/v1/trade/order-tpsl-detail":
+                return {"state":"live", "tpslId":"stop1", "tpTriggerPrice":"0",
+                        "slTriggerPrice":self.live_sl,
+                        "slTriggerPriceType":"last"}
+            if path == "/api/v1/trade/amend-tpsl":
+                assert method == "POST"
+                assert body["tpslId"] == "stop1"
+                assert body.get("newSlTriggerPrice") > self.d("0")
+                assert "newTpTriggerPrice" not in body
+                self.pending_sl = body["newSlTriggerPrice"]
+                if not self.delay_confirmation:
+                    self.live_sl = self.pending_sl
+                return {"code":"0", "tpslId":"stop1"}
+            raise AssertionError("Unexpected broker call "+path)
+
+    def position(self):
+        return {"inst":"TEST-USDT", "side":"LONG", "strategy":"VOLUME_FLIP_BOTH_5M_V1",
+                "opened_ms":7*FIVE, "signal_close_ms":6*FIVE,
+                "reference_entry":"0.0951", "sl":"0.0947", "tp":"0",
+                "tp_sl_mode":"SECOND_BOUNCE_SL_ONLY", "tpsl_id":"stop1",
+                "pivot_tunnel":{"lower_anchors":[
+                    {"open_ms":0,"confirmed_close_ms":2*FIVE,"price":0.0946},
+                    {"open_ms":6*FIVE,"confirmed_close_ms":8*FIVE,"price":0.0947},
+                ]}}
+
+    def test_long_sl_moves_up_with_frozen_rising_lower_line(self):
+        from blofin_volume_flip_both_live import _trail_confirmed_pivot_long_sl
+        bot = self.FakeBot()
+        pos = self.position()
+        state = {"positions":{"TEST-USDT":pos}}
+        at = 12*FIVE
+        rows = {at-FIVE: (0.095, 0.0957, 0.0948, 0.0955, 120)}
+        result = _trail_confirmed_pivot_long_sl(bot,state,pos,
+                 {"tickSize":"0.0001"},rows,at,{"last":"0.0955"})
+        self.assertEqual(result["status"],"BROKER_VERIFIED")
+        self.assertEqual(pos["sl"],"0.0948")
+        self.assertEqual(bot.live_sl,"0.0948")
+        self.assertTrue(pos["sl_trailing_active"])
+        self.assertNotIn("tunnel_sl_pending",pos)
+        self.assertEqual(sum(1 for m,p,b in bot.calls if m=="POST"),1)
+        self.assertIsNone(_trail_confirmed_pivot_long_sl(bot,state,pos,
+            {"tickSize":"0.0001"},rows,at,{"last":"0.0955"}))
+        self.assertEqual(sum(1 for m,p,b in bot.calls if m=="POST"),1)
+
+    def test_sl_can_lock_profit_above_entry(self):
+        from blofin_volume_flip_both_live import _trail_confirmed_pivot_long_sl, _protection_prices
+        bot = self.FakeBot()
+        pos = self.position()
+        state = {"positions":{"TEST-USDT":pos}}
+        at = 36*FIVE
+        rows = {at-FIVE: (0.0955, 0.0957, 0.0953, 0.0955, 120)}
+        result = _trail_confirmed_pivot_long_sl(bot,state,pos,
+                 {"tickSize":"0.0001"},rows,at,{"last":"0.0955"})
+        self.assertEqual(result["status"],"BROKER_VERIFIED")
+        self.assertGreater(bot.d(pos["sl"]),bot.d(pos["reference_entry"]))
+        self.assertEqual(_protection_prices(bot,pos,{"tickSize":"0.0001"})[1],
+                         bot.d(pos["sl"]))
+
+    def test_pending_confirmation_keeps_old_broker_stop(self):
+        from blofin_volume_flip_both_live import (_trail_confirmed_pivot_long_sl,
+                                                    _reconcile_pending_tunnel_sl)
+        bot = self.FakeBot(delay_confirmation=True)
+        pos = self.position()
+        state = {"positions":{"TEST-USDT":pos}}
+        at = 12*FIVE
+        rows = {at-FIVE: (0.095, 0.0957, 0.0948, 0.0955, 120)}
+        result = _trail_confirmed_pivot_long_sl(bot,state,pos,
+                 {"tickSize":"0.0001"},rows,at,{"last":"0.0955"})
+        self.assertEqual(result["status"],"PENDING_VERIFICATION")
+        self.assertEqual(pos["sl"],"0.0947")
+        self.assertEqual(bot.live_sl,"0.0947")
+        self.assertIn("tunnel_sl_pending",pos)
+        bot.live_sl = bot.pending_sl
+        self.assertTrue(_reconcile_pending_tunnel_sl(bot,state,pos))
+        self.assertEqual(pos["sl"],"0.0948")
+        self.assertNotIn("tunnel_sl_pending",pos)
+
+    def test_stop_does_not_move_if_support_falls_or_crosses_price(self):
+        from blofin_volume_flip_both_live import _trail_confirmed_pivot_long_sl
+        for support_direction, last in [("falling","0.0955"),("rising","0.0947")]:
+            with self.subTest(support=support_direction,price=last):
+                bot=self.FakeBot()
+                pos=self.position()
+                if support_direction=="falling":
+                    pos["pivot_tunnel"]["lower_anchors"][1]["price"]=0.0945
+                state={"positions":{"TEST-USDT":pos}}
+                at=12*FIVE
+                rows={at-FIVE:(0.095,0.0957,0.0946,0.0955,120)}
+                result=_trail_confirmed_pivot_long_sl(bot,state,pos,
+                     {"tickSize":"0.0001"},rows,at,{"last":last})
+                self.assertIsNone(result)
+                self.assertEqual(pos["sl"],"0.0947")
+                self.assertFalse(any(method=="POST" for method,_,_ in bot.calls))
+
+
 if __name__=="__main__":
     unittest.main()
