@@ -391,7 +391,7 @@ class TestLivePivotTrailingStop(unittest.TestCase):
                    "tunnel_tp_line":"100","tunnel_sl_line":sl}
                 tp, stop=_protection_prices(bot,p,{"tickSize":"0.01"})
                 self.assertEqual(str(tp),expected_tp)
-                self.assertEqual(str(stop),sl)
+                self.assertEqual(stop,Decimal(sl))
         for side, entry, sl in [
             ("LONG","99.96","99.0"),
             ("SHORT","100.04","101.0"),
@@ -432,8 +432,8 @@ class TestLivePivotTrailingStop(unittest.TestCase):
                 self.assertEqual(pos["tp"],expected_tp)
                 self.assertEqual(bot.live_tp,expected_tp)
                 self.assertEqual(bot.live_sl,sl)
-                self.assertEqual(pos["tunnel_tp_line"],
-                                 "0.0962" if side=="LONG" else "0.0944")
+                self.assertEqual(bot.d(pos["tunnel_tp_line"]),
+                                 bot.d("0.0962" if side=="LONG" else "0.0944"))
                 self.assertNotIn("tunnel_tp_pending",pos)
 
     def test_second_touch_has_only_virtual_tp_for_both_directions(self):
