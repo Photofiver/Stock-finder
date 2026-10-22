@@ -585,6 +585,16 @@ def main():
             bot, state, top7, tickers, instruments, expected_close_ms,
             wait_for_confirmed_signal_close,
         )
+        # Rebuild the daily read-only journal if a previous runner/commit
+        # failed. Never delay or change trading decisions on journal errors.
+        try:
+            from blofin_trade_reviews import sync_daily_reviews
+            journal = sync_daily_reviews(state)
+            if journal["updated_state_reviews"]:
+                bot.save_state(state)
+            print(f"POST_TRADE_JOURNAL {json.dumps(journal, sort_keys=True)}")
+        except Exception as exc:
+            print(f"POST_TRADE_JOURNAL_WARN {type(exc).__name__}: {exc}")
         return
     if os.getenv("LIVE_VOLUME_FLIP_BOTH", "").strip().lower() == "true":
         raise RuntimeError("LIVE_VOLUME_FLIP_BOTH flag set for nonmatching entry strategy; fail closed")
