@@ -210,6 +210,8 @@ class TestLivePivotTrailingStop(unittest.TestCase):
                 assert body["tpslId"] == "stop1"
                 assert self.d(body.get("newSlTriggerPrice")) > self.d("0")
                 assert "newTpTriggerPrice" not in body
+                assert body.get("newSlTriggerPriceType") == "last"
+                assert body.get("newSlOrderPrice") == "-1"
                 self.pending_sl = body["newSlTriggerPrice"]
                 if not self.delay_confirmation:
                     self.live_sl = self.pending_sl
@@ -331,6 +333,60 @@ class TestLivePivotTrailingStop(unittest.TestCase):
         self.assertEqual(result["status"],"BLOCK_MISSING_LOWER_ANCHORS")
         self.assertEqual(pos["sl"],"0.0947")
         self.assertFalse(any(method=="POST" for method,_,_ in bot.calls))
+
+
+    def test_recover_actual_broker_152001_pending_and_resend_with_required_type(self):
+        """JTO LIVE regression: rejected old id must be replaced after broker read."""
+        from blofin_volume_flip_both_live import _trail_confirmed_pivot_long_sl
+        bot=self.FakeBot(live_sl="0.4614")
+        pos=self.position()
+        pos.update({"inst":"JTO-USDT", "reference_entry":"0.463119626168224299",
+                    "sl":"0.4614", "tunnel_sl_line":"0.4614",
+                    "signal_close_ms":1792674300000,
+                    "pivot_tunnel":{"lower_anchors":[
+                        {"open_ms":1792671900000,"confirmed_close_ms":1792672500000,"price":0.4610},
+                        {"open_ms":1792673700000,"confirmed_close_ms":1792674300000,"price":0.4613},
+                    ]},
+                    "tunnel_sl_pending":{"close_ms":1792674900000,
+                        "old_sl":"0.4614","target_sl":"0.4615",
+                        "request_id":"voltrail_old_rejected_152001"},
+                    "sl_trail_error":("AMEND_UNCERTAIN: BloFin API "
+                        "/api/v1/trade/amend-tpsl: 152001 Parameter "
+                        "newSlTriggerPriceType cannot be empty. | details=null"),
+                })
+        at=1792675200000
+        rows={at-FIVE:(0.4621,0.4625,0.4620,0.4622,100)}
+        state={"positions":{"JTO-USDT":pos}}
+        result=_trail_confirmed_pivot_long_sl(
+            bot,state,pos,{"tickSize":"0.0001"},rows,at,{"last":"0.4622"})
+        self.assertEqual(result["status"],"BROKER_VERIFIED")
+        self.assertGreater(bot.d(pos["sl"]),bot.d("0.4614"))
+        self.assertNotIn("tunnel_sl_pending",pos)
+        calls=[body for method,path,body in bot.calls if method=="POST"]
+        self.assertEqual(len(calls),1)
+        self.assertNotEqual(calls[0]["requestId"],"voltrail_old_rejected_152001")
+        self.assertEqual(calls[0]["newSlTriggerPriceType"],"last")
+
+    def test_uncertain_pending_keeps_same_request_id_not_new_order(self):
+        """Network uncertainty never permits a second distinct amend request."""
+        from blofin_volume_flip_both_live import _trail_confirmed_pivot_long_sl
+        bot=self.FakeBot(delay_confirmation=True)
+        pos=self.position()
+        pos["tunnel_sl_pending"]={
+            "close_ms":11*FIVE,"old_sl":"0.0947",
+            "target_sl":"0.0948","request_id":"voltrail_ambiguous",
+        }
+        pos["sl_trail_error"]="AMEND_UNCERTAIN: socket timeout"
+        state={"positions":{"TEST-USDT":pos}}
+        at=12*FIVE
+        rows={at-FIVE:(0.095,0.0957,0.0948,0.0955,120)}
+        result=_trail_confirmed_pivot_long_sl(
+            bot,state,pos,{"tickSize":"0.0001"},rows,at,{"last":"0.0955"})
+        self.assertEqual(result["status"],"PENDING_VERIFICATION")
+        requests=[body for method,path,body in bot.calls if method=="POST"]
+        self.assertEqual(len(requests),1)
+        self.assertEqual(requests[0]["requestId"],"voltrail_ambiguous")
+        self.assertEqual(pos["sl"],"0.0947")
 
     def test_stop_does_not_move_if_support_falls_or_crosses_price(self):
         from blofin_volume_flip_both_live import _trail_confirmed_pivot_long_sl
