@@ -228,7 +228,7 @@ class TestLivePivotTrailingStop(unittest.TestCase):
             if path == "/api/v1/trade/order-tpsl-detail":
                 return {"state":"live", "tpslId":"stop1", "tpTriggerPrice":self.live_tp,
                         "slTriggerPrice":self.live_sl,
-                        "slTriggerPriceType":"last"}
+                        "tpTriggerPriceType":"last", "slTriggerPriceType":"last"}
             if path == "/api/v1/trade/amend-tpsl":
                 assert method == "POST"
                 assert body["tpslId"] == "stop1"
