@@ -144,33 +144,44 @@ def pivot_exit_transition(position_tunnel, rows, expected_close_ms, side):
 
 
 def second_boundary_bounce(position, rows, expected_close_ms):
-    """Count newly confirmed upper pivots AFTER entry for a LONG position.
+    """Exit on SECOND confirmed opposite tunnel-boundary touch after entry.
 
-    Confirmation takes a full subsequent 5m candle; no future prices.
-    Touches use the straight line between the last two confirmed upper
-    anchors saved at entry. Multiple calls for one candle are idempotent.
+    LONG counts new upper pivots; SHORT counts new lower pivots. Only fully
+    closed following candles confirm a touch; a wick alone is insufficient.
+    The straight boundary is projected from the original entry anchors.
     """
-    if position.get("side") != "LONG":
+    side = position.get("side")
+    if side not in ("LONG", "SHORT"):
         return False
     tunnel = position.get("pivot_tunnel") or {}
-    anchors = tunnel.get("upper_anchors") or []
+    anchor_key = "upper_anchors" if side == "LONG" else "lower_anchors"
+    anchors = tunnel.get(anchor_key) or []
     if len(anchors) != 2:
         return False
     close_ms = int(expected_close_ms)
     start_ms = int(position.get("opened_ms") or 0)
-    highs, _ = confirmed_pivots(rows, close_ms)
-    seen = int(position.get("second_bounce_last_upper_pivot_ms") or start_ms)
-    for peak in highs:
-        if int(peak["confirmed_close_ms"]) != close_ms or int(peak["open_ms"]) <= seen:
+    highs, lows = confirmed_pivots(rows, close_ms)
+    pivots = highs if side == "LONG" else lows
+    last_key = ("second_bounce_last_upper_pivot_ms" if side == "LONG"
+                else "second_bounce_last_lower_pivot_ms")
+    count_key = ("second_bounce_upper_count" if side == "LONG"
+                 else "second_bounce_lower_count")
+    seen = int(position.get(last_key) or start_ms)
+    for point in pivots:
+        if (int(point["confirmed_close_ms"]) != close_ms
+                or int(point["open_ms"]) <= seen
+                or int(point["open_ms"]) < start_ms):
             continue
         try:
-            upper = _line(anchors[0], anchors[1], peak["open_ms"])
+            boundary = _line(anchors[0], anchors[1], point["open_ms"])
         except (ValueError, ZeroDivisionError):
             continue
-        if upper <= 0 or not math.isfinite(upper):
+        if boundary <= 0 or not math.isfinite(boundary):
             continue
-        if float(peak["price"]) >= upper:
-            position["second_bounce_last_upper_pivot_ms"] = int(peak["open_ms"])
-            position["second_bounce_upper_count"] = int(position.get("second_bounce_upper_count") or 0) + 1
-            return position["second_bounce_upper_count"] >= 2
+        touched = (float(point["price"]) >= boundary if side == "LONG"
+                   else float(point["price"]) <= boundary)
+        if touched:
+            position[last_key] = int(point["open_ms"])
+            position[count_key] = int(position.get(count_key) or 0) + 1
+            return position[count_key] >= 2
     return False
