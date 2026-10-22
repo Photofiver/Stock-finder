@@ -208,7 +208,7 @@ class TestLivePivotTrailingStop(unittest.TestCase):
             if path == "/api/v1/trade/amend-tpsl":
                 assert method == "POST"
                 assert body["tpslId"] == "stop1"
-                assert body.get("newSlTriggerPrice") > self.d("0")
+                assert self.d(body.get("newSlTriggerPrice")) > self.d("0")
                 assert "newTpTriggerPrice" not in body
                 self.pending_sl = body["newSlTriggerPrice"]
                 if not self.delay_confirmation:
@@ -218,7 +218,7 @@ class TestLivePivotTrailingStop(unittest.TestCase):
 
     def position(self):
         return {"inst":"TEST-USDT", "side":"LONG", "strategy":"VOLUME_FLIP_BOTH_5M_V1",
-                "opened_ms":7*FIVE, "signal_close_ms":6*FIVE,
+                "opened_ms":8*FIVE+1000, "signal_close_ms":8*FIVE,
                 "reference_entry":"0.0951", "sl":"0.0947", "tp":"0",
                 "tp_sl_mode":"SECOND_BOUNCE_SL_ONLY", "tpsl_id":"stop1",
                 "pivot_tunnel":{"lower_anchors":[
