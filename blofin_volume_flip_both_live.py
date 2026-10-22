@@ -70,7 +70,7 @@ def _protection_prices(bot, pos, meta):
         elif pos["side"] == "SHORT":
             tp = (tp_line / tick).to_integral_value(rounding=ROUND_FLOOR) * tick
             sl = (sl_line / tick).to_integral_value(rounding=ROUND_CEILING) * tick
-            valid = tp < entry < sl
+            valid = (0 < tp < sl) if pos.get("sl_trailing_active") else tp < entry < sl
         else:
             raise RuntimeError("Unknown side")
         if not valid:
@@ -78,10 +78,10 @@ def _protection_prices(bot, pos, meta):
         return tp, sl
     if pos.get("tp_sl_mode") == SECOND_BOUNCE_SL_MODE:
         sl_line = bot.d(pos.get("tunnel_sl_line") or "0")
-        if pos.get("side") != "LONG" or not sl_line.is_finite() or sl_line <= 0:
+        if pos.get("side") not in ("LONG", "SHORT") or not sl_line.is_finite() or sl_line <= 0:
             raise RuntimeError("Second bounce LONG requires a verified SL")
-        sl = (sl_line/tick).to_integral_value(rounding=ROUND_FLOOR)*tick
-        if not (sl > 0 and (pos.get("sl_trailing_active") or sl < entry)):
+        sl = (sl_line/tick).to_integral_value(rounding=(ROUND_FLOOR if pos.get("side") == "LONG" else ROUND_CEILING))*tick
+        if not (sl > 0 and (pos.get("sl_trailing_active") or (sl < entry if pos.get("side") == "LONG" else sl > entry))):
             raise RuntimeError("Second bounce initial SL must be below entry")
         return Decimal("0"), sl
     if pos["side"]=="LONG":
@@ -315,13 +315,45 @@ def _confirmed_entry_lower_anchors(bot, state, pos):
     return tunnel["lower_anchors"]
 
 
+def _confirmed_entry_upper_anchors(bot, state, pos):
+    """Recover original confirmed resistance anchors, never guess newer pivots."""
+    tunnel = pos.get("pivot_tunnel") or {}
+    anchors = tunnel.get("upper_anchors") or []
+    if len(anchors) == 2:
+        return anchors
+    snap = (pos.get("signal_snapshot") or {}).get("volume_price_tunnel") or {}
+    saved = snap.get("upper_anchors") or []
+    last = tunnel.get("last_confirmed_high") or {}
+    try:
+        if (snap.get("status") != "VALID"
+                or snap.get("tunnel_direction") != pos.get("side")
+                or int(snap.get("signal_close_ms") or 0) != int(pos.get("signal_close_ms") or 0)
+                or len(saved) != 2
+                or int(saved[0]["open_ms"]) >= int(saved[1]["open_ms"])
+                or int(saved[1]["open_ms"]) != int(last["open_ms"])
+                or bot.d(saved[1]["price"]) != bot.d(last["price"])
+                or int(saved[1]["confirmed_close_ms"]) != int(pos["signal_close_ms"])
+                or any(bot.d(a["price"]) <= 0 or
+                       int(a["confirmed_close_ms"]) > int(pos["signal_close_ms"])
+                       for a in saved)):
+            raise ValueError("entry upper anchor snapshot failed validation")
+    except (ValueError, KeyError, TypeError, ArithmeticError) as exc:
+        pos["sl_trail_error"] = f"MISSING_CONFIRMED_ENTRY_UPPER_ANCHORS: {exc}"[:220]
+        bot.save_state(state)
+        return []
+    tunnel["upper_anchors"] = [dict(saved[0]), dict(saved[1])]
+    pos["pivot_tunnel"] = tunnel
+    bot.save_state(state)
+    return tunnel["upper_anchors"]
+
+
 def _trail_confirmed_pivot_long_sl(bot, state, pos, meta, rows, close_ms, ticker):
     """Tighten existing broker SL along ENTRY's lower pivot line, never loosen.
 
     Only confirmed 5m candles and already-confirmed entry pivot anchors.
     Amend the existing tpslId in place; never cancel the prior protective order.
     """
-    if (pos.get("side") != "LONG" or not pos.get("pivot_tunnel")
+    if (pos.get("side") not in ("LONG", "SHORT") or not pos.get("pivot_tunnel")
             or pos.get("tp_sl_mode") not in (SECOND_BOUNCE_SL_MODE, TUNNEL_TPSL_MODE)
             or pos.get("exit_pending") or not pos.get("tpsl_id")):
         return None
@@ -330,9 +362,10 @@ def _trail_confirmed_pivot_long_sl(bot, state, pos, meta, rows, close_ms, ticker
     candle = rows.get(close_ms-FIVE)
     if not candle:
         return None
-    anchors = _confirmed_entry_lower_anchors(bot, state, pos)
+    anchors = (_confirmed_entry_lower_anchors(bot, state, pos) if pos["side"] == "LONG"
+               else _confirmed_entry_upper_anchors(bot, state, pos))
     if len(anchors) != 2:
-        return {"status":"BLOCK_MISSING_LOWER_ANCHORS"}
+        return {"status":"BLOCK_MISSING_ENTRY_SL_ANCHORS"}
     if not meta:
         pos["last_sl_trail_status"] = "SKIP_MISSING_INSTRUMENT_META"
         return None
@@ -347,20 +380,24 @@ def _trail_confirmed_pivot_long_sl(bot, state, pos, meta, rows, close_ms, ticker
             return None
         # Same straight support line as the confirmed lower anchors at entry.
         raw = v1 + (v2-v1) * bot.d(close_ms-t1) / bot.d(t2-t1)
-        target = (raw/tick).to_integral_value(rounding=ROUND_FLOOR)*tick
+        target = (raw/tick).to_integral_value(
+            rounding=(ROUND_FLOOR if pos["side"] == "LONG" else ROUND_CEILING))*tick
         previous = bot.d(pos.get("sl") or "0")
-        if not (target > previous > 0):
+        improves = target > previous if pos["side"] == "LONG" else target < previous
+        if not (improves and previous > 0):
             pos["last_sl_trail_status"] = "NO_HIGHER_SL_LINE_TICK"
             return None
         price_close = bot.d(candle[3])
         price_live = bot.d((ticker or {}).get("last") or "0")
         # Do not submit a stop ABOVE last close/current price, which could
         # be rejected or immediately execute. Keep old broker SL instead.
-        if price_live <= 0 or target >= min(price_close, price_live):
+        invalid_market = (target >= min(price_close, price_live) if pos["side"] == "LONG"
+                          else target <= max(price_close, price_live))
+        if price_live <= 0 or invalid_market:
             pos["last_sl_trail_status"] = "SKIP_LINE_AT_OR_ABOVE_MARKET"
             return None
         tp = bot.d(pos.get("tp") or "0")
-        if tp > 0 and target >= tp:
+        if tp > 0 and (target >= tp if pos["side"] == "LONG" else target <= tp):
             pos["last_sl_trail_status"] = "SKIP_SL_AT_OR_ABOVE_TP"
             return None
     except (KeyError, TypeError, ValueError, ArithmeticError, ZeroDivisionError) as exc:
@@ -440,6 +477,181 @@ def _trail_confirmed_pivot_long_sl(bot, state, pos, meta, rows, close_ms, ticker
         pos["sl_trail_error"]=f"VERIFY_UNCERTAIN: {exc}"[:220]
         bot.save_state(state)
         return {"status":"PENDING_VERIFICATION"}
+
+
+def _project_confirmed_tunnel_line(bot, anchors, close_ms, tick, rounding):
+    if len(anchors or []) != 2:
+        raise ValueError("two confirmed original tunnel anchors required")
+    a, b = anchors
+    t1, t2 = int(a["open_ms"]), int(b["open_ms"])
+    if t1 >= t2 or close_ms < int(b["confirmed_close_ms"]):
+        raise ValueError("unconfirmed or reversed tunnel anchors")
+    p1, p2 = bot.d(a["price"]), bot.d(b["price"])
+    if not all(x.is_finite() and x > 0 for x in (p1, p2, tick)):
+        raise ValueError("invalid pivot price/tick")
+    value = p1 + (p2 - p1) * bot.d(close_ms - t1) / bot.d(t2 - t1)
+    if not value.is_finite() or value <= 0:
+        raise ValueError("invalid projected boundary")
+    return (value / tick).to_integral_value(rounding=rounding) * tick
+
+
+def _reconcile_pending_tunnel_tp(bot, state, pos):
+    """Only accept a moved TP after reading it from the SAME live exchange OCO."""
+    pending = pos.get("tunnel_tp_pending")
+    if not pending:
+        return True
+    detail = bot.private_request("GET", "/api/v1/trade/order-tpsl-detail",
+                 params={"instId": pos["inst"], "tpslId": str(pos["tpsl_id"])}) or {}
+    if isinstance(detail, list):
+        detail = detail[0] if detail else {}
+    if (str(detail.get("state") or "").lower() != "live"
+            or str(detail.get("tpslId") or "") != str(pos["tpsl_id"])):
+        raise RuntimeError("Broker OCO not LIVE")
+    if bot.d(detail.get("slTriggerPrice") or "0") != bot.d(pending["old_sl"]):
+        raise RuntimeError("Broker stop differs during TP amendment")
+    observed = bot.d(detail.get("tpTriggerPrice") or "0")
+    if observed == bot.d(pending["new_tp"]):
+        pos["tp"] = pending["new_tp"]
+        pos["tunnel_tp_line"] = pending["new_tp"]
+        pos["last_tp_trail_close_ms"] = int(pending["close_ms"])
+        pos["last_tp_trail_status"] = "BROKER_VERIFIED"
+        pos.pop("tunnel_tp_pending", None)
+        pos.pop("tp_trail_error", None)
+        bot.save_state(state)
+        return True
+    if observed == bot.d(pending["old_tp"]):
+        pos["last_tp_trail_status"] = "PENDING_OLD_TP_STILL_LIVE"
+        bot.save_state(state)
+        return False
+    raise RuntimeError("Unexpected broker TP; preserve pending amendment")
+
+
+def _trail_confirmed_pivot_tp(bot, state, pos, meta, rows, close_ms, ticker):
+    """Project TP from entry pivots on each closed 5m candle; second touch is virtual."""
+    side = pos.get("side")
+    mode = pos.get("tp_sl_mode")
+    if (side not in ("LONG", "SHORT")
+            or mode not in (SECOND_BOUNCE_SL_MODE, TUNNEL_TPSL_MODE)
+            or (mode == SECOND_BOUNCE_SL_MODE and side != "LONG"
+                and side != "SHORT")
+            or not pos.get("pivot_tunnel") or not pos.get("tpsl_id")
+            or pos.get("exit_pending") or pos.get("trigger_migration_deferred")
+            or pos.get("tunnel_sl_pending") or not meta
+            or close_ms <= int(pos.get("signal_close_ms") or 0)
+            or close_ms - FIVE not in rows):
+        return None
+    try:
+        tick = bot.d(meta.get("tickSize") or "0")
+        anchors = (pos["pivot_tunnel"].get("upper_anchors") if side == "LONG"
+                   else pos["pivot_tunnel"].get("lower_anchors"))
+        projected = _project_confirmed_tunnel_line(
+            bot, anchors, close_ms, tick,
+            ROUND_CEILING if side == "LONG" else ROUND_FLOOR)
+        if mode == SECOND_BOUNCE_SL_MODE:
+            # Keep the exchange TP ABSENT. second_boundary_bounce() owns exit.
+            pos["tunnel_tp_projected"] = bot.clean_decimal(projected)
+            pos["last_tp_projection_close_ms"] = int(close_ms)
+            bot.save_state(state)
+            return {"status": "SECOND_TOUCH_TARGET_TRACKED",
+                    "projected_tp": pos["tunnel_tp_projected"]}
+        previous = bot.d(pos.get("tp") or "0")
+        previous_sl = bot.d(pos.get("sl") or "0")
+        close_price = bot.d(rows[close_ms - FIVE][3])
+        live_price = bot.d((ticker or {}).get("last") or "0")
+        if not all(x.is_finite() and x > 0 for x in
+                   (previous, previous_sl, close_price, live_price)):
+            raise ValueError("invalid last price or protective price")
+        if not pos.get("tunnel_tp_pending"):
+            if projected == previous:
+                return None
+            if side == "LONG" and projected <= max(close_price, live_price, previous_sl):
+                return None
+            if side == "SHORT" and projected >= min(close_price, live_price, previous_sl):
+                return None
+    except (KeyError, TypeError, ValueError, ArithmeticError, ZeroDivisionError) as exc:
+        pos["tp_trail_error"] = f"INVALID_TUNNEL_TP: {exc}"[:180]
+        bot.save_state(state)
+        return None
+    pending = pos.get("tunnel_tp_pending")
+    if pending:
+        try:
+            if _reconcile_pending_tunnel_tp(bot, state, pos):
+                return {"status": "BROKER_VERIFIED_PREVIOUS", "tp": pos["tp"]}
+        except Exception as exc:
+            pos["tp_trail_error"] = f"PENDING_VERIFY_ERROR: {exc}"[:200]
+            bot.save_state(state)
+            return {"status": "PENDING_VERIFICATION"}
+    else:
+        try:
+            detail = bot.private_request("GET", "/api/v1/trade/order-tpsl-detail",
+                       params={"instId": pos["inst"], "tpslId": str(pos["tpsl_id"])}) or {}
+            if isinstance(detail, list):
+                detail = detail[0] if detail else {}
+            if (str(detail.get("state") or "").lower() != "live"
+                    or str(detail.get("tpslId") or "") != str(pos["tpsl_id"])
+                    or bot.d(detail.get("tpTriggerPrice") or "0") != previous
+                    or bot.d(detail.get("slTriggerPrice") or "0") != previous_sl
+                    or str(detail.get("tpTriggerPriceType") or "").lower() != TRIGGER_TYPE
+                    or str(detail.get("slTriggerPriceType") or "").lower() != TRIGGER_TYPE):
+                raise RuntimeError("Existing live OCO differs from local TP/SL")
+        except Exception as exc:
+            pos["tp_trail_error"] = f"BROKER_READ_FAILED: {exc}"[:200]
+            bot.save_state(state)
+            return {"status": "BROKER_READ_FAILED"}
+        pending = {"old_tp": bot.clean_decimal(previous),
+                   "new_tp": bot.clean_decimal(projected),
+                   "old_sl": bot.clean_decimal(previous_sl),
+                   "close_ms": int(close_ms),
+                   "request_id": ("voltp" + uuid.uuid4().hex)[:32]}
+        pos["tunnel_tp_pending"] = pending
+        bot.save_state(state)
+    try:
+        response = bot.private_request("POST", "/api/v1/trade/amend-tpsl", body={
+            "instId": pos["inst"], "tpslId": str(pos["tpsl_id"]),
+            "requestId": pending["request_id"],
+            "newTpTriggerPrice": pending["new_tp"],
+            "newTpTriggerPriceType": TRIGGER_TYPE,
+            "newTpOrderPrice": "-1",
+        })
+        row = response[0] if isinstance(response, list) and response else (response or {})
+        if str(row.get("code", "0")) != "0":
+            raise RuntimeError("BloFin rejected TP amendment: " + str(row)[:180])
+    except Exception as exc:
+        pos["tp_trail_error"] = f"AMEND_UNCERTAIN: {exc}"[:200]
+        bot.save_state(state)
+        return {"status": "PENDING_VERIFICATION"}
+    try:
+        confirmed = _reconcile_pending_tunnel_tp(bot, state, pos)
+        return ({"status": "BROKER_VERIFIED", "tp": pos["tp"]}
+                if confirmed else {"status": "PENDING_VERIFICATION"})
+    except Exception as exc:
+        pos["tp_trail_error"] = f"VERIFY_UNCERTAIN: {exc}"[:200]
+        bot.save_state(state)
+        return {"status": "PENDING_VERIFICATION"}
+
+
+def _trail_confirmed_pivot_tpsl(bot, state, pos, meta, rows, close_ms, ticker):
+    """Shared updater for both trade directions; SL always risk-reducing."""
+    updated = {}
+    try:
+        sl = _trail_confirmed_pivot_long_sl(
+            bot, state, pos, meta, rows, close_ms, ticker)
+        if sl:
+            updated["sl"] = sl
+    except Exception as exc:
+        pos["sl_trail_error"] = f"{type(exc).__name__}: {exc}"[:220]
+        bot.save_state(state)
+        updated["sl_error"] = pos["sl_trail_error"]
+    try:
+        tp = _trail_confirmed_pivot_tp(
+            bot, state, pos, meta, rows, close_ms, ticker)
+        if tp:
+            updated["tp"] = tp
+    except Exception as exc:
+        pos["tp_trail_error"] = f"{type(exc).__name__}: {exc}"[:220]
+        bot.save_state(state)
+        updated["tp_error"] = pos["tp_trail_error"]
+    return updated or None
 
 
 def _by_ts(bars, close_ms):
@@ -1228,10 +1440,7 @@ def _open_one(bot, state, sig, instruments):
     side = sig["side"]
     if side not in ("LONG","SHORT"):
         return False
-    pivot_long_only = PIVOT_ENABLED or bool(sig.get("pivot_tunnel_entry"))
-    if pivot_long_only and side != "LONG":
-        sig["preorder_rejection"] = "PIVOT_LONG_ONLY"
-        return False
+    pivot_mode = PIVOT_ENABLED or bool(sig.get("pivot_tunnel_entry"))
     if bot.risk_stop_active(state):
         return False
     if bot.get_tracked_positions(state).get(inst):
@@ -1304,7 +1513,7 @@ def _open_one(bot, state, sig, instruments):
         sig["preorder_rejection"] = "TUNNEL_TPSL_UNTRADEABLE"
         sig["preorder_tpsl_error"] = f"{type(exc).__name__}: {exc}"[:200]
         return False
-    if pivot_long_only:
+    if pivot_mode and side == "LONG":
         sig["pre_order_quote"] = quote
         sig["pivot_long_entry_filter"] = pivot_long_entry_filter(sig, quote)
         if not sig["pivot_long_entry_filter"]["allowed"]:
@@ -1368,6 +1577,8 @@ def _open_one(bot, state, sig, instruments):
         "second_bounce_exit": bool(sig.get("second_bounce_entry")),
         "second_bounce_upper_count": 0,
         "second_bounce_last_upper_pivot_ms": 0,
+        "second_bounce_lower_count": 0,
+        "second_bounce_last_lower_pivot_ms": 0,
         "tunnel_tp_line":str(frozen_tp),
         "tunnel_sl_line":str(frozen_sl),
         "tunnel_reference_close_ms":int(sig["signal_close_ms"]),
@@ -1743,7 +1954,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         pos["last_checked_signal_close_ms"]=int(expected_close_ms)
         if not should_close and pos.get("pivot_tunnel"):
             try:
-                trail = _trail_confirmed_pivot_long_sl(
+                trail = _trail_confirmed_pivot_tpsl(
                     bot, state, pos, instruments.get(inst),
                     _by_ts(bars, expected_close_ms), expected_close_ms, tickers.get(inst))
                 if trail:
@@ -1826,23 +2037,21 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                 rows, expected_close_ms, int(pivot_restart.get(inst) or 0))
             if not tunnel["entry_allowed"]:
                 continue
-            # Enter only on confirmation of the SECOND lower swing itself.
-            # A newly confirmed upper pivot alone is not a lower bounce.
-            lows=tunnel.get("lower_anchors") or []
-            if (len(lows)!=2 or
-                    int(lows[1].get("confirmed_close_ms") or 0)!=int(expected_close_ms)):
+            # LONG enters on the second confirmed LOWER pivot.
+            # SHORT enters on the second confirmed UPPER pivot.
+            side = tunnel["tunnel_direction"]
+            entry_anchors = (tunnel.get("lower_anchors") or [] if side == "LONG"
+                             else tunnel.get("upper_anchors") or [])
+            if (len(entry_anchors) != 2
+                    or int(entry_anchors[1].get("confirmed_close_ms") or 0)
+                        != int(expected_close_ms)):
                 scan["rejections"].append({
-                    "inst":inst,"rank":rank,"reason":"WAIT_SECOND_LOWER_BOUNCE"})
+                    "inst": inst, "rank": rank, "side": side,
+                    "reason": ("WAIT_SECOND_LOWER_BOUNCE" if side == "LONG"
+                               else "WAIT_SECOND_UPPER_BOUNCE")})
                 continue
             candle = rows.get(expected_close_ms-FIVE)
             if candle is None or candle[4] <= 0:
-                continue
-            side = tunnel["tunnel_direction"]
-            if side != "LONG":
-                scan["rejections"].append({
-                    "inst": inst, "rank": rank, "side": side,
-                    "reason": "PIVOT_LONG_ONLY",
-                })
                 continue
             # The two consecutive CLOSED Volume bars must change colour:
             # RED -> larger GREEN for LONG, GREEN -> larger RED for SHORT.
