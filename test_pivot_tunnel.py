@@ -278,6 +278,60 @@ class TestLivePivotTrailingStop(unittest.TestCase):
         self.assertEqual(pos["sl"],"0.0948")
         self.assertNotIn("tunnel_sl_pending",pos)
 
+    def test_recover_real_prl_entry_snapshot_and_trail_after_new_candle(self):
+        """Regression: PRL live position had lower pivots ONLY in entry snapshot."""
+        from blofin_volume_flip_both_live import _trail_confirmed_pivot_long_sl
+        bot=self.FakeBot(live_sl="0.0947")
+        pos=self.position()
+        pos["signal_close_ms"]=1792668300000
+        pos["pivot_tunnel"]={
+            "upper_anchors":[{"open_ms":1792665600000, "price":0.0950,
+                               "confirmed_close_ms":1792666200000},
+                             {"open_ms":1792666800000, "price":0.0951,
+                               "confirmed_close_ms":1792667400000}],
+            "last_confirmed_low":{"open_ms":1792667700000,
+                                  "price":0.0947,"confirmed_close_ms":1792668300000},
+        }
+        pos["signal_snapshot"]={"volume_price_tunnel":{
+            "status":"VALID","tunnel_direction":"LONG",
+            "signal_close_ms":1792668300000,
+            "lower_anchors":[
+                {"open_ms":1792665900000,"price":0.0946,
+                 "confirmed_close_ms":1792666500000},
+                {"open_ms":1792667700000,"price":0.0947,
+                 "confirmed_close_ms":1792668300000},
+            ],
+        }}
+        state={"positions":{"PRL-USDT":pos}}
+        at=1792670700000  # 13:05 UK, the historical candle at which SL had remained 0.0947
+        rows={at-FIVE:(0.0954,0.0954,0.0951,0.0951,88)}
+        result=_trail_confirmed_pivot_long_sl(bot,state,pos,
+                 {"tickSize":"0.0001"},rows,at,{"last":"0.0951"})
+        self.assertEqual(result["status"],"BROKER_VERIFIED")
+        self.assertEqual(pos["sl"],"0.0948")
+        self.assertEqual(bot.live_sl,"0.0948")
+        self.assertEqual(len(pos["pivot_tunnel"]["lower_anchors"]),2)
+
+    def test_wrong_recovered_lower_anchors_are_never_used(self):
+        from blofin_volume_flip_both_live import _trail_confirmed_pivot_long_sl
+        bot=self.FakeBot()
+        pos=self.position()
+        anchors=pos["pivot_tunnel"].pop("lower_anchors")
+        pos["pivot_tunnel"]["last_confirmed_low"]=dict(anchors[1])
+        pos["signal_snapshot"]={"volume_price_tunnel":{
+            "status":"VALID","tunnel_direction":"LONG",
+            "signal_close_ms":pos["signal_close_ms"]-FIVE, # stale history
+            "lower_anchors":anchors,
+        }}
+        state={"positions":{"TEST-USDT":pos}}
+        at=12*FIVE
+        rows={at-FIVE:(0.095,0.0957,0.0948,0.0955,120)}
+        result=_trail_confirmed_pivot_long_sl(bot,state,pos,
+                 {"tickSize":"0.0001"},rows,at,{"last":"0.0955"})
+        self.assertEqual(result["status"],"BLOCK_MISSING_LOWER_ANCHORS")
+        self.assertEqual(pos["sl"],"0.0947")
+        self.assertFalse(any(method=="POST" for method,_,_ in bot.calls))
+
     def test_stop_does_not_move_if_support_falls_or_crosses_price(self):
         from blofin_volume_flip_both_live import _trail_confirmed_pivot_long_sl
         for support_direction, last in [("falling","0.0955"),("rising","0.0947")]:
