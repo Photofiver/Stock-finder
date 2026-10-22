@@ -1625,7 +1625,7 @@ def _open_one(bot, state, sig, instruments):
         "notional_usdt":bot.clean_decimal(expected_notional),
         "tp":"","sl":"","tp_policy":"TUNNEL_LINE","sl_policy":"TUNNEL_LINE",
         "tp_sl_mode":(EARLY_TUNNEL_TP_MODE if sig.get("second_bounce_entry") else TUNNEL_TPSL_MODE),
-        "second_bounce_exit": False,  # new entries exit on broker TP 0.05% before line
+        "second_bounce_exit": bool(sig.get("second_bounce_entry")),  # Keep second-touch as fallback; active broker TP can fill earlier.
         "tp_offset_from_tunnel_line_pct": ("0.05" if sig.get("second_bounce_entry") else "0"),
         "second_bounce_upper_count": 0,
         "second_bounce_last_upper_pivot_ms": 0,
