@@ -373,6 +373,69 @@ class TestLivePivotTrailingStop(unittest.TestCase):
         self.assertEqual(pos["tp"],"0.0962")
 
 
+    def test_early_tp_005_percent_from_tunnel_line_long_short(self):
+        from decimal import Decimal
+        from blofin_volume_flip_both_live import (
+            _early_tunnel_tp, _protection_prices, EARLY_TUNNEL_TP_MODE)
+        bot=self.FakeBot()
+        self.assertEqual(_early_tunnel_tp(bot,"LONG",Decimal("100"),Decimal("0.01")),
+                         Decimal("99.95"))
+        self.assertEqual(_early_tunnel_tp(bot,"SHORT",Decimal("100"),Decimal("0.01")),
+                         Decimal("100.05"))
+        for side, entry, sl, expected_tp in [
+            ("LONG","99.5","99.0","99.95"),
+            ("SHORT","100.5","101.0","100.05"),
+        ]:
+            with self.subTest(side=side):
+                p={"side":side,"reference_entry":entry,"tp_sl_mode":EARLY_TUNNEL_TP_MODE,
+                   "tunnel_tp_line":"100","tunnel_sl_line":sl}
+                tp, stop=_protection_prices(bot,p,{"tickSize":"0.01"})
+                self.assertEqual(str(tp),expected_tp)
+                self.assertEqual(str(stop),sl)
+        for side, entry, sl in [
+            ("LONG","99.96","99.0"),
+            ("SHORT","100.04","101.0"),
+        ]:
+            with self.subTest(side=side):
+                p={"side":side,"reference_entry":entry,"tp_sl_mode":EARLY_TUNNEL_TP_MODE,
+                   "tunnel_tp_line":"100","tunnel_sl_line":sl}
+                with self.assertRaises(RuntimeError):
+                    _protection_prices(bot,p,{"tickSize":"0.01"})
+
+    def test_early_005_real_broker_tp_amend_and_raw_line_preserved(self):
+        from blofin_volume_flip_both_live import (
+            _trail_confirmed_pivot_tp, EARLY_TUNNEL_TP_MODE)
+        for side, old_tp, expected_tp, sl in [
+            ("LONG","0.09605","0.09615","0.0947"),
+            ("SHORT","0.09455","0.09445","0.0959"),
+        ]:
+            with self.subTest(side=side):
+                bot=self.FakeBot(live_tp=old_tp,live_sl=sl)
+                pos=self.position()
+                pos.update(side=side,reference_entry="0.0951",tp=old_tp,
+                           sl=sl,tp_sl_mode=EARLY_TUNNEL_TP_MODE,
+                           tunnel_tp_line="0.0961" if side=="LONG" else "0.0945")
+                pos["pivot_tunnel"]["upper_anchors"]=[
+                    {"open_ms":0,"confirmed_close_ms":2*FIVE,"price":0.0958},
+                    {"open_ms":6*FIVE,"confirmed_close_ms":8*FIVE,"price":0.0960},
+                ]
+                pos["pivot_tunnel"]["lower_anchors"]=[
+                    {"open_ms":0,"confirmed_close_ms":2*FIVE,"price":0.0948},
+                    {"open_ms":6*FIVE,"confirmed_close_ms":8*FIVE,"price":0.0946},
+                ]
+                state={"positions":{"TEST-USDT":pos}}
+                at=12*FIVE
+                rows={at-FIVE:(0.095,0.0955,0.0948,0.095,100)}
+                result=_trail_confirmed_pivot_tp(
+                    bot,state,pos,{"tickSize":"0.00001"},rows,at,{"last":"0.095"})
+                self.assertEqual(result["status"],"BROKER_VERIFIED")
+                self.assertEqual(pos["tp"],expected_tp)
+                self.assertEqual(bot.live_tp,expected_tp)
+                self.assertEqual(bot.live_sl,sl)
+                self.assertEqual(pos["tunnel_tp_line"],
+                                 "0.0962" if side=="LONG" else "0.0944")
+                self.assertNotIn("tunnel_tp_pending",pos)
+
     def test_second_touch_has_only_virtual_tp_for_both_directions(self):
         from blofin_volume_flip_both_live import _trail_confirmed_pivot_tp
         for side in ("LONG", "SHORT"):
