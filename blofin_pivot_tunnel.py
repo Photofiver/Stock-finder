@@ -135,3 +135,36 @@ def pivot_exit_transition(position_tunnel, rows, expected_close_ms, side):
                 position_tunnel["last_confirmed_low"] = trough
                 last_low = trough
     return float(candle[3]) < float(last_low["price"])
+
+
+def second_boundary_bounce(position, rows, expected_close_ms):
+    """Count newly confirmed upper pivots AFTER entry for a LONG position.
+
+    Confirmation takes a full subsequent 5m candle; no future prices.
+    Touches use the straight line between the last two confirmed upper
+    anchors saved at entry. Multiple calls for one candle are idempotent.
+    """
+    if position.get("side") != "LONG":
+        return False
+    tunnel = position.get("pivot_tunnel") or {}
+    anchors = tunnel.get("upper_anchors") or []
+    if len(anchors) != 2:
+        return False
+    close_ms = int(expected_close_ms)
+    start_ms = int(position.get("opened_ms") or 0)
+    highs, _ = confirmed_pivots(rows, close_ms)
+    seen = int(position.get("second_bounce_last_upper_pivot_ms") or start_ms)
+    for peak in highs:
+        if int(peak["confirmed_close_ms"]) != close_ms or int(peak["open_ms"]) <= seen:
+            continue
+        try:
+            upper = _line(anchors[0], anchors[1], peak["open_ms"])
+        except (ValueError, ZeroDivisionError):
+            continue
+        if upper <= 0 or not math.isfinite(upper):
+            continue
+        if float(peak["price"]) >= upper:
+            position["second_bounce_last_upper_pivot_ms"] = int(peak["open_ms"])
+            position["second_bounce_upper_count"] = int(position.get("second_bounce_upper_count") or 0) + 1
+            return position["second_bounce_upper_count"] >= 2
+    return False
