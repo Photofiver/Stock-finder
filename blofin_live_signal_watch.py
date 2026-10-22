@@ -572,40 +572,6 @@ def main():
 
     run_started_ms = bot.now_ms()
     state = bot.load_state()
-    # One-time, user-requested reset of the 10% accounting drawdown reference.
-    # Preserve the shared 20-USDT trading cap, exchange balance and trade history.
-    reset_reason = "USER_REQUESTED_RESET_10_PERCENT_DRAWDOWN_20261022_2353_UK"
-    reset_history = state.setdefault("bankroll_rebase_history", [])
-    if not any(isinstance(row, dict) and row.get("reason") == reset_reason
-               for row in reset_history):
-        previous_bankroll = bot.current_live_bankroll(state)
-        realized = str(state.get("realized_pnl_usdt", "0"))
-        reset_history.append({
-            "at_ms": bot.now_ms(),
-            "reason": reset_reason,
-            "reset_scope": "drawdown_reference_only",
-            "max_drawdown_pct": "0.10",
-            "previous_bankroll_start_usdt": str(state.get("bankroll_start_usdt", "20")),
-            "previous_current_bankroll_usdt": str(previous_bankroll),
-            "previous_pnl_baseline_usdt": str(state.get("bankroll_pnl_baseline_usdt", "0")),
-            "previous_realized_pnl_usdt": realized,
-            "previous_risk_stop_triggered": bool(state.get("risk_stop_triggered", False)),
-            "new_bankroll_start_usdt": "20",
-            "new_pnl_baseline_usdt": realized,
-            "new_risk_stop_triggered": False,
-            "no_deposit_or_exchange_order_performed": True,
-            "note": "Reset the 10% drawdown reference once by explicit user request; retain all positions, PnL, fees, trading rules, and the 20 USDT shared cap.",
-        })
-        state["bankroll_start_usdt"] = "20"
-        state["bankroll_pnl_baseline_usdt"] = realized
-        state["bankroll_rebased_at_ms"] = bot.now_ms()
-        state["risk_stop_triggered"] = False
-        state["risk_stop_triggered_ms"] = None
-        state["risk_stop_bankroll_usdt"] = None
-        state["risk_stop_threshold_usdt"] = None
-        bot.save_state(state)
-        print(f"USER_DRAWDOWN_RESET_APPLIED: 10% active, "
-              f"old bookkeeping bankroll={previous_bankroll}, new baseline=20 USDT")
     top7, tickers, instruments = bot.get_universe()
     if not top7:
         raise RuntimeError("BloFin TOP7 is empty")
