@@ -48,7 +48,7 @@ MIN_PER_COIN_USDT = Decimal("5")
 CASH_BUFFER_USDT = Decimal("0.50")
 AGE_MAX_MS = 120_000
 def _protection_prices(bot, pos, meta):
-    """Tick-align protected prices; freeze tunnel lines at signal close.
+    """Tick-align broker protection; LONG pivot SL can tighten after closed 5m bars.
 
     Existing positions continue using their original fixed TP/SL.
     Rounding moves TUNNEL targets to the first tradable tick on or just
@@ -66,7 +66,7 @@ def _protection_prices(bot, pos, meta):
         if pos["side"] == "LONG":
             tp = (tp_line / tick).to_integral_value(rounding=ROUND_CEILING) * tick
             sl = (sl_line / tick).to_integral_value(rounding=ROUND_FLOOR) * tick
-            valid = sl < entry < tp
+            valid = (entry < tp and 0 < sl < tp) if pos.get("sl_trailing_active") else sl < entry < tp
         elif pos["side"] == "SHORT":
             tp = (tp_line / tick).to_integral_value(rounding=ROUND_FLOOR) * tick
             sl = (sl_line / tick).to_integral_value(rounding=ROUND_CEILING) * tick
@@ -81,8 +81,8 @@ def _protection_prices(bot, pos, meta):
         if pos.get("side") != "LONG" or not sl_line.is_finite() or sl_line <= 0:
             raise RuntimeError("Second bounce LONG requires a verified SL")
         sl = (sl_line/tick).to_integral_value(rounding=ROUND_FLOOR)*tick
-        if not 0 < sl < entry:
-            raise RuntimeError("Second bounce SL not below entry")
+        if not (sl > 0 and (pos.get("sl_trailing_active") or sl < entry)):
+            raise RuntimeError("Second bounce initial SL must be below entry")
         return Decimal("0"), sl
     if pos["side"]=="LONG":
         tp=((entry*(1+TP_PCT)/tick).to_integral_value(rounding=ROUND_CEILING))*tick
@@ -235,6 +235,146 @@ def _ensure_protection(bot,state,pos,meta):
     pos["tpsl_id"]=str(row["tpslId"])
     bot.save_state(state)
     return _ensure_mark_trigger(bot,state,pos,tp,sl)
+
+
+
+def _reconcile_pending_tunnel_sl(bot, state, pos):
+    """Adopt an SL amendment only after the LIVE broker order confirms it.
+
+    If the broker still shows the old SL, leave that known protection in place.
+    The same requestId is safe to retry; never infer success from POST alone.
+    """
+    pending = pos.get("tunnel_sl_pending")
+    if not pending:
+        return True
+    detail = bot.private_request("GET", "/api/v1/trade/order-tpsl-detail",
+                                 params={"instId":pos["inst"], "tpslId":str(pos["tpsl_id"])}) or {}
+    if isinstance(detail, list):
+        detail = detail[0] if detail else {}
+    if (str(detail.get("state") or "").lower() != "live"
+            or str(detail.get("tpslId") or "") != str(pos["tpsl_id"])):
+        raise RuntimeError("Pending trailing SL: broker protection not LIVE")
+    observed = bot.d(detail.get("slTriggerPrice") or "0")
+    prior = bot.d(pending["old_sl"])
+    proposed = bot.d(pending["target_sl"])
+    if observed == proposed:
+        pos["sl"] = bot.clean_decimal(proposed)
+        pos["tunnel_sl_line"] = bot.clean_decimal(proposed)
+        pos["sl_trailing_active"] = True
+        pos["last_sl_trail_close_ms"] = int(pending["close_ms"])
+        pos["last_sl_trail_status"] = "BROKER_VERIFIED"
+        pos.pop("tunnel_sl_pending", None)
+        pos.pop("sl_trail_error", None)
+        bot.save_state(state)
+        return True
+    if observed == prior:
+        pos["last_sl_trail_status"] = "PENDING_OLD_SL_STILL_LIVE"
+        bot.save_state(state)
+        return False
+    raise RuntimeError("Pending trailing SL: unexpected broker SL; do not overwrite")
+
+
+def _trail_confirmed_pivot_long_sl(bot, state, pos, meta, rows, close_ms, ticker):
+    """Tighten existing broker SL along ENTRY's lower pivot line, never loosen.
+
+    Only confirmed 5m candles and already-confirmed entry pivot anchors.
+    Amend the existing tpslId in place; never cancel the prior protective order.
+    """
+    if (pos.get("side") != "LONG" or not pos.get("pivot_tunnel")
+            or pos.get("tp_sl_mode") not in (SECOND_BOUNCE_SL_MODE, TUNNEL_TPSL_MODE)
+            or pos.get("exit_pending") or not pos.get("tpsl_id")):
+        return None
+    if close_ms <= int(pos.get("signal_close_ms") or 0):
+        return None
+    candle = rows.get(close_ms-FIVE)
+    anchors = (pos.get("pivot_tunnel") or {}).get("lower_anchors") or []
+    if not candle or len(anchors) != 2 or not meta:
+        return None
+    try:
+        left, right = anchors
+        t1, t2 = int(left["open_ms"]), int(right["open_ms"])
+        if not (t1 < t2 and close_ms >= int(right["confirmed_close_ms"])):
+            return None
+        v1, v2 = bot.d(left["price"]), bot.d(right["price"])
+        tick = bot.d(meta.get("tickSize") or "0")
+        if not (tick > 0 and v1 > 0 and v2 > 0):
+            return None
+        # Same straight support line as the confirmed lower anchors at entry.
+        raw = v1 + (v2-v1) * bot.d(close_ms-t1) / bot.d(t2-t1)
+        target = (raw/tick).to_integral_value(rounding=ROUND_FLOOR)*tick
+        previous = bot.d(pos.get("sl") or "0")
+        if not (target > previous > 0):
+            return None
+        price_close = bot.d(candle[3])
+        price_live = bot.d((ticker or {}).get("last") or "0")
+        # Do not submit a stop ABOVE last close/current price, which could
+        # be rejected or immediately execute. Keep old broker SL instead.
+        if price_live <= 0 or target >= min(price_close, price_live):
+            pos["last_sl_trail_status"] = "SKIP_LINE_AT_OR_ABOVE_MARKET"
+            return None
+        tp = bot.d(pos.get("tp") or "0")
+        if tp > 0 and target >= tp:
+            pos["last_sl_trail_status"] = "SKIP_SL_AT_OR_ABOVE_TP"
+            return None
+    except (KeyError, TypeError, ValueError, ArithmeticError, ZeroDivisionError) as exc:
+        pos["sl_trail_error"] = f"INVALID_TUNNEL_SL: {exc}"[:180]
+        return None
+
+    pending = pos.get("tunnel_sl_pending")
+    if pending:
+        # Never submit a different amendment before confirming the previous.
+        # An old request may have reached the broker despite network timeout.
+        try:
+            if _reconcile_pending_tunnel_sl(bot, state, pos):
+                return {"status":"CONFIRMED_PREVIOUS", "sl":pos["sl"]}
+            request = pending
+        except Exception as exc:
+            pos["sl_trail_error"] = f"RECONCILE_FAILED: {exc}"[:200]
+            bot.save_state(state)
+            return {"status":"PENDING_VERIFICATION"}
+    else:
+        # Confirm currently live protection BEFORE requesting a higher stop.
+        try:
+            detail = bot.private_request("GET","/api/v1/trade/order-tpsl-detail",
+                          params={"instId":pos["inst"],"tpslId":str(pos["tpsl_id"])}) or {}
+            if isinstance(detail,list):
+                detail=detail[0] if detail else {}
+            if (str(detail.get("state") or "").lower()!="live"
+                    or str(detail.get("tpslId") or "")!=str(pos["tpsl_id"])
+                    or bot.d(detail.get("slTriggerPrice") or "0")!=previous):
+                raise RuntimeError("Old protective SL differs from LIVE broker")
+        except Exception as exc:
+            pos["sl_trail_error"] = f"BROKER_READ_FAILED: {exc}"[:200]
+            bot.save_state(state)
+            return {"status":"BROKER_READ_FAILED"}
+        request = {"old_sl":bot.clean_decimal(previous),
+                   "target_sl":bot.clean_decimal(target),
+                   "close_ms":int(close_ms),
+                   "request_id":("voltrail"+uuid.uuid4().hex)[:32]}
+        # Save BEFORE POST so a timeout cannot lead to a second new request.
+        pos["tunnel_sl_pending"] = request
+        bot.save_state(state)
+    try:
+        result=bot.private_request("POST","/api/v1/trade/amend-tpsl",body={
+            "instId":pos["inst"],"tpslId":str(pos["tpsl_id"]),
+            "requestId":request["request_id"],
+            "newSlTriggerPrice":request["target_sl"],
+        })
+        row=result[0] if isinstance(result,list) and result else (result or {})
+        if str(row.get("code","0"))!="0":
+            raise RuntimeError("BloFin rejected trailing SL: "+str(row)[:160])
+    except Exception as exc:
+        pos["sl_trail_error"] = f"AMEND_UNCERTAIN: {exc}"[:220]
+        bot.save_state(state)
+        return {"status":"PENDING_VERIFICATION"}
+    try:
+        confirmed=_reconcile_pending_tunnel_sl(bot,state,pos)
+        return ({"status":"BROKER_VERIFIED","sl":pos["sl"]} if confirmed
+                else {"status":"PENDING_VERIFICATION"})
+    except Exception as exc:
+        pos["sl_trail_error"]=f"VERIFY_UNCERTAIN: {exc}"[:220]
+        bot.save_state(state)
+        return {"status":"PENDING_VERIFICATION"}
 
 
 def _by_ts(bars, close_ms):
@@ -1398,7 +1538,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
           "signal_close_ms":int(expected_close_ms),
           "top200_count":len(top200),"status":"PENDING",
           "scanned_confirmed":0,"matched":0,"candidates":[],
-          "entries":[],"exits":[],"rejections":[]}
+          "entries":[],"exits":[],"sl_updates":[],"rejections":[]}
 
     bot.sync_all_tracked_positions(state)
     bot.evaluate_all_tracked_exit_signals(state, expected_close_ms)
@@ -1420,6 +1560,8 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         if (inst in broker_set and pos.get("strategy")==STRATEGY
                 and not pos.get("exit_pending")):
             try:
+                if pos.get("tunnel_sl_pending"):
+                    _reconcile_pending_tunnel_sl(bot,state,pos)
                 protected=_ensure_protection(bot,state,pos,instruments.get(inst))
             except Exception as exc:
                 protected=False
@@ -1534,6 +1676,18 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                                      if legacy else exit_transition(pos,bars,expected_close_ms))
         pos["last_red_volume" if legacy else "last_same_volume"]=new_volume
         pos["last_checked_signal_close_ms"]=int(expected_close_ms)
+        if not should_close and pos.get("pivot_tunnel"):
+            try:
+                trail = _trail_confirmed_pivot_long_sl(
+                    bot, state, pos, instruments.get(inst),
+                    _by_ts(bars, expected_close_ms), expected_close_ms, tickers.get(inst))
+                if trail:
+                    scan["sl_updates"].append({"inst":inst, **trail})
+            except Exception as exc:
+                pos["sl_trail_error"]=f"{type(exc).__name__}: {exc}"[:220]
+                scan["rejections"].append({"inst":inst,"reason":"TRAIL_SL_ERROR",
+                                           "error":pos["sl_trail_error"]})
+                bot.save_state(state)
         if should_close:
             if pos.get("pivot_tunnel"):
                 pivot_restart[inst] = int(expected_close_ms)
