@@ -125,15 +125,16 @@ class TestSelectedLongEntryFilter(unittest.TestCase):
                     self.signal(), {"expected_fill": price})["allowed"])
         self.assertFalse(pivot_long_entry_filter(self.signal(), {})["allowed"])
 
-    def test_new_short_blocked_before_any_bot_call(self):
+    def test_new_short_no_long_only_rejection(self):
         from unittest.mock import Mock, patch
         import blofin_volume_flip_both_live as live
         bot = Mock()
+        bot.risk_stop_active.return_value = True
         with patch.object(live, "PIVOT_ENABLED", True):
             sig = {"inst": "TEST-USDT", "side": "SHORT"}
             self.assertFalse(live._open_one(bot, {}, sig, {}))
-        self.assertEqual(sig["preorder_rejection"], "PIVOT_LONG_ONLY")
-        self.assertEqual(bot.mock_calls, [])
+        self.assertNotEqual(sig.get("preorder_rejection"), "PIVOT_LONG_ONLY")
+        bot.risk_stop_active.assert_called_once()
 
 class TestSecondUpperBounce(unittest.TestCase):
     def test_two_confirmed_upper_touches_only(self):
@@ -159,6 +160,28 @@ class TestSecondUpperBounce(unittest.TestCase):
         self.assertEqual(pos["second_bounce_upper_count"], 1)
         self.assertTrue(second_boundary_bounce(pos, rows, 9*FIVE))
         self.assertEqual(pos["second_bounce_upper_count"], 2)
+
+class TestShortSecondLowerBounce(unittest.TestCase):
+    def test_short_exits_only_after_second_confirmed_lower_touch(self):
+        rows = {i*FIVE: (9.5, 9.8, 9.0, 9.5, 100) for i in range(13)}
+        for i,low in ((3,8.8),(7,8.7)):
+            rows[i*FIVE] = (9.5,9.8,low,9.5,100)
+        pos = {
+            "side": "SHORT", "opened_ms": 2*FIVE,
+            "pivot_tunnel": {"lower_anchors": [
+                {"open_ms": 0, "price": 9.0},
+                {"open_ms": FIVE, "price": 9.0},
+            ]},
+            "second_bounce_lower_count": 0,
+        }
+        self.assertFalse(second_boundary_bounce(pos, rows, 4*FIVE))
+        self.assertFalse(second_boundary_bounce(pos, rows, 5*FIVE))
+        self.assertEqual(pos["second_bounce_lower_count"], 1)
+        self.assertFalse(second_boundary_bounce(pos, rows, 5*FIVE))
+        self.assertEqual(pos["second_bounce_lower_count"], 1)
+        self.assertTrue(second_boundary_bounce(pos, rows, 9*FIVE))
+        self.assertEqual(pos["second_bounce_lower_count"], 2)
+
 
 class TestFortyEightBarTunnelLookback(unittest.TestCase):
     def test_only_last_forty_eight_closed_five_minute_bars(self):
@@ -227,6 +250,56 @@ class TestLivePivotTrailingStop(unittest.TestCase):
                     {"open_ms":0,"confirmed_close_ms":2*FIVE,"price":0.0946},
                     {"open_ms":6*FIVE,"confirmed_close_ms":8*FIVE,"price":0.0947},
                 ]}}
+
+    def test_short_sl_moves_down_and_never_back_up(self):
+        from blofin_volume_flip_both_live import _trail_confirmed_pivot_long_sl
+        bot = self.FakeBot(live_sl="0.0958")
+        pos = self.position()
+        pos.update(side="SHORT", reference_entry="0.0951",
+                   tp_sl_mode="SECOND_BOUNCE_SL_ONLY",
+                   sl="0.0958", tp="0")
+        pos["pivot_tunnel"]["upper_anchors"] = [
+            {"open_ms": 0, "confirmed_close_ms": 2*FIVE, "price": 0.0961},
+            {"open_ms": 6*FIVE, "confirmed_close_ms": 8*FIVE, "price": 0.0959},
+        ]
+        state = {"positions": {"TEST-USDT": pos}}
+        at = 12*FIVE
+        rows = {at-FIVE:(0.0949,0.0950,0.0948,0.0949,120)}
+        changed = _trail_confirmed_pivot_long_sl(
+            bot,state,pos,{"tickSize":"0.0001"},rows,at,{"last":"0.0949"})
+        self.assertEqual(changed["status"],"BROKER_VERIFIED")
+        self.assertEqual(pos["sl"],"0.0957")
+        self.assertEqual(bot.live_sl,"0.0957")
+        # Even if the upper line slopes upward later, the SL cannot loosen.
+        pos["pivot_tunnel"]["upper_anchors"][1]["price"] = 0.0962
+        self.assertIsNone(_trail_confirmed_pivot_long_sl(
+            bot,state,pos,{"tickSize":"0.0001"},rows,13*FIVE,{"last":"0.0949"}))
+        self.assertEqual(pos["sl"],"0.0957")
+
+    def test_second_touch_has_only_virtual_tp_for_both_directions(self):
+        from blofin_volume_flip_both_live import _trail_confirmed_pivot_tp
+        for side in ("LONG", "SHORT"):
+            with self.subTest(side=side):
+                bot = self.FakeBot()
+                pos = self.position()
+                pos["side"] = side
+                pos["pivot_tunnel"]["upper_anchors"] = [
+                    {"open_ms":0,"confirmed_close_ms":2*FIVE,"price":0.096},
+                    {"open_ms":6*FIVE,"confirmed_close_ms":8*FIVE,"price":0.0961},
+                ]
+                pos["pivot_tunnel"]["lower_anchors"] = [
+                    {"open_ms":0,"confirmed_close_ms":2*FIVE,"price":0.0946},
+                    {"open_ms":6*FIVE,"confirmed_close_ms":8*FIVE,"price":0.0945},
+                ]
+                state={"positions":{"TEST-USDT":pos}}
+                at=12*FIVE
+                rows={at-FIVE:(0.0950,0.0955,0.0948,0.0950,120)}
+                result = _trail_confirmed_pivot_tp(
+                    bot,state,pos,{"tickSize":"0.0001"},rows,at,{"last":"0.0950"})
+                self.assertEqual(result["status"],"SECOND_TOUCH_TARGET_TRACKED")
+                self.assertIn("tunnel_tp_projected",pos)
+                self.assertEqual(pos["tp"],"0")
+                self.assertFalse(any(method=="POST" for method,_,_ in bot.calls))
 
     def test_long_sl_moves_up_with_frozen_rising_lower_line(self):
         from blofin_volume_flip_both_live import _trail_confirmed_pivot_long_sl
