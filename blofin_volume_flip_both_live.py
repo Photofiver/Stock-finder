@@ -308,6 +308,17 @@ def _reconcile_pending_tunnel_sl(bot, state, pos):
         bot.save_state(state)
         return True
     if observed == prior:
+        # A concrete 102040 rejection means BloFin did not amend the SL.
+        # Once the SAME live broker order confirms the old SL is intact,
+        # clear the rejected request so it cannot freeze future TP updates.
+        # Never clear pending requests after a timeout or ambiguous response.
+        rejected = str(pos.get("sl_trail_error") or "")
+        if "102040" in rejected and "SL trigger price" in rejected:
+            pos.pop("tunnel_sl_pending", None)
+            pos.pop("sl_trail_error", None)
+            pos["last_sl_trail_status"] = "BROKER_REJECTED_102040_OLD_SL_VERIFIED"
+            bot.save_state(state)
+            return True
         pos["last_sl_trail_status"] = "PENDING_OLD_SL_STILL_LIVE"
         bot.save_state(state)
         return False
@@ -572,7 +583,11 @@ def _reconcile_pending_tunnel_tp(bot, state, pos):
 
 
 def _trail_confirmed_pivot_tp(bot, state, pos, meta, rows, close_ms, ticker):
-    """Project TP from entry pivots on each closed 5m candle; second touch is virtual."""
+    """Only tighten the early broker TP; never let it run away from entry.
+
+    LONG early TP may decrease, SHORT early TP may increase. Existing
+    legacy tunnel modes and the virtual second-touch target are unchanged.
+    """
     side = pos.get("side")
     mode = pos.get("tp_sl_mode")
     if (side not in ("LONG", "SHORT")
@@ -612,6 +627,16 @@ def _trail_confirmed_pivot_tp(bot, state, pos, meta, rows, close_ms, ticker):
                    (previous, previous_sl, close_price, live_price)):
             raise ValueError("invalid last price or protective price")
         if not pos.get("tunnel_tp_pending"):
+            # With an EARLY_TUNNEL_TP_MODE broker order, freeze the original
+            # 0.05%-before-line TP unless a newly confirmed boundary would
+            # move it CLOSER TO ENTRY: lower TP for LONG, higher for SHORT.
+            # Never amend the broker order to a farther-away profit target.
+            if mode == EARLY_TUNNEL_TP_MODE and (
+                    (side == "LONG" and projected >= previous) or
+                    (side == "SHORT" and projected <= previous)):
+                pos["last_tp_trail_status"] = "SKIP_TP_WOULD_MOVE_FARTHER"
+                bot.save_state(state)
+                return None
             if projected == previous:
                 return None
             if side == "LONG" and projected <= max(close_price, live_price, previous_sl):
