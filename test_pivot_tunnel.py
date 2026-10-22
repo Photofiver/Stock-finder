@@ -205,8 +205,9 @@ class TestLivePivotTrailingStop(unittest.TestCase):
 
     class FakeBot:
         MARGIN_MODE = "isolated"
-        def __init__(self, live_sl="0.0947", delay_confirmation=False):
+        def __init__(self, live_sl="0.0947", delay_confirmation=False, live_tp="0"):
             self.live_sl = live_sl
+            self.live_tp = live_tp
             self.delay_confirmation = delay_confirmation
             self.pending_sl = None
             self.calls = []
@@ -225,12 +226,20 @@ class TestLivePivotTrailingStop(unittest.TestCase):
         def private_request(self, method, path, params=None, body=None):
             self.calls.append((method, path, body))
             if path == "/api/v1/trade/order-tpsl-detail":
-                return {"state":"live", "tpslId":"stop1", "tpTriggerPrice":"0",
+                return {"state":"live", "tpslId":"stop1", "tpTriggerPrice":self.live_tp,
                         "slTriggerPrice":self.live_sl,
                         "slTriggerPriceType":"last"}
             if path == "/api/v1/trade/amend-tpsl":
                 assert method == "POST"
                 assert body["tpslId"] == "stop1"
+                if "newTpTriggerPrice" in body:
+                    assert "newSlTriggerPrice" not in body
+                    assert body["newTpTriggerPriceType"] == "last"
+                    assert body["newTpOrderPrice"] == "-1"
+                    self.pending_tp = body["newTpTriggerPrice"]
+                    if not self.delay_confirmation:
+                        self.live_tp = self.pending_tp
+                    return {"code":"0", "tpslId":"stop1"}
                 assert self.d(body.get("newSlTriggerPrice")) > self.d("0")
                 assert "newTpTriggerPrice" not in body
                 assert body.get("newSlTriggerPriceType") == "last"
@@ -272,9 +281,97 @@ class TestLivePivotTrailingStop(unittest.TestCase):
         self.assertEqual(bot.live_sl,"0.0957")
         # Even if the upper line slopes upward later, the SL cannot loosen.
         pos["pivot_tunnel"]["upper_anchors"][1]["price"] = 0.0962
+        rows[12*FIVE] = (0.0949,0.0950,0.0948,0.0949,120)
         self.assertIsNone(_trail_confirmed_pivot_long_sl(
             bot,state,pos,{"tickSize":"0.0001"},rows,13*FIVE,{"last":"0.0949"}))
         self.assertEqual(pos["sl"],"0.0957")
+
+    def test_broker_tp_follows_confirmed_line_for_both_directions(self):
+        from blofin_volume_flip_both_live import (
+            _trail_confirmed_pivot_tp, TUNNEL_TPSL_MODE)
+        for side,old_tp,new_tp,old_sl,lower in (
+                ("LONG","0.0961","0.0962","0.0947",False),
+                ("SHORT","0.0945","0.0944","0.0959",True)):
+            with self.subTest(side=side):
+                bot=self.FakeBot(live_sl=old_sl,live_tp=old_tp)
+                pos=self.position()
+                pos.update(side=side,tp_sl_mode=TUNNEL_TPSL_MODE,
+                           tp=old_tp,sl=old_sl)
+                pos["pivot_tunnel"]["upper_anchors"]=[
+                    {"open_ms":0,"confirmed_close_ms":2*FIVE,"price":0.0958},
+                    {"open_ms":6*FIVE,"confirmed_close_ms":8*FIVE,"price":0.0960},
+                ]
+                if lower:
+                    pos["pivot_tunnel"]["lower_anchors"]=[
+                        {"open_ms":0,"confirmed_close_ms":2*FIVE,"price":0.0948},
+                        {"open_ms":6*FIVE,"confirmed_close_ms":8*FIVE,"price":0.0946},
+                    ]
+                state={"positions":{"TEST-USDT":pos}}
+                at=12*FIVE
+                rows={at-FIVE:(0.095,0.0955,0.0948,0.095,100)}
+                result=_trail_confirmed_pivot_tp(
+                    bot,state,pos,{"tickSize":"0.0001"},rows,at,{"last":"0.095"})
+                self.assertEqual(result["status"],"BROKER_VERIFIED")
+                self.assertEqual(pos["tp"],new_tp)
+                self.assertEqual(bot.live_tp,new_tp)
+                self.assertEqual(bot.live_sl,old_sl)
+                self.assertNotIn("tunnel_tp_pending",pos)
+                self.assertEqual(len([x for x in bot.calls if x[0]=="POST"]),1)
+
+    def test_tp_timeout_after_broker_exec_does_not_reissue(self):
+        from blofin_volume_flip_both_live import (
+            _trail_confirmed_pivot_tp, _reconcile_pending_tunnel_tp,
+            TUNNEL_TPSL_MODE)
+        class AfterApplyTimeout(self.FakeBot):
+            def private_request(self, method, path, params=None, body=None):
+                result=super().private_request(method,path,params=params,body=body)
+                if path=="/api/v1/trade/amend-tpsl":
+                    raise TimeoutError("response lost after broker applied")
+                return result
+        bot=AfterApplyTimeout(live_tp="0.0961")
+        pos=self.position()
+        pos.update(tp="0.0961",tp_sl_mode=TUNNEL_TPSL_MODE)
+        pos["pivot_tunnel"]["upper_anchors"]=[
+            {"open_ms":0,"confirmed_close_ms":2*FIVE,"price":0.0958},
+            {"open_ms":6*FIVE,"confirmed_close_ms":8*FIVE,"price":0.0960},
+        ]
+        state={"positions":{"TEST-USDT":pos}}
+        at=12*FIVE
+        rows={at-FIVE:(0.095,0.0955,0.0948,0.095,100)}
+        result=_trail_confirmed_pivot_tp(
+            bot,state,pos,{"tickSize":"0.0001"},rows,at,{"last":"0.095"})
+        self.assertEqual(result["status"],"PENDING_VERIFICATION")
+        self.assertEqual(pos["tp"],"0.0961")
+        self.assertTrue(pos.get("tunnel_tp_pending"))
+        # Simulated restart: broker data, same durable saved pending request.
+        self.assertTrue(_reconcile_pending_tunnel_tp(bot,state,pos))
+        self.assertEqual(pos["tp"],"0.0962")
+        self.assertNotIn("tunnel_tp_pending",pos)
+        self.assertEqual(sum(1 for m,p,b in bot.calls if m=="POST"),1)
+
+    def test_broker_old_tp_kept_while_amend_response_is_uncertain(self):
+        from blofin_volume_flip_both_live import (
+            _trail_confirmed_pivot_tp, _reconcile_pending_tunnel_tp,
+            TUNNEL_TPSL_MODE)
+        bot=self.FakeBot(live_tp="0.0961",delay_confirmation=True)
+        pos=self.position()
+        pos.update(tp="0.0961",tp_sl_mode=TUNNEL_TPSL_MODE)
+        pos["pivot_tunnel"]["upper_anchors"]=[
+            {"open_ms":0,"confirmed_close_ms":2*FIVE,"price":0.0958},
+            {"open_ms":6*FIVE,"confirmed_close_ms":8*FIVE,"price":0.0960},
+        ]
+        state={"positions":{"TEST-USDT":pos}}
+        at=12*FIVE
+        rows={at-FIVE:(0.095,0.0955,0.0948,0.095,100)}
+        result=_trail_confirmed_pivot_tp(
+            bot,state,pos,{"tickSize":"0.0001"},rows,at,{"last":"0.095"})
+        self.assertEqual(result["status"],"PENDING_VERIFICATION")
+        self.assertFalse(_reconcile_pending_tunnel_tp(bot,state,pos))
+        self.assertEqual(pos["tp"],"0.0961")
+        bot.live_tp=bot.pending_tp
+        self.assertTrue(_reconcile_pending_tunnel_tp(bot,state,pos))
+        self.assertEqual(pos["tp"],"0.0962")
+
 
     def test_second_touch_has_only_virtual_tp_for_both_directions(self):
         from blofin_volume_flip_both_live import _trail_confirmed_pivot_tp
