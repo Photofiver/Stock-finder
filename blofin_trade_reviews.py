@@ -164,3 +164,35 @@ def short_summary(review):
     return (f"{review['side']} {review['instrument']} | net {net_text} | "
             f"peak {peak_text} | reason {review['close_reason_recorded']}"
             f"{changed} | journal {review['closed_uk'][:10]}")
+
+
+def sync_daily_reviews(state, day=None):
+    """Recreate today's missing journal after runner restart or a failed git push.
+
+    Uses ONLY verified historical closes already stored in LIVE state.
+    Never queries BloFin, never changes order execution.
+    """
+    if day is None:
+        day = datetime.now(UK).date().isoformat()
+    written = 0
+    updated_state = 0
+    for trade in state.get("trade_history", []):
+        if not isinstance(trade, dict):
+            continue
+        closed = int(trade.get("closed_ms") or 0)
+        if closed <= 0:
+            continue
+        closed_day = datetime.fromtimestamp(
+            closed / 1000, timezone.utc).astimezone(UK).date().isoformat()
+        if closed_day != day:
+            continue
+        review = trade.get("post_trade_review")
+        if not review or review.get("version") != 1:
+            review = make_review(trade)
+            trade["post_trade_review"] = review
+            updated_state += 1
+        _, appended = archive_review(review)
+        if appended:
+            written += 1
+    return {"day": day, "new_journal_rows": written,
+            "updated_state_reviews": updated_state}
