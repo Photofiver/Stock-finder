@@ -369,17 +369,31 @@ def _trail_confirmed_pivot_long_sl(bot, state, pos, meta, rows, close_ms, ticker
 
     pending = pos.get("tunnel_sl_pending")
     if pending:
-        # Never submit a different amendment before confirming the previous.
-        # An old request may have reached the broker despite network timeout.
+        # An ambiguous POST may have succeeded: read broker state before
+        # attempting another request or changing the tracked SL.
         try:
             if _reconcile_pending_tunnel_sl(bot, state, pos):
                 return {"status":"CONFIRMED_PREVIOUS", "sl":pos["sl"]}
-            request = pending
+            # This specific API validation error means the original request
+            # was REJECTED (not ambiguous). If the live broker still has our
+            # previous SL, clear that rejected idempotency key and prepare a
+            # complete new request. Never replace uncertain requests.
+            previous_error = str(pos.get("sl_trail_error") or "")
+            if ("152001" in previous_error
+                    and "newSlTriggerPriceType" in previous_error
+                    and pos.get("last_sl_trail_status") == "PENDING_OLD_SL_STILL_LIVE"):
+                pos.pop("tunnel_sl_pending", None)
+                pos.pop("sl_trail_error", None)
+                pos["last_sl_trail_status"] = "RETRY_BROKER_REJECTED_152001"
+                bot.save_state(state)
+                pending = None
+            else:
+                request = pending
         except Exception as exc:
             pos["sl_trail_error"] = f"RECONCILE_FAILED: {exc}"[:200]
             bot.save_state(state)
             return {"status":"PENDING_VERIFICATION"}
-    else:
+    if not pending:
         # Confirm currently live protection BEFORE requesting a higher stop.
         try:
             detail = bot.private_request("GET","/api/v1/trade/order-tpsl-detail",
@@ -406,6 +420,10 @@ def _trail_confirmed_pivot_long_sl(bot, state, pos, meta, rows, close_ms, ticker
             "instId":pos["inst"],"tpslId":str(pos["tpsl_id"]),
             "requestId":request["request_id"],
             "newSlTriggerPrice":request["target_sl"],
+            # BloFin rejects price-only changes with code 152001 when the
+            # trigger type is omitted, even though API docs mark it optional.
+            "newSlTriggerPriceType":TRIGGER_TYPE,
+            "newSlOrderPrice":"-1",
         })
         row=result[0] if isinstance(result,list) and result else (result or {})
         if str(row.get("code","0"))!="0":
