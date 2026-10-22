@@ -30,6 +30,9 @@ LEGACY_STRATEGY = "REV_SHORT_20W_LONG_VOLUME_V1"
 HOLD_POLICY = "VOLUME_FLIP_BOTH_NO_TPSL"
 TUNNEL_TPSL_MODE = "TUNNEL_LINES_AT_ENTRY"
 SECOND_BOUNCE_SL_MODE = "SECOND_BOUNCE_SL_ONLY"
+EARLY_TUNNEL_TP_MODE = "TUNNEL_TP_EARLY_005"
+EARLY_TUNNEL_TP_OFFSET = Decimal("0.0005")  # TP 0.05% BEFORE the moving exit line.
+EARLY_TUNNEL_MIN_GROSS_MOVE = Decimal("0.0012")  # fee buffer on NEW entries (estimate only).
 EMERGENCY_TPSL_MODE = "EMERGENCY_FIXED_AFTER_FILL"
 TP_PCT = Decimal("0.0055")
 SL_PCT = Decimal("0.005")
@@ -47,6 +50,28 @@ MAX_PER_COIN_USDT = Decimal("5")
 MIN_PER_COIN_USDT = Decimal("5")
 CASH_BUFFER_USDT = Decimal("0.50")
 AGE_MAX_MS = 120_000
+def _early_tunnel_tp(bot, side, line, tick):
+    """0.05% before the opposite boundary, tick-aligned toward entry."""
+    boundary, tick = bot.d(line), bot.d(tick)
+    if (side not in ("LONG", "SHORT") or not boundary.is_finite()
+            or not tick.is_finite() or boundary <= 0 or tick <= 0):
+        raise ValueError("Invalid confirmed TP line / tick size / side")
+    if side == "LONG":
+        target = boundary * (Decimal("1") - EARLY_TUNNEL_TP_OFFSET)
+        return (target / tick).to_integral_value(rounding=ROUND_FLOOR) * tick
+    target = boundary * (Decimal("1") + EARLY_TUNNEL_TP_OFFSET)
+    return (target / tick).to_integral_value(rounding=ROUND_CEILING) * tick
+
+
+def _early_tp_fee_gap_ok(side, entry, tp):
+    """Never open at a TP too close to entry to pay estimated round-trip fees."""
+    if side == "LONG":
+        return tp > entry * (Decimal("1") + EARLY_TUNNEL_MIN_GROSS_MOVE)
+    if side == "SHORT":
+        return tp < entry * (Decimal("1") - EARLY_TUNNEL_MIN_GROSS_MOVE)
+    return False
+
+
 def _protection_prices(bot, pos, meta):
     """Tick-align broker protection; LONG pivot SL can tighten after closed 5m bars.
 
@@ -58,23 +83,38 @@ def _protection_prices(bot, pos, meta):
     tick=bot.d((meta or {}).get("tickSize") or "0")
     if entry<=0 or tick<=0 or not entry.is_finite() or not tick.is_finite():
         raise RuntimeError("Verified entry and tickSize are required for TP/SL")
-    if pos.get("tp_sl_mode") == TUNNEL_TPSL_MODE:
+    if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, EARLY_TUNNEL_TP_MODE):
         tp_line = bot.d(pos.get("tunnel_tp_line") or "0")
         sl_line = bot.d(pos.get("tunnel_sl_line") or "0")
         if not all(x.is_finite() and x > 0 for x in (tp_line, sl_line)):
             raise RuntimeError("Tunnel TP/SL boundaries missing or invalid")
         if pos["side"] == "LONG":
-            tp = (tp_line / tick).to_integral_value(rounding=ROUND_CEILING) * tick
+            tp = (_early_tunnel_tp(bot, "LONG", tp_line, tick)
+                  if pos.get("tp_sl_mode") == EARLY_TUNNEL_TP_MODE else
+                  (tp_line / tick).to_integral_value(rounding=ROUND_CEILING) * tick)
             sl = (sl_line / tick).to_integral_value(rounding=ROUND_FLOOR) * tick
             valid = (entry < tp and 0 < sl < tp) if pos.get("sl_trailing_active") else sl < entry < tp
         elif pos["side"] == "SHORT":
-            tp = (tp_line / tick).to_integral_value(rounding=ROUND_FLOOR) * tick
+            tp = (_early_tunnel_tp(bot, "SHORT", tp_line, tick)
+                  if pos.get("tp_sl_mode") == EARLY_TUNNEL_TP_MODE else
+                  (tp_line / tick).to_integral_value(rounding=ROUND_FLOOR) * tick)
             sl = (sl_line / tick).to_integral_value(rounding=ROUND_CEILING) * tick
             valid = (0 < tp < sl) if pos.get("sl_trailing_active") else tp < entry < sl
+        # Existing broker TP wins for already-open positions; verify broker
+        # matches this same tpslId rather than applying the discount twice.
+        if pos.get("tp_sl_mode") == EARLY_TUNNEL_TP_MODE and pos.get("tpsl_id"):
+            tp = bot.d(pos.get("tp") or "0")
+            valid = ((tp > entry and tp > sl) if pos["side"] == "LONG"
+                     else (tp < entry and tp < sl)) if not pos.get("sl_trailing_active") else (
+                     tp > sl if pos["side"] == "LONG" else 0 < tp < sl)
         else:
             raise RuntimeError("Unknown side")
         if not valid:
             raise RuntimeError("Tunnel TP/SL not on the correct side of entry")
+        if (pos.get("tp_sl_mode") == EARLY_TUNNEL_TP_MODE
+                and not pos.get("tpsl_id")
+                and not _early_tp_fee_gap_ok(pos["side"], entry, tp)):
+            raise RuntimeError("EARLY_TP_005_ENTRY_PROFIT_MARGIN_BELOW_FEES")
         return tp, sl
     if pos.get("tp_sl_mode") == SECOND_BOUNCE_SL_MODE:
         sl_line = bot.d(pos.get("tunnel_sl_line") or "0")
@@ -103,7 +143,7 @@ def _protection_prices(bot, pos, meta):
 def _ensure_mark_trigger(bot, state, pos, tp, sl):
     """Verify OCO and amend old MARK tunnel triggers to candle-aligned LAST."""
     inst=pos["inst"]
-    desired = (TRIGGER_TYPE if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, SECOND_BOUNCE_SL_MODE)
+    desired = (TRIGGER_TYPE if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, SECOND_BOUNCE_SL_MODE, EARLY_TUNNEL_TP_MODE)
                else "mark")  # Preserve legacy / non-tunnel protections.
     try:
         detail=bot.private_request("GET","/api/v1/trade/order-tpsl-detail",
@@ -120,7 +160,7 @@ def _ensure_mark_trigger(bot, state, pos, tp, sl):
         if types==(desired,desired) or (pos.get("tp_sl_mode")==SECOND_BOUNCE_SL_MODE and types[1]==desired):
             pos.update(tp_trigger_type=desired,sl_trigger_type=desired,
                        protection_status=("TUNNEL_LINES_LAST_ACTIVE"
-                                          if pos.get("tp_sl_mode") == TUNNEL_TPSL_MODE
+                                          if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, EARLY_TUNNEL_TP_MODE)
                                           else "TP055_SL05_MARK_ACTIVE"))
             pos.pop("trigger_migration_deferred",None)
             pos.pop("mark_amend_request_id",None)
@@ -194,8 +234,8 @@ def _ensure_protection(bot,state,pos,meta):
                     and bot.d(detail.get("slTriggerPrice") or "0")==sl):
                 pos.update(tpsl_id=str(detail["tpslId"]),tp=bot.clean_decimal(tp),
                            sl=bot.clean_decimal(sl),
-                           tp_policy=("TUNNEL_LINE" if pos.get("tp_sl_mode") == TUNNEL_TPSL_MODE else TP_POLICY),
-                           sl_policy=("TUNNEL_LINE" if pos.get("tp_sl_mode") == TUNNEL_TPSL_MODE else SL_POLICY))
+                           tp_policy=("TUNNEL_LINE" if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, EARLY_TUNNEL_TP_MODE) else TP_POLICY),
+                           sl_policy=("TUNNEL_LINE" if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, EARLY_TUNNEL_TP_MODE) else SL_POLICY))
                 bot.save_state(state)
                 return _ensure_mark_trigger(bot,state,pos,tp,sl)
         except Exception as exc:
@@ -206,18 +246,18 @@ def _ensure_protection(bot,state,pos,meta):
     client=("voltp055"+uuid.uuid4().hex)[:32]
     pos.update(tpsl_client_order_id=client,protection_status="TPSL_POST_STARTED",
                tp=bot.clean_decimal(tp),sl=bot.clean_decimal(sl),
-               tp_policy=("TUNNEL_LINE" if pos.get("tp_sl_mode") == TUNNEL_TPSL_MODE else TP_POLICY),
-               sl_policy=("TUNNEL_LINE" if pos.get("tp_sl_mode") == TUNNEL_TPSL_MODE else SL_POLICY))
+               tp_policy=("TUNNEL_LINE" if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, EARLY_TUNNEL_TP_MODE) else TP_POLICY),
+               sl_policy=("TUNNEL_LINE" if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, EARLY_TUNNEL_TP_MODE) else SL_POLICY))
     bot.save_state(state)
     try:
         request_body={
             "instId":inst,"marginMode":bot.MARGIN_MODE,"positionSide":"net",
             "side":"sell" if pos["side"]=="LONG" else "buy",
             "tpTriggerPrice":bot.clean_decimal(tp),"tpOrderPrice":"-1",
-            "tpTriggerPriceType":(TRIGGER_TYPE if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, SECOND_BOUNCE_SL_MODE) else "mark"),
+            "tpTriggerPriceType":(TRIGGER_TYPE if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, SECOND_BOUNCE_SL_MODE, EARLY_TUNNEL_TP_MODE) else "mark"),
             "slTriggerPrice":bot.clean_decimal(sl),
             "slOrderPrice":"-1",
-            "slTriggerPriceType":(TRIGGER_TYPE if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, SECOND_BOUNCE_SL_MODE) else "mark"),
+            "slTriggerPriceType":(TRIGGER_TYPE if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, SECOND_BOUNCE_SL_MODE, EARLY_TUNNEL_TP_MODE) else "mark"),
             "size":"-1","reduceOnly":"true","clientOrderId":client,
         }
         if pos.get("tp_sl_mode") == SECOND_BOUNCE_SL_MODE:
@@ -358,7 +398,7 @@ def _trail_confirmed_pivot_long_sl(bot, state, pos, meta, rows, close_ms, ticker
     Amend the existing tpslId in place; never cancel the prior protective order.
     """
     if (pos.get("side") not in ("LONG", "SHORT") or not pos.get("pivot_tunnel")
-            or pos.get("tp_sl_mode") not in (SECOND_BOUNCE_SL_MODE, TUNNEL_TPSL_MODE)
+            or pos.get("tp_sl_mode") not in (SECOND_BOUNCE_SL_MODE, TUNNEL_TPSL_MODE, EARLY_TUNNEL_TP_MODE)
             or pos.get("exit_pending") or not pos.get("tpsl_id")
             or pos.get("tunnel_tp_pending")):
         return None
@@ -517,7 +557,7 @@ def _reconcile_pending_tunnel_tp(bot, state, pos):
     observed = bot.d(detail.get("tpTriggerPrice") or "0")
     if observed == bot.d(pending["new_tp"]):
         pos["tp"] = pending["new_tp"]
-        pos["tunnel_tp_line"] = pending["new_tp"]
+        pos["tunnel_tp_line"] = pending.get("projected_line", pending["new_tp"])
         pos["last_tp_trail_close_ms"] = int(pending["close_ms"])
         pos["last_tp_trail_status"] = "BROKER_VERIFIED"
         pos.pop("tunnel_tp_pending", None)
@@ -536,7 +576,7 @@ def _trail_confirmed_pivot_tp(bot, state, pos, meta, rows, close_ms, ticker):
     side = pos.get("side")
     mode = pos.get("tp_sl_mode")
     if (side not in ("LONG", "SHORT")
-            or mode not in (SECOND_BOUNCE_SL_MODE, TUNNEL_TPSL_MODE)
+            or mode not in (SECOND_BOUNCE_SL_MODE, TUNNEL_TPSL_MODE, EARLY_TUNNEL_TP_MODE)
             or (mode == SECOND_BOUNCE_SL_MODE and side != "LONG"
                 and side != "SHORT")
             or not pos.get("pivot_tunnel") or not pos.get("tpsl_id")
@@ -559,6 +599,11 @@ def _trail_confirmed_pivot_tp(bot, state, pos, meta, rows, close_ms, ticker):
             bot.save_state(state)
             return {"status": "SECOND_TOUCH_TARGET_TRACKED",
                     "projected_tp": pos["tunnel_tp_projected"]}
+        raw_projected = projected
+        if mode == EARLY_TUNNEL_TP_MODE:
+            projected = _early_tunnel_tp(bot, side, raw_projected, tick)
+            pos["tunnel_tp_projected"] = bot.clean_decimal(raw_projected)
+            pos["last_tp_projection_close_ms"] = int(close_ms)
         previous = bot.d(pos.get("tp") or "0")
         previous_sl = bot.d(pos.get("sl") or "0")
         close_price = bot.d(rows[close_ms - FIVE][3])
@@ -605,6 +650,7 @@ def _trail_confirmed_pivot_tp(bot, state, pos, meta, rows, close_ms, ticker):
             return {"status": "BROKER_READ_FAILED"}
         pending = {"old_tp": bot.clean_decimal(previous),
                    "new_tp": bot.clean_decimal(projected),
+                   "projected_line": bot.clean_decimal(raw_projected),
                    "old_sl": bot.clean_decimal(previous_sl),
                    "close_ms": int(close_ms),
                    "request_id": ("voltp" + uuid.uuid4().hex)[:32]}
@@ -1509,7 +1555,7 @@ def _open_one(bot, state, sig, instruments):
         frozen_sl = tunnel["lower_price"] if side == "LONG" else tunnel["upper_price"]
         tunnel_pos = {
             "side":side, "reference_entry":str(quote["expected_fill"]),
-            "tp_sl_mode":(SECOND_BOUNCE_SL_MODE if sig.get("second_bounce_entry") else TUNNEL_TPSL_MODE),
+            "tp_sl_mode":(EARLY_TUNNEL_TP_MODE if sig.get("second_bounce_entry") else TUNNEL_TPSL_MODE),
             "tunnel_tp_line":str(frozen_tp),
             "tunnel_sl_line":str(frozen_sl),
         }
@@ -1578,8 +1624,9 @@ def _open_one(bot, state, sig, instruments):
         "filled_size":"",
         "notional_usdt":bot.clean_decimal(expected_notional),
         "tp":"","sl":"","tp_policy":"TUNNEL_LINE","sl_policy":"TUNNEL_LINE",
-        "tp_sl_mode":(SECOND_BOUNCE_SL_MODE if sig.get("second_bounce_entry") else TUNNEL_TPSL_MODE),
-        "second_bounce_exit": bool(sig.get("second_bounce_entry")),
+        "tp_sl_mode":(EARLY_TUNNEL_TP_MODE if sig.get("second_bounce_entry") else TUNNEL_TPSL_MODE),
+        "second_bounce_exit": False,  # new entries exit on broker TP 0.05% before line
+        "tp_offset_from_tunnel_line_pct": ("0.05" if sig.get("second_bounce_entry") else "0"),
         "second_bounce_upper_count": 0,
         "second_bounce_last_upper_pivot_ms": 0,
         "second_bounce_lower_count": 0,
