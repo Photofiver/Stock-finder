@@ -160,21 +160,21 @@ class TestSecondUpperBounce(unittest.TestCase):
         self.assertTrue(second_boundary_bounce(pos, rows, 9*FIVE))
         self.assertEqual(pos["second_bounce_upper_count"], 2)
 
-class TestThirtyBarTunnelLookback(unittest.TestCase):
-    def test_only_last_thirty_closed_five_minute_bars(self):
-        self.assertEqual(TUNNEL_LOOKBACK_CANDLES, 30)
+class TestFortyEightBarTunnelLookback(unittest.TestCase):
+    def test_only_last_forty_eight_closed_five_minute_bars(self):
+        self.assertEqual(TUNNEL_LOOKBACK_CANDLES, 48)
         rows = {i*FIVE: (9.0, 10.0, 8.0, 9.0, 100)
-                for i in range(50)}
-        # Old pivots at 19 lie outside the last 30 bars [20..49].
+                for i in range(70)}
+        # Old pivot at 19 is outside the last 48 bars [22..69].
         rows[19*FIVE] = (9.0, 15.0, 5.0, 9.0, 100)
         # The pivot at 21 has its left, center and right within the window.
-        rows[21*FIVE] = (9.0, 16.0, 6.0, 9.0, 100)
-        highs, lows = confirmed_pivots(rows, 50*FIVE)
-        self.assertEqual([p["open_ms"] for p in highs], [21*FIVE])
+        rows[25*FIVE] = (9.0, 16.0, 6.0, 9.0, 100)
+        highs, lows = confirmed_pivots(rows, 70*FIVE)
+        self.assertEqual([p["open_ms"] for p in highs], [25*FIVE])
         self.assertEqual([p["open_ms"] for p in lows], [21*FIVE])
-        tunnel = evaluate_tunnel(rows, 50*FIVE)
+        tunnel = evaluate_tunnel(rows, 70*FIVE)
         self.assertFalse(tunnel["entry_allowed"])
-        self.assertEqual(tunnel["lookback_candles"], 30)
+        self.assertEqual(tunnel["lookback_candles"], 48)
 
 if __name__=="__main__":
     unittest.main()
