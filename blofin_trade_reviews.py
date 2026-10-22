@@ -12,7 +12,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 UK = ZoneInfo("Europe/London")
-ARCHIVE_DIR = os.getenv("BLOFIN_TRADE_REVIEWS_DIR", "blofin_trade_reviews")
+ARCHIVE_DIR = os.getenv("BLOFIN_TRADE_REVIEWS_DIR", "blofin_fast_scan_events/trade_reviews")
 
 
 def number(value):
