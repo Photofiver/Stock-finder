@@ -2078,10 +2078,13 @@ def record_closed(state, reason_hint=None):
     # Do not let public candle API errors prevent a real close from being logged.
     try:
         from blofin_trade_peak import summarize_position_peak
-        # Reuse confirmed candle audit; no extra BloFin API request on close.
-        peak_position = summarize_position_peak(
-            pos, hist, lambda _inst, _limit: []
-        )
+        # Research-only: fetch completed 1m candles; do not modify orders.
+        def fetch_peak_candles(inst, limit):
+            return market_get(
+                "/api/v1/market/candles",
+                {"instId": inst, "bar": "1m", "limit": str(limit)},
+            )
+        peak_position = summarize_position_peak(pos, hist, fetch_peak_candles)
     except Exception as exc:
         peak_position = {
             "available": False,
@@ -2126,6 +2129,29 @@ def record_closed(state, reason_hint=None):
             "highest_coin_price_observed"
         ),
         "peak_position_before_exit": peak_position,
+        "best_possible_exit_research": {
+            "available": bool(peak_position.get("available")),
+            "direction": str(pos.get("side") or ""),
+            "best_observed_exit_price": peak_position.get("peak_favorable_coin_price"),
+            "best_observed_exit_ms_or_minute_start": peak_position.get(
+                "peak_observed_at_ms_or_window_start"
+            ),
+            "best_observed_gross_return_pct": peak_position.get(
+                "peak_profit_pct_before_exit"
+            ),
+            "actual_gross_return_pct": (
+                float((d(hist.get("closeAveragePrice")) /
+                       d(hist.get("openAveragePrice") or pos.get("reference_entry")) - 1)
+                      * (1 if pos.get("side") == "LONG" else -1) * 100)
+                if d(hist.get("openAveragePrice") or pos.get("reference_entry")) > 0
+                and d(hist.get("closeAveragePrice")) > 0 else None
+            ),
+            "observed_1m_candles": peak_position.get("full_1m_candles_observed"),
+            "expected_1m_candles": peak_position.get("full_1m_candles_expected"),
+            "full_minute_coverage": peak_position.get("full_minute_coverage"),
+            "source": peak_position.get("source"),
+            "precision_note": "Research-only historical candle extrema; not a tick-accurate exit.",
+        },
         "reason": reason,
         "history_id": str(hist.get("historyId") or ""),
         "signal_snapshot": pos.get("signal_snapshot") or {},
