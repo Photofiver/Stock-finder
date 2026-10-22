@@ -1,8 +1,8 @@
 """LIVE volume flip on CLOSED 5m BloFin candles.
 
-Active pivot mode: NEW LONG entries only, with pre-order
-TP-line distance <= 0.60% and SL-line distance >= 0.10%; no MA10 entry gate. Existing exits
-and legacy non-pivot mode are unchanged.
+Active pivot mode: LONG and SHORT second-boundary entries.
+The existing LONG pre-order TP gap <= 0.60% and SL gap >= 0.10%
+filter remains; original volume and protection safety checks remain.
 
 LONG: qualified GREEN after qualified RED, green volume > prior red.
 SHORT: qualified RED after qualified GREEN, red volume > prior green.
@@ -292,13 +292,15 @@ def _confirmed_entry_lower_anchors(bot, state, pos):
     last = tunnel.get("last_confirmed_low") or {}
     try:
         if (snap.get("status") != "VALID"
-                or snap.get("tunnel_direction") != "LONG"
+                or snap.get("tunnel_direction") != pos.get("side")
                 or int(snap.get("signal_close_ms") or 0) != int(pos.get("signal_close_ms") or 0)
                 or len(saved) != 2
                 or int(saved[0]["open_ms"]) >= int(saved[1]["open_ms"])
                 or int(saved[1]["open_ms"]) != int(last["open_ms"])
                 or bot.d(saved[1]["price"]) != bot.d(last["price"])
-                or int(saved[1]["confirmed_close_ms"]) != int(pos["signal_close_ms"])
+                or (int(saved[1]["confirmed_close_ms"]) != int(pos["signal_close_ms"])
+                    if pos.get("side") == "LONG"
+                    else int(saved[1]["confirmed_close_ms"]) > int(pos["signal_close_ms"]))
                 or any(bot.d(a["price"]) <= 0 or
                        int(a["confirmed_close_ms"]) > int(pos["signal_close_ms"])
                        for a in saved)):
@@ -332,7 +334,9 @@ def _confirmed_entry_upper_anchors(bot, state, pos):
                 or int(saved[0]["open_ms"]) >= int(saved[1]["open_ms"])
                 or int(saved[1]["open_ms"]) != int(last["open_ms"])
                 or bot.d(saved[1]["price"]) != bot.d(last["price"])
-                or int(saved[1]["confirmed_close_ms"]) != int(pos["signal_close_ms"])
+                or (int(saved[1]["confirmed_close_ms"]) != int(pos["signal_close_ms"])
+                    if pos.get("side") == "SHORT"
+                    else int(saved[1]["confirmed_close_ms"]) > int(pos["signal_close_ms"]))
                 or any(bot.d(a["price"]) <= 0 or
                        int(a["confirmed_close_ms"]) > int(pos["signal_close_ms"])
                        for a in saved)):
@@ -348,14 +352,15 @@ def _confirmed_entry_upper_anchors(bot, state, pos):
 
 
 def _trail_confirmed_pivot_long_sl(bot, state, pos, meta, rows, close_ms, ticker):
-    """Tighten existing broker SL along ENTRY's lower pivot line, never loosen.
+    """Tighten LONG support or SHORT resistance SL, never loosen.
 
     Only confirmed 5m candles and already-confirmed entry pivot anchors.
     Amend the existing tpslId in place; never cancel the prior protective order.
     """
     if (pos.get("side") not in ("LONG", "SHORT") or not pos.get("pivot_tunnel")
             or pos.get("tp_sl_mode") not in (SECOND_BOUNCE_SL_MODE, TUNNEL_TPSL_MODE)
-            or pos.get("exit_pending") or not pos.get("tpsl_id")):
+            or pos.get("exit_pending") or not pos.get("tpsl_id")
+            or pos.get("tunnel_tp_pending")):
         return None
     if close_ms <= int(pos.get("signal_close_ms") or 0):
         return None
@@ -378,27 +383,26 @@ def _trail_confirmed_pivot_long_sl(bot, state, pos, meta, rows, close_ms, ticker
         tick = bot.d(meta.get("tickSize") or "0")
         if not (tick > 0 and v1 > 0 and v2 > 0):
             return None
-        # Same straight support line as the confirmed lower anchors at entry.
+        # Use original confirmed lower support (LONG) or upper resistance (SHORT).
         raw = v1 + (v2-v1) * bot.d(close_ms-t1) / bot.d(t2-t1)
         target = (raw/tick).to_integral_value(
             rounding=(ROUND_FLOOR if pos["side"] == "LONG" else ROUND_CEILING))*tick
         previous = bot.d(pos.get("sl") or "0")
         improves = target > previous if pos["side"] == "LONG" else target < previous
         if not (improves and previous > 0):
-            pos["last_sl_trail_status"] = "NO_HIGHER_SL_LINE_TICK"
+            pos["last_sl_trail_status"] = "NO_RISK_REDUCING_SL_TICK"
             return None
         price_close = bot.d(candle[3])
         price_live = bot.d((ticker or {}).get("last") or "0")
-        # Do not submit a stop ABOVE last close/current price, which could
-        # be rejected or immediately execute. Keep old broker SL instead.
+        # Keep LONG SL below price and SHORT SL above price to avoid immediate execution.
         invalid_market = (target >= min(price_close, price_live) if pos["side"] == "LONG"
                           else target <= max(price_close, price_live))
         if price_live <= 0 or invalid_market:
-            pos["last_sl_trail_status"] = "SKIP_LINE_AT_OR_ABOVE_MARKET"
+            pos["last_sl_trail_status"] = "SKIP_SL_ON_WRONG_SIDE_OF_MARKET"
             return None
         tp = bot.d(pos.get("tp") or "0")
         if tp > 0 and (target >= tp if pos["side"] == "LONG" else target <= tp):
-            pos["last_sl_trail_status"] = "SKIP_SL_AT_OR_ABOVE_TP"
+            pos["last_sl_trail_status"] = "SKIP_SL_CROSSES_TP"
             return None
     except (KeyError, TypeError, ValueError, ArithmeticError, ZeroDivisionError) as exc:
         pos["sl_trail_error"] = f"INVALID_TUNNEL_SL: {exc}"[:180]
@@ -542,8 +546,8 @@ def _trail_confirmed_pivot_tp(bot, state, pos, meta, rows, close_ms, ticker):
         return None
     try:
         tick = bot.d(meta.get("tickSize") or "0")
-        anchors = (pos["pivot_tunnel"].get("upper_anchors") if side == "LONG"
-                   else pos["pivot_tunnel"].get("lower_anchors"))
+        anchors = (_confirmed_entry_upper_anchors(bot, state, pos) if side == "LONG"
+                   else _confirmed_entry_lower_anchors(bot, state, pos))
         projected = _project_confirmed_tunnel_line(
             bot, anchors, close_ms, tick,
             ROUND_CEILING if side == "LONG" else ROUND_FLOOR)
