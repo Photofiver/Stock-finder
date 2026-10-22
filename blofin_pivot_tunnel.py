@@ -3,7 +3,7 @@
 import math
 
 FIVE = 300_000
-TUNNEL_LOOKBACK_CANDLES = 30  # Only the last 30 fully closed 5m bars
+TUNNEL_LOOKBACK_CANDLES = 48  # 4 hours: latest 48 fully closed 5m candles
 
 
 def _point(ts, price, confirmed_close_ms):
@@ -25,7 +25,7 @@ def confirmed_pivots(rows, expected_close_ms, after_ms=0):
     for ts in eligible:
         if ts <= int(after_ms):
             continue
-        # A pivot must have all three required bars inside the 30-bar window.
+        # A pivot must have all three required bars inside the 48-bar window.
         if ts - FIVE < first_open_ms:
             continue
         prev, now, nxt = rows.get(ts-FIVE), rows.get(ts), rows.get(ts+FIVE)
