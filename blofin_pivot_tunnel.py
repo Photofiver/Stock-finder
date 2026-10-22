@@ -3,6 +3,7 @@
 import math
 
 FIVE = 300_000
+TUNNEL_LOOKBACK_CANDLES = 30  # Only the last 30 fully closed 5m bars
 
 
 def _point(ts, price, confirmed_close_ms):
@@ -18,10 +19,14 @@ def confirmed_pivots(rows, expected_close_ms, after_ms=0):
     The point is confirmed only when the following bar has CLOSED.
     """
     end = int(expected_close_ms)
-    eligible = sorted(ts for ts in rows if ts + FIVE <= end)
+    first_open_ms = end - TUNNEL_LOOKBACK_CANDLES * FIVE
+    eligible = sorted(ts for ts in rows if first_open_ms <= ts and ts + FIVE <= end)
     highs, lows = [], []
     for ts in eligible:
         if ts <= int(after_ms):
+            continue
+        # A pivot must have all three required bars inside the 30-bar window.
+        if ts - FIVE < first_open_ms:
             continue
         prev, now, nxt = rows.get(ts-FIVE), rows.get(ts), rows.get(ts+FIVE)
         if prev is None or now is None or nxt is None or ts + 2*FIVE > end:
@@ -50,6 +55,7 @@ def evaluate_tunnel(rows, expected_close_ms, after_ms=0):
         "status": "UNAVAILABLE", "reason": "NOT_ENOUGH_CONFIRMED_POINTS",
         "rule": "PIVOT_HIGH_LOW_ONE_LEFT_ONE_RIGHT_V1",
         "timeframe": "5m", "signal_close_ms": end,
+        "lookback_candles": TUNNEL_LOOKBACK_CANDLES,
         "entry_allowed": False, "breakout_confirmed": False,
     }
     candle = rows.get(end-FIVE)
