@@ -370,7 +370,8 @@ def _trail_confirmed_pivot_long_sl(bot, state, pos, meta, rows, close_ms, ticker
     anchors = (_confirmed_entry_lower_anchors(bot, state, pos) if pos["side"] == "LONG"
                else _confirmed_entry_upper_anchors(bot, state, pos))
     if len(anchors) != 2:
-        return {"status":"BLOCK_MISSING_ENTRY_SL_ANCHORS"}
+        return {"status": ("BLOCK_MISSING_LOWER_ANCHORS" if pos["side"] == "LONG"
+                           else "BLOCK_MISSING_UPPER_ANCHORS")}
     if not meta:
         pos["last_sl_trail_status"] = "SKIP_MISSING_INSTRUMENT_META"
         return None
