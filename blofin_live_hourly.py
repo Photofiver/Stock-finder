@@ -2170,13 +2170,27 @@ def record_closed(state, reason_hint=None):
     if len(history) > TRADE_HISTORY_LIMIT:
         del history[:-TRADE_HISTORY_LIMIT]
 
+    # Independent analysis ONLY. No trade rules, exchange orders or stops
+    # are touched. Saved state retains the review if GitHub archive fails.
+    review_note = ""
+    try:
+        from blofin_trade_reviews import make_review, archive_review, short_summary
+        review = make_review(history[-1])
+        history[-1]["post_trade_review"] = review
+        archive_path, _ = archive_review(review)
+        review_note = " | " + short_summary(review)
+        print(f"LIVE POST-TRADE JOURNAL {archive_path}: {review['review_id']}")
+    except Exception as exc:
+        history[-1]["post_trade_review_error"] = f"{type(exc).__name__}: {exc}"[:240]
+        print(f"LIVE POST-TRADE JOURNAL WARN {pos['inst']}: {exc}")
+
     append_pattern_audit(pos, result, closed_ms, net_pnl)
 
     notify(
         f"{result} {pos['side']} {pos['inst']} | {reason} | "
         f"gross {gross_pnl:+.4f} USDT | fee {fee:.4f} USDT | "
         f"NET {net_pnl:+.4f} USDT | held {hold_minutes:.1f} min | "
-        f"exit {hist.get('closeAveragePrice')}",
+        f"exit {hist.get('closeAveragePrice')}" + review_note,
         "BloFin LIVE RESULT",
         attachment_path=exit_chart,
     )
