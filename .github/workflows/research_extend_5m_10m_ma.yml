@@ -1,0 +1,35 @@
+name: Test 5m 10m hold and next MA exits (read-only)
+on:
+  push:
+    branches:
+      - research-real-4h-20261023
+    paths:
+      - research_extend_5m_10m_ma_readonly.py
+      - .github/workflows/research_extend_5m_10m_ma.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            /research_past_34_entries.json
+            /research_extend_5m_10m_ma_readonly.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify test script compiles
+        run: python -m py_compile research_extend_5m_10m_ma_readonly.py
+      - name: Evaluate actual fills with future confirmed BloFin candles
+        run: python -u research_extend_5m_10m_ma_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: verified-trades-extend5-extend10-ma
+          path: research_extend_5m_10m_ma_results.json
+          retention-days: 7
