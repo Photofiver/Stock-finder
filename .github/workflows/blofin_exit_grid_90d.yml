@@ -1,0 +1,88 @@
+name: 90-day BloFin TP-SL exit experiments (read-only)
+
+on:
+  push:
+    branches:
+      - research/tp-sl-exit-grid-90d-20261023
+    paths:
+      - 'research/exit_study_90d/exit_grid.py'
+      - '.github/workflows/blofin_exit_grid_90d.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: blofin-readonly-exit-grid-90d
+  cancel-in-progress: false
+
+jobs:
+  exit-study:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 58
+    steps:
+      - name: Checkout frozen replay and research code (NOT LIVE)
+        uses: actions/checkout@v4
+        with:
+          ref: research/tp-sl-exit-grid-90d-20261023
+          fetch-depth: 0
+          sparse-checkout: |
+            research/capital_replay_20261023/candidate_parts
+            research/exit_study_90d
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate Python script syntax
+        run: python -m py_compile research/exit_study_90d/exit_grid.py
+      - name: Download existing 90d candles from completed run 39994070142
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39994070142
+          repository: Photofiver/Stock-finder
+          github-token: ${{ github.token }}
+          pattern: blofin-free-90d-shard-*
+          path: /tmp/90d-ohlcv
+          merge-multiple: true
+      - name: Verify candle shards, candidate partitions and perform counterfactual test
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import pathlib
+          candles=list(pathlib.Path('/tmp/90d-ohlcv').rglob('*-USDT.json.gz'))
+          cp=list(pathlib.Path('research/capital_replay_20261023/candidate_parts').glob('*.csv.gz'))
+          print('Candles',len(candles),'candidate partitions',len(cp),flush=True)
+          if len(candles)!=200 or len(cp)!=10:
+            raise SystemExit('Dataset incomplete: require all 200 candle files and 10 candidate partitions')
+          PY
+          python research/exit_study_90d/exit_grid.py /tmp/90d-ohlcv
+      - name: Save full tested results as downloadable artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blofin-90d-exit-grid-results
+          path: |
+            research/exit_study_90d/exit_grid_report.json
+            research/exit_study_90d/exit_grid_report.md
+            research/exit_study_90d/baseline_check.json
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Publish read-only analysis to this research branch
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- research/exit_study_90d/exit_grid_report.json research/exit_study_90d/exit_grid_report.md research/exit_study_90d/baseline_check.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Store reproducible 90d exit strategy research results [skip ci]'
+          for n in 1 2 3 4; do
+            git fetch origin research/tp-sl-exit-grid-90d-20261023
+            git rebase origin/research/tp-sl-exit-grid-90d-20261023
+            if git push origin HEAD:research/tp-sl-exit-grid-90d-20261023; then exit 0; fi
+            sleep 3
+          done
+          exit 1
