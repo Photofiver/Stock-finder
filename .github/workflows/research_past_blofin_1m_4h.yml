@@ -1,0 +1,35 @@
+name: Verify 26 losses on BloFin 1m at 1H and 4H (read-only)
+on:
+  push:
+    branches:
+      - research-real-4h-20261023
+    paths:
+      - research_past_34_blofin_real1m_readonly.py
+      - .github/workflows/research_past_blofin_1m_4h.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            /research_past_34_entries.json
+            /research_past_34_blofin_real1m_readonly.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify syntax
+        run: python -m py_compile research_past_34_blofin_real1m_readonly.py
+      - name: Test original positions from BloFin public 1m data
+        run: python -u research_past_34_blofin_real1m_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: actual-26-losers-1h4h-results
+          path: research_past_34_blofin_real1m_result.json
+          retention-days: 7
