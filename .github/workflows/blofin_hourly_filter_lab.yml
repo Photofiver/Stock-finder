@@ -1,0 +1,94 @@
+name: BloFin hourly filter research (read-only)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
+  push:
+    branches:
+      - research/blofin-hourly-filter-lab-20261023
+    paths:
+      - 'blofin_hourly_filter_lab.py'
+      - 'test_blofin_hourly_filter_lab.py'
+      - '.github/workflows/blofin_hourly_filter_lab.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: blofin-hourly-filter-research
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            blofin_hourly_filter_lab.py
+            test_blofin_hourly_filter_lab.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Safety and formula tests
+        run: python -m unittest -v test_blofin_hourly_filter_lab.py
+
+  hourly:
+    needs: tests
+    if: github.ref == 'refs/heads/main' && github.event_name != 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          sparse-checkout: |
+            blofin_live_state.json
+            blofin_hourly_filter_lab.py
+            test_blofin_hourly_filter_lab.py
+            research/blofin_hourly_filter_lab
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read saved entry snapshots, update all bounded tests
+        run: python blofin_hourly_filter_lab.py
+      - name: Save research-only report and frozen thresholds
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add --sparse -- research/blofin_hourly_filter_lab/
+          if git diff --cached --quiet; then
+            echo 'Research report unchanged'
+            exit 0
+          fi
+          git commit -m 'Update hourly BloFin research statistics [skip ci]'
+          for attempt in 1 2 3 4 5 6; do
+            git fetch origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then
+              echo 'Research data saved'
+              exit 0
+            fi
+            echo "Concurrent LIVE push; retry $attempt/6"
+            sleep 3
+          done
+          echo 'Could not save report after six pushes' >&2
+          exit 1
+      - name: Hourly research summary to existing BloFin notification channel
+        if: success()
+        env:
+          NTFY_TOPIC: 'blofin-nhd0jt7wspfnhtitdlaowk1n'
+        shell: bash
+        run: |
+          curl -fsS --retry 2 --retry-delay 3 --max-time 20 \
+            -H 'Title: BloFin hourly research' \
+            -H 'Priority: 3' \
+            --data-binary @research/blofin_hourly_filter_lab/latest.txt \
+            "https://ntfy.sh/$NTFY_TOPIC"
