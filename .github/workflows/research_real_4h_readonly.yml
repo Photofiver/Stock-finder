@@ -1,0 +1,37 @@
+name: Research real 4H BloFin read-only
+
+on:
+  push:
+    branches:
+      - research-real-4h-20261023
+    paths:
+      - research_real_4h_profit_readonly.py
+      - .github/workflows/research_real_4h_readonly.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_real_4h_profit_readonly.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile - reject syntax errors
+        run: python -m py_compile research_real_4h_profit_readonly.py
+      - name: Backtest real closed 4H candles (NO API keys, NO orders)
+        run: python -u research_real_4h_profit_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: research-real-4h-results
+          path: research_real_4h_result.json
+          retention-days: 7
