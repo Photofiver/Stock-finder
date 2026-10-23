@@ -1,0 +1,28 @@
+name: Public BloFin candle API diagnostic (read-only)
+on:
+  push:
+    branches:
+      - research-real-4h-20261023
+    paths:
+      - .github/workflows/research_public_candle_probe.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Probe public candles without API keys
+        shell: bash
+        run: |
+          for mode in browser curl_json demo; do
+            case "$mode" in
+              browser) url="https://openapi.blofin.com/api/v1/market/candles?instId=BTC-USDT&bar=1H&limit=2"; user="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/132.0.0.0 Safari/537.36" ;;
+              curl_json) url="https://openapi.blofin.com/api/v1/market/candles?instId=BTC-USDT&bar=1H&limit=2"; user="curl/8.5.0" ;;
+              demo) url="https://demo-trading-openapi.blofin.com/api/v1/market/candles?instId=BTC-USDT&bar=1H&limit=2"; user="Mozilla/5.0" ;;
+            esac
+            echo "PROBE=$mode"
+            curl -sS --retry 0 --max-time 12 -o /tmp/candle_probe_result -w 'HTTP_STATUS=%{http_code}\n' -H "Accept: application/json" -H "User-Agent: $user" "$url" || true
+            echo -n "BODY_PREFIX="; head -c 220 /tmp/candle_probe_result || true; echo
+          done
