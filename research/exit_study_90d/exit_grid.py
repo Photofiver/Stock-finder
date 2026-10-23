@@ -79,9 +79,12 @@ def counterfactual(c,bars,ts,spec):
       # Stop update only AFTER this candle closes: no lookahead execution.
       peak=h if sign==1 else l
       best=(max(best,peak) if sign==1 else min(best,peak))
+      # A stop cannot be amended beyond the current post-close price.
+      # The 0.20% protective level exceeds the modeled ~0.17% round-trip cost.
       if trigger is not None and sign*(best/entry-1)*100 >= trigger:
-        be=entry*(1+sign*.12/100)
-        stop=max(stop,be) if sign==1 else min(stop,be)
+        be=entry*(1+sign*.20/100)
+        if sign*(cl-be)>0:
+          stop=max(stop,be) if sign==1 else min(stop,be)
       if (j-start+1)*5>=spec['hold']:
         if j+1>=len(bars) or bars[j+1][0]!=time0+FIVE:return None
         return outcome(c,bars[j+1][1],time0+FIVE,'TIME',False)
