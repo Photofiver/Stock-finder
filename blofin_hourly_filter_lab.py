@@ -100,7 +100,8 @@ def load(path):
             seen.add(ident)
             trades.append(dict(id=ident,opened_ms=op,closed_ms=cl,coin=t.get("inst"),
                 side=t.get("side"),net=net,gross=gross,fee=fee,notional=notional,
-                rate=net/notional,features=flatten(snap)))
+                rate=net/notional,features=flatten(snap),
+                snapshot_strategy=str(snap.get("strategy") or "")))
         except (KeyError,ValueError,TypeError,OverflowError) as exc:
             errors[str(exc)[:60]]+=1
     trades.sort(key=lambda t:(t["opened_ms"],t["id"]))
@@ -233,7 +234,10 @@ def main():
     a.add_argument("--now-ms",type=int)
     args=a.parse_args()
     output=Path(args.out); output.mkdir(parents=True,exist_ok=True)
-    rows,problems=load(args.state)
+    all_rows,problems=load(args.state)
+    cohort="PIVOT_TUNNEL_5M"
+    rows=[x for x in all_rows if x["snapshot_strategy"]==cohort]
+    problems["other_snapshots_not_pooled"]=len(all_rows)-len(rows)
     now=args.now_ms or round(time.time()*1000)
     rules=output/"frozen_rulebook.json"
     if rules.exists():
@@ -256,6 +260,7 @@ def main():
     newest=max([last]+[r["closed_ms"] for r in rows])
     report.update(generated_utc=datetime.fromtimestamp(now/1000,timezone.utc).isoformat(),
         state="RESEARCH_ONLY_NO_LIVE_CHANGES",entries_analyzed=len(rows),
+        all_valid_trade_records=len(all_rows),cohort=cohort,
         excluded_data=problems,base_predicates=len(cfg["predicates"]),
         rulebook_frozen_at_utc=datetime.fromtimestamp(cfg["frozen_cutoff_ms"]/1000,timezone.utc).isoformat(),
         last_seen_closed_ms=newest,
@@ -266,7 +271,8 @@ def main():
         limitations=["Bounded bank only, NOT all 114-variable combinations",
                      "No lookahead; new trades never tune historical thresholds",
                      "Selected historical trade filtering != full counterfactual simulation",
-                     "Portfolio is approximate; no additional trades opened by freed capital"])
+                     "Portfolio is approximate; no additional trades opened by freed capital",
+                     "Other strategy versions are counted, but not pooled into tunnel filters"])
     prev.write_text(json.dumps(report,indent=2,ensure_ascii=False)+"\n",encoding="utf-8")
     f=report["baseline_forward"]; n=report["new_closed"]; top=report["top_frozen_training_filters"]
     lines=[f'BloFin hourly research | {report["generated_utc"][:16]} UTC',
