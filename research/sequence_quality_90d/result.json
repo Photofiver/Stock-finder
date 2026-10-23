@@ -1,0 +1,4912 @@
+{
+  "status": "COMPLETE_READ_ONLY_NO_LIVE_CHANGES",
+  "data_run": 39994070142,
+  "candidate_source": "research/live-capital-replay-20261023",
+  "frozen_candidates": 5994,
+  "sequences_missing": 0,
+  "method": "Exact 2-6 bar trailing red/green sequences relative to trade direction + 2-6 bar U counts + structural price/volume patterns, intersected with training-quantile thresholds for width/body/ATR",
+  "train_quantiles": {
+    "LONG": {
+      "width_pct": {
+        "25": 0.5294890602470128,
+        "50": 0.6668583561886448,
+        "75": 0.8371468809134524
+      },
+      "body_pct": {
+        "25": 0.14514006092769538,
+        "50": 0.24798512089274638,
+        "75": 0.41404825720368077
+      },
+      "atr_pct": {
+        "25": 0.23211546861869845,
+        "50": 0.315881748382805,
+        "75": 0.4413797440665296
+      }
+    },
+    "SHORT": {
+      "width_pct": {
+        "25": 0.8501689266310642,
+        "50": 1.3339765235568453,
+        "75": 2.3070929298258265
+      },
+      "body_pct": {
+        "25": 0.15904756205131765,
+        "50": 0.30857856481388835,
+        "75": 0.5737344032235636
+      },
+      "atr_pct": {
+        "25": 0.34888716308523454,
+        "50": 0.5211590772924151,
+        "75": 0.8367799573560267
+      }
+    }
+  },
+  "baseline_reproduced": {
+    "20": {
+      "expected": -2.050609,
+      "got": -2.050609
+    },
+    "100": {
+      "expected": -10.004899,
+      "got": -10.0048992
+    },
+    "500": {
+      "expected": -50.03708,
+      "got": -50.0370802
+    },
+    "1000": {
+      "expected": -50.03708,
+      "got": -50.0370802
+    }
+  },
+  "baseline": {
+    "20": {
+      "train": {
+        "n": 288,
+        "wins": 93,
+        "losses": 195,
+        "net_usdt": -2.050609,
+        "net_pct": -10.25305,
+        "risk_stop": true,
+        "rejected": {
+          "free_bankroll_below_5": 14,
+          "restart_pivots": 2,
+          "already_open": 1,
+          "risk_stop": 3980
+        }
+      },
+      "validation": {
+        "n": 308,
+        "wins": 125,
+        "losses": 183,
+        "net_usdt": -2.0835287,
+        "net_pct": -10.41764,
+        "risk_stop": true,
+        "rejected": {
+          "restart_pivots": 8,
+          "free_bankroll_below_5": 5,
+          "risk_stop": 566
+        }
+      },
+      "test": {
+        "n": 277,
+        "wins": 94,
+        "losses": 183,
+        "net_usdt": -1.9882021,
+        "net_pct": -9.94101,
+        "risk_stop": true,
+        "rejected": {
+          "free_bankroll_below_5": 5,
+          "restart_pivots": 5,
+          "risk_stop": 535
+        }
+      },
+      "all90": {
+        "n": 288,
+        "wins": 93,
+        "losses": 195,
+        "net_usdt": -2.050609,
+        "net_pct": -10.25305,
+        "risk_stop": true,
+        "rejected": {
+          "free_bankroll_below_5": 14,
+          "restart_pivots": 2,
+          "already_open": 1,
+          "risk_stop": 5689
+        }
+      }
+    },
+    "100": {
+      "train": {
+        "n": 1060,
+        "wins": 325,
+        "losses": 735,
+        "net_usdt": -10.0048992,
+        "net_pct": -10.0049,
+        "risk_stop": true,
+        "rejected": {
+          "restart_pivots": 12,
+          "four_slots": 8,
+          "already_open": 2,
+          "risk_stop": 3203
+        }
+      },
+      "validation": {
+        "n": 860,
+        "wins": 298,
+        "losses": 562,
+        "net_usdt": -6.9750481,
+        "net_pct": -6.97505,
+        "risk_stop": false,
+        "rejected": {
+          "restart_pivots": 18,
+          "four_slots": 9
+        }
+      },
+      "test": {
+        "n": 792,
+        "wins": 267,
+        "losses": 525,
+        "net_usdt": -5.9301246,
+        "net_pct": -5.93012,
+        "risk_stop": false,
+        "rejected": {
+          "four_slots": 13,
+          "restart_pivots": 15,
+          "already_open": 2
+        }
+      },
+      "all90": {
+        "n": 1060,
+        "wins": 325,
+        "losses": 735,
+        "net_usdt": -10.0048992,
+        "net_pct": -10.0049,
+        "risk_stop": true,
+        "rejected": {
+          "restart_pivots": 12,
+          "four_slots": 8,
+          "already_open": 2,
+          "risk_stop": 4912
+        }
+      }
+    },
+    "500": {
+      "train": {
+        "n": 4123,
+        "wins": 1352,
+        "losses": 2771,
+        "net_usdt": -37.1319074,
+        "net_pct": -7.42638,
+        "risk_stop": false,
+        "rejected": {
+          "restart_pivots": 68,
+          "four_slots": 85,
+          "already_open": 9
+        }
+      },
+      "validation": {
+        "n": 860,
+        "wins": 298,
+        "losses": 562,
+        "net_usdt": -6.9750481,
+        "net_pct": -1.39501,
+        "risk_stop": false,
+        "rejected": {
+          "restart_pivots": 18,
+          "four_slots": 9
+        }
+      },
+      "test": {
+        "n": 792,
+        "wins": 267,
+        "losses": 525,
+        "net_usdt": -5.9301246,
+        "net_pct": -1.18602,
+        "risk_stop": false,
+        "rejected": {
+          "four_slots": 13,
+          "restart_pivots": 15,
+          "already_open": 2
+        }
+      },
+      "all90": {
+        "n": 5775,
+        "wins": 1917,
+        "losses": 3858,
+        "net_usdt": -50.0370802,
+        "net_pct": -10.00742,
+        "risk_stop": false,
+        "rejected": {
+          "restart_pivots": 101,
+          "four_slots": 107,
+          "already_open": 11
+        }
+      }
+    },
+    "1000": {
+      "train": {
+        "n": 4123,
+        "wins": 1352,
+        "losses": 2771,
+        "net_usdt": -37.1319074,
+        "net_pct": -3.71319,
+        "risk_stop": false,
+        "rejected": {
+          "restart_pivots": 68,
+          "four_slots": 85,
+          "already_open": 9
+        }
+      },
+      "validation": {
+        "n": 860,
+        "wins": 298,
+        "losses": 562,
+        "net_usdt": -6.9750481,
+        "net_pct": -0.6975,
+        "risk_stop": false,
+        "rejected": {
+          "restart_pivots": 18,
+          "four_slots": 9
+        }
+      },
+      "test": {
+        "n": 792,
+        "wins": 267,
+        "losses": 525,
+        "net_usdt": -5.9301246,
+        "net_pct": -0.59301,
+        "risk_stop": false,
+        "rejected": {
+          "four_slots": 13,
+          "restart_pivots": 15,
+          "already_open": 2
+        }
+      },
+      "all90": {
+        "n": 5775,
+        "wins": 1917,
+        "losses": 3858,
+        "net_usdt": -50.0370802,
+        "net_pct": -5.00371,
+        "risk_stop": false,
+        "rejected": {
+          "restart_pivots": 101,
+          "four_slots": 107,
+          "already_open": 11
+        }
+      }
+    }
+  },
+  "search": [
+    {
+      "side": "LONG",
+      "search_count": 984,
+      "unique_train_finalists": 243,
+      "passed_validation": 0,
+      "selected_rule": null,
+      "top_validation_first_10": [
+        {
+          "rule": {
+            "side": "LONG",
+            "thresholds": {
+              "width_pct": 0.5294890602470128,
+              "body_pct": 0.41404825720368077,
+              "atr_pct": 0.23211546861869845
+            },
+            "quartiles": {
+              "width": 25,
+              "body": 75,
+              "atr": 25
+            },
+            "pattern": "exact_6_DUUDDU"
+          },
+          "raw_train": -0.8235998,
+          "n_train_candidates": 79,
+          "train_wins": 44,
+          "train": {
+            "n": 79,
+            "wins": 44,
+            "losses": 35,
+            "net_usdt": -0.8235998,
+            "net_pct": -0.8236,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 6,
+            "losses": 2,
+            "net_usdt": 0.0179286,
+            "net_pct": 0.01793,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 8
+        },
+        {
+          "rule": {
+            "side": "LONG",
+            "thresholds": {
+              "width_pct": 0.6668583561886448,
+              "body_pct": 0.14514006092769538,
+              "atr_pct": 0.315881748382805
+            },
+            "quartiles": {
+              "width": 50,
+              "body": 25,
+              "atr": 50
+            },
+            "pattern": "exact_3_XDU"
+          },
+          "raw_train": -0.4512493,
+          "n_train_candidates": 72,
+          "train_wins": 41,
+          "train": {
+            "n": 72,
+            "wins": 41,
+            "losses": 31,
+            "net_usdt": -0.4512493,
+            "net_pct": -0.45125,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 6,
+            "losses": 2,
+            "net_usdt": 0.0078526,
+            "net_pct": 0.00785,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 8
+        },
+        {
+          "rule": {
+            "side": "LONG",
+            "thresholds": {
+              "width_pct": 0.8371468809134524,
+              "body_pct": 0.24798512089274638,
+              "atr_pct": 0.315881748382805
+            },
+            "quartiles": {
+              "width": 75,
+              "body": 50,
+              "atr": 50
+            },
+            "pattern": "exact_5_DUUDU"
+          },
+          "raw_train": -0.3801345,
+          "n_train_candidates": 52,
+          "train_wins": 30,
+          "train": {
+            "n": 52,
+            "wins": 30,
+            "losses": 22,
+            "net_usdt": -0.3801345,
+            "net_pct": -0.38013,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.00301,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 8
+        },
+        {
+          "rule": {
+            "side": "LONG",
+            "thresholds": {
+              "width_pct": 0.8371468809134524,
+              "body_pct": 0.24798512089274638,
+              "atr_pct": 0.23211546861869845
+            },
+            "quartiles": {
+              "width": 75,
+              "body": 50,
+              "atr": 25
+            },
+            "pattern": "exact_5_DUUDU"
+          },
+          "raw_train": -0.4107802,
+          "n_train_candidates": 55,
+          "train_wins": 30,
+          "train": {
+            "n": 55,
+            "wins": 30,
+            "losses": 25,
+            "net_usdt": -0.4107802,
+            "net_pct": -0.41078,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.00301,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 8
+        },
+        {
+          "rule": {
+            "side": "LONG",
+            "thresholds": {
+              "width_pct": 0.8371468809134524,
+              "body_pct": 0.14514006092769538,
+              "atr_pct": 0.315881748382805
+            },
+            "quartiles": {
+              "width": 75,
+              "body": 25,
+              "atr": 50
+            },
+            "pattern": "exact_5_DUUDU"
+          },
+          "raw_train": -0.4419445,
+          "n_train_candidates": 55,
+          "train_wins": 30,
+          "train": {
+            "n": 55,
+            "wins": 30,
+            "losses": 25,
+            "net_usdt": -0.4419445,
+            "net_pct": -0.44194,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.00301,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 8
+        },
+        {
+          "rule": {
+            "side": "LONG",
+            "thresholds": {
+              "width_pct": 0.8371468809134524,
+              "body_pct": 0.14514006092769538,
+              "atr_pct": 0.23211546861869845
+            },
+            "quartiles": {
+              "width": 75,
+              "body": 25,
+              "atr": 25
+            },
+            "pattern": "exact_5_DUUDU"
+          },
+          "raw_train": -0.4806769,
+          "n_train_candidates": 60,
+          "train_wins": 31,
+          "train": {
+            "n": 60,
+            "wins": 31,
+            "losses": 29,
+            "net_usdt": -0.4806769,
+            "net_pct": -0.48068,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.00301,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 8
+        },
+        {
+          "rule": {
+            "side": "LONG",
+            "thresholds": {
+              "width_pct": 0.5294890602470128,
+              "body_pct": 0.41404825720368077,
+              "atr_pct": 0.23211546861869845
+            },
+            "quartiles": {
+              "width": 25,
+              "body": 75,
+              "atr": 25
+            },
+            "pattern": "exact_5_DUUDU"
+          },
+          "raw_train": -0.4305803,
+          "n_train_candidates": 67,
+          "train_wins": 36,
+          "train": {
+            "n": 67,
+            "wins": 36,
+            "losses": 31,
+            "net_usdt": -0.4305803,
+            "net_pct": -0.43058,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0056495,
+            "net_pct": -0.00565,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 8
+        },
+        {
+          "rule": {
+            "side": "LONG",
+            "thresholds": {
+              "width_pct": 0.6668583561886448,
+              "body_pct": 0.14514006092769538,
+              "atr_pct": 0.315881748382805
+            },
+            "quartiles": {
+              "width": 50,
+              "body": 25,
+              "atr": 50
+            },
+            "pattern": "exact_6_DUUUDU"
+          },
+          "raw_train": -0.7210747,
+          "n_train_candidates": 63,
+          "train_wins": 24,
+          "train": {
+            "n": 63,
+            "wins": 24,
+            "losses": 39,
+            "net_usdt": -0.7210747,
+            "net_pct": -0.72107,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 13,
+            "wins": 7,
+            "losses": 6,
+            "net_usdt": -0.0079615,
+            "net_pct": -0.00796,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 13
+        },
+        {
+          "rule": {
+            "side": "LONG",
+            "thresholds": {
+              "width_pct": 0.6668583561886448,
+              "body_pct": 0.14514006092769538,
+              "atr_pct": 0.23211546861869845
+            },
+            "quartiles": {
+              "width": 50,
+              "body": 25,
+              "atr": 25
+            },
+            "pattern": "exact_6_DUUUDU"
+          },
+          "raw_train": -0.8507211,
+          "n_train_candidates": 76,
+          "train_wins": 28,
+          "train": {
+            "n": 76,
+            "wins": 28,
+            "losses": 48,
+            "net_usdt": -0.8507211,
+            "net_pct": -0.85072,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 13,
+            "wins": 7,
+            "losses": 6,
+            "net_usdt": -0.0079615,
+            "net_pct": -0.00796,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 13
+        },
+        {
+          "rule": {
+            "side": "LONG",
+            "thresholds": {
+              "width_pct": 0.8371468809134524,
+              "body_pct": 0.24798512089274638,
+              "atr_pct": 0.23211546861869845
+            },
+            "quartiles": {
+              "width": 75,
+              "body": 50,
+              "atr": 25
+            },
+            "pattern": "exact_6_DUUDDU"
+          },
+          "raw_train": -0.9874518,
+          "n_train_candidates": 75,
+          "train_wins": 35,
+          "train": {
+            "n": 75,
+            "wins": 35,
+            "losses": 40,
+            "net_usdt": -0.9874518,
+            "net_pct": -0.98745,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 10,
+            "wins": 7,
+            "losses": 3,
+            "net_usdt": -0.009159,
+            "net_pct": -0.00916,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 10
+        }
+      ]
+    },
+    {
+      "side": "SHORT",
+      "search_count": 302,
+      "unique_train_finalists": 202,
+      "passed_validation": 1,
+      "selected_rule": {
+        "side": "SHORT",
+        "thresholds": {
+          "width_pct": 0.8501689266310642,
+          "body_pct": 0.5737344032235636,
+          "atr_pct": 0.5211590772924151
+        },
+        "quartiles": {
+          "width": 25,
+          "body": 75,
+          "atr": 50
+        },
+        "pattern": "breakout3"
+      },
+      "top_validation_first_10": [
+        {
+          "rule": {
+            "side": "SHORT",
+            "thresholds": {
+              "width_pct": 0.8501689266310642,
+              "body_pct": 0.15904756205131765,
+              "atr_pct": 0.34888716308523454
+            },
+            "quartiles": {
+              "width": 25,
+              "body": 25,
+              "atr": 25
+            },
+            "pattern": "exact_5_DUDDU"
+          },
+          "raw_train": -0.8455452,
+          "n_train_candidates": 56,
+          "train_wins": 14,
+          "train": {
+            "n": 55,
+            "wins": 13,
+            "losses": 42,
+            "net_usdt": -0.9103206,
+            "net_pct": -0.91032,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 1
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 7,
+            "losses": 1,
+            "net_usdt": 0.195922,
+            "net_pct": 0.19592,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 8
+        },
+        {
+          "rule": {
+            "side": "SHORT",
+            "thresholds": {
+              "width_pct": 0.8501689266310642,
+              "body_pct": 0.5737344032235636,
+              "atr_pct": 0.5211590772924151
+            },
+            "quartiles": {
+              "width": 25,
+              "body": 75,
+              "atr": 50
+            },
+            "pattern": "same_6_3"
+          },
+          "raw_train": -1.1350494,
+          "n_train_candidates": 78,
+          "train_wins": 34,
+          "train": {
+            "n": 75,
+            "wins": 31,
+            "losses": 44,
+            "net_usdt": -1.2462552,
+            "net_pct": -1.24626,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 6,
+            "losses": 2,
+            "net_usdt": 0.1247974,
+            "net_pct": 0.1248,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 8
+        },
+        {
+          "rule": {
+            "side": "SHORT",
+            "thresholds": {
+              "width_pct": 0.8501689266310642,
+              "body_pct": 0.5737344032235636,
+              "atr_pct": 0.34888716308523454
+            },
+            "quartiles": {
+              "width": 25,
+              "body": 75,
+              "atr": 25
+            },
+            "pattern": "same_6_3"
+          },
+          "raw_train": -1.3892594,
+          "n_train_candidates": 84,
+          "train_wins": 34,
+          "train": {
+            "n": 81,
+            "wins": 31,
+            "losses": 50,
+            "net_usdt": -1.5004651,
+            "net_pct": -1.50047,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 10,
+            "wins": 7,
+            "losses": 3,
+            "net_usdt": 0.1154262,
+            "net_pct": 0.11543,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 10
+        },
+        {
+          "rule": {
+            "side": "SHORT",
+            "thresholds": {
+              "width_pct": 1.3339765235568453,
+              "body_pct": 0.5737344032235636,
+              "atr_pct": 0.34888716308523454
+            },
+            "quartiles": {
+              "width": 50,
+              "body": 75,
+              "atr": 25
+            },
+            "pattern": "same_6_3"
+          },
+          "raw_train": -1.2603407,
+          "n_train_candidates": 76,
+          "train_wins": 31,
+          "train": {
+            "n": 73,
+            "wins": 28,
+            "losses": 45,
+            "net_usdt": -1.3715464,
+            "net_pct": -1.37155,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": 0.1067214,
+            "net_pct": 0.10672,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 8
+        },
+        {
+          "rule": {
+            "side": "SHORT",
+            "thresholds": {
+              "width_pct": 0.8501689266310642,
+              "body_pct": 0.5737344032235636,
+              "atr_pct": 0.5211590772924151
+            },
+            "quartiles": {
+              "width": 25,
+              "body": 75,
+              "atr": 50
+            },
+            "pattern": "same_5_2"
+          },
+          "raw_train": -0.1773305,
+          "n_train_candidates": 56,
+          "train_wins": 25,
+          "train": {
+            "n": 53,
+            "wins": 22,
+            "losses": 31,
+            "net_usdt": -0.2885362,
+            "net_pct": -0.28854,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": 0.1006068,
+            "net_pct": 0.10061,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 8
+        },
+        {
+          "rule": {
+            "side": "SHORT",
+            "thresholds": {
+              "width_pct": 0.8501689266310642,
+              "body_pct": 0.5737344032235636,
+              "atr_pct": 0.34888716308523454
+            },
+            "quartiles": {
+              "width": 25,
+              "body": 75,
+              "atr": 25
+            },
+            "pattern": "same_5_2"
+          },
+          "raw_train": -0.4865546,
+          "n_train_candidates": 63,
+          "train_wins": 25,
+          "train": {
+            "n": 60,
+            "wins": 22,
+            "losses": 38,
+            "net_usdt": -0.5977604,
+            "net_pct": -0.59776,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 11,
+            "wins": 6,
+            "losses": 5,
+            "net_usdt": 0.0911558,
+            "net_pct": 0.09116,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 11
+        },
+        {
+          "rule": {
+            "side": "SHORT",
+            "thresholds": {
+              "width_pct": 0.8501689266310642,
+              "body_pct": 0.5737344032235636,
+              "atr_pct": 0.5211590772924151
+            },
+            "quartiles": {
+              "width": 25,
+              "body": 75,
+              "atr": 50
+            },
+            "pattern": "momentum3"
+          },
+          "raw_train": -0.7087565,
+          "n_train_candidates": 172,
+          "train_wins": 80,
+          "train": {
+            "n": 168,
+            "wins": 77,
+            "losses": 91,
+            "net_usdt": -0.7365143,
+            "net_pct": -0.73651,
+            "risk_stop": false,
+            "rejected": {
+              "restart_pivots": 1,
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 15,
+            "wins": 10,
+            "losses": 5,
+            "net_usdt": 0.0876169,
+            "net_pct": 0.08762,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 15
+        },
+        {
+          "rule": {
+            "side": "SHORT",
+            "thresholds": {
+              "width_pct": 1.3339765235568453,
+              "body_pct": 0.5737344032235636,
+              "atr_pct": 0.34888716308523454
+            },
+            "quartiles": {
+              "width": 50,
+              "body": 75,
+              "atr": 25
+            },
+            "pattern": "same_5_2"
+          },
+          "raw_train": -0.3474048,
+          "n_train_candidates": 58,
+          "train_wins": 24,
+          "train": {
+            "n": 55,
+            "wins": 21,
+            "losses": 34,
+            "net_usdt": -0.4586106,
+            "net_pct": -0.45861,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 4,
+            "losses": 4,
+            "net_usdt": 0.0825308,
+            "net_pct": 0.08253,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 8
+        },
+        {
+          "rule": {
+            "side": "SHORT",
+            "thresholds": {
+              "width_pct": 1.3339765235568453,
+              "body_pct": 0.15904756205131765,
+              "atr_pct": 0.5211590772924151
+            },
+            "quartiles": {
+              "width": 50,
+              "body": 25,
+              "atr": 50
+            },
+            "pattern": "same_5_2"
+          },
+          "raw_train": -0.5569922,
+          "n_train_candidates": 113,
+          "train_wins": 41,
+          "train": {
+            "n": 110,
+            "wins": 38,
+            "losses": 72,
+            "net_usdt": -0.6681979,
+            "net_pct": -0.6682,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 14,
+            "wins": 7,
+            "losses": 7,
+            "net_usdt": 0.0741096,
+            "net_pct": 0.07411,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 14
+        },
+        {
+          "rule": {
+            "side": "SHORT",
+            "thresholds": {
+              "width_pct": 0.8501689266310642,
+              "body_pct": 0.15904756205131765,
+              "atr_pct": 0.5211590772924151
+            },
+            "quartiles": {
+              "width": 25,
+              "body": 25,
+              "atr": 50
+            },
+            "pattern": "same_5_2"
+          },
+          "raw_train": -0.610294,
+          "n_train_candidates": 125,
+          "train_wins": 47,
+          "train": {
+            "n": 122,
+            "wins": 44,
+            "losses": 78,
+            "net_usdt": -0.7214998,
+            "net_pct": -0.7215,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 16,
+            "wins": 8,
+            "losses": 8,
+            "net_usdt": 0.0681784,
+            "net_pct": 0.06818,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "n_validation_candidates": 16
+        }
+      ]
+    }
+  ],
+  "holdout_first10_per_direction": [
+    {
+      "side": "LONG",
+      "rank": 1,
+      "passed_validation": false,
+      "rule": {
+        "side": "LONG",
+        "thresholds": {
+          "width_pct": 0.5294890602470128,
+          "body_pct": 0.41404825720368077,
+          "atr_pct": 0.23211546861869845
+        },
+        "quartiles": {
+          "width": 25,
+          "body": 75,
+          "atr": 25
+        },
+        "pattern": "exact_6_DUUDDU"
+      },
+      "n_candidates": 93,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 79,
+            "wins": 44,
+            "losses": 35,
+            "net_usdt": -0.8235998,
+            "net_pct": -4.118,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 6,
+            "losses": 2,
+            "net_usdt": 0.0179286,
+            "net_pct": 0.08964,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 6,
+            "wins": 3,
+            "losses": 3,
+            "net_usdt": -0.0393714,
+            "net_pct": -0.19686,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 93,
+            "wins": 53,
+            "losses": 40,
+            "net_usdt": -0.8450426,
+            "net_pct": -4.22521,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "100": {
+          "train": {
+            "n": 79,
+            "wins": 44,
+            "losses": 35,
+            "net_usdt": -0.8235998,
+            "net_pct": -0.8236,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 6,
+            "losses": 2,
+            "net_usdt": 0.0179286,
+            "net_pct": 0.01793,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 6,
+            "wins": 3,
+            "losses": 3,
+            "net_usdt": -0.0393714,
+            "net_pct": -0.03937,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 93,
+            "wins": 53,
+            "losses": 40,
+            "net_usdt": -0.8450426,
+            "net_pct": -0.84504,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "500": {
+          "train": {
+            "n": 79,
+            "wins": 44,
+            "losses": 35,
+            "net_usdt": -0.8235998,
+            "net_pct": -0.16472,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 6,
+            "losses": 2,
+            "net_usdt": 0.0179286,
+            "net_pct": 0.00359,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 6,
+            "wins": 3,
+            "losses": 3,
+            "net_usdt": -0.0393714,
+            "net_pct": -0.00787,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 93,
+            "wins": 53,
+            "losses": 40,
+            "net_usdt": -0.8450426,
+            "net_pct": -0.16901,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 79,
+            "wins": 44,
+            "losses": 35,
+            "net_usdt": -0.8235998,
+            "net_pct": -0.08236,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 6,
+            "losses": 2,
+            "net_usdt": 0.0179286,
+            "net_pct": 0.00179,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 6,
+            "wins": 3,
+            "losses": 3,
+            "net_usdt": -0.0393714,
+            "net_pct": -0.00394,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 93,
+            "wins": 53,
+            "losses": 40,
+            "net_usdt": -0.8450426,
+            "net_pct": -0.0845,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        }
+      }
+    },
+    {
+      "side": "LONG",
+      "rank": 2,
+      "passed_validation": false,
+      "rule": {
+        "side": "LONG",
+        "thresholds": {
+          "width_pct": 0.6668583561886448,
+          "body_pct": 0.14514006092769538,
+          "atr_pct": 0.315881748382805
+        },
+        "quartiles": {
+          "width": 50,
+          "body": 25,
+          "atr": 50
+        },
+        "pattern": "exact_3_XDU"
+      },
+      "n_candidates": 85,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 72,
+            "wins": 41,
+            "losses": 31,
+            "net_usdt": -0.4512493,
+            "net_pct": -2.25625,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 6,
+            "losses": 2,
+            "net_usdt": 0.0078526,
+            "net_pct": 0.03926,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 5,
+            "wins": 4,
+            "losses": 1,
+            "net_usdt": 0.0284874,
+            "net_pct": 0.14244,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 85,
+            "wins": 51,
+            "losses": 34,
+            "net_usdt": -0.4149093,
+            "net_pct": -2.07455,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "100": {
+          "train": {
+            "n": 72,
+            "wins": 41,
+            "losses": 31,
+            "net_usdt": -0.4512493,
+            "net_pct": -0.45125,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 6,
+            "losses": 2,
+            "net_usdt": 0.0078526,
+            "net_pct": 0.00785,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 5,
+            "wins": 4,
+            "losses": 1,
+            "net_usdt": 0.0284874,
+            "net_pct": 0.02849,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 85,
+            "wins": 51,
+            "losses": 34,
+            "net_usdt": -0.4149093,
+            "net_pct": -0.41491,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "500": {
+          "train": {
+            "n": 72,
+            "wins": 41,
+            "losses": 31,
+            "net_usdt": -0.4512493,
+            "net_pct": -0.09025,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 6,
+            "losses": 2,
+            "net_usdt": 0.0078526,
+            "net_pct": 0.00157,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 5,
+            "wins": 4,
+            "losses": 1,
+            "net_usdt": 0.0284874,
+            "net_pct": 0.0057,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 85,
+            "wins": 51,
+            "losses": 34,
+            "net_usdt": -0.4149093,
+            "net_pct": -0.08298,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 72,
+            "wins": 41,
+            "losses": 31,
+            "net_usdt": -0.4512493,
+            "net_pct": -0.04512,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 6,
+            "losses": 2,
+            "net_usdt": 0.0078526,
+            "net_pct": 0.00079,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 5,
+            "wins": 4,
+            "losses": 1,
+            "net_usdt": 0.0284874,
+            "net_pct": 0.00285,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 85,
+            "wins": 51,
+            "losses": 34,
+            "net_usdt": -0.4149093,
+            "net_pct": -0.04149,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        }
+      }
+    },
+    {
+      "side": "LONG",
+      "rank": 3,
+      "passed_validation": false,
+      "rule": {
+        "side": "LONG",
+        "thresholds": {
+          "width_pct": 0.8371468809134524,
+          "body_pct": 0.24798512089274638,
+          "atr_pct": 0.315881748382805
+        },
+        "quartiles": {
+          "width": 75,
+          "body": 50,
+          "atr": 50
+        },
+        "pattern": "exact_5_DUUDU"
+      },
+      "n_candidates": 66,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 52,
+            "wins": 30,
+            "losses": 22,
+            "net_usdt": -0.3801345,
+            "net_pct": -1.90067,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.01507,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 6,
+            "wins": 4,
+            "losses": 2,
+            "net_usdt": -0.0087284,
+            "net_pct": -0.04364,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 66,
+            "wins": 39,
+            "losses": 27,
+            "net_usdt": -0.3918776,
+            "net_pct": -1.95939,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "100": {
+          "train": {
+            "n": 52,
+            "wins": 30,
+            "losses": 22,
+            "net_usdt": -0.3801345,
+            "net_pct": -0.38013,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.00301,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 6,
+            "wins": 4,
+            "losses": 2,
+            "net_usdt": -0.0087284,
+            "net_pct": -0.00873,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 66,
+            "wins": 39,
+            "losses": 27,
+            "net_usdt": -0.3918776,
+            "net_pct": -0.39188,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "500": {
+          "train": {
+            "n": 52,
+            "wins": 30,
+            "losses": 22,
+            "net_usdt": -0.3801345,
+            "net_pct": -0.07603,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.0006,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 6,
+            "wins": 4,
+            "losses": 2,
+            "net_usdt": -0.0087284,
+            "net_pct": -0.00175,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 66,
+            "wins": 39,
+            "losses": 27,
+            "net_usdt": -0.3918776,
+            "net_pct": -0.07838,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 52,
+            "wins": 30,
+            "losses": 22,
+            "net_usdt": -0.3801345,
+            "net_pct": -0.03801,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.0003,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 6,
+            "wins": 4,
+            "losses": 2,
+            "net_usdt": -0.0087284,
+            "net_pct": -0.00087,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 66,
+            "wins": 39,
+            "losses": 27,
+            "net_usdt": -0.3918776,
+            "net_pct": -0.03919,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        }
+      }
+    },
+    {
+      "side": "LONG",
+      "rank": 4,
+      "passed_validation": false,
+      "rule": {
+        "side": "LONG",
+        "thresholds": {
+          "width_pct": 0.8371468809134524,
+          "body_pct": 0.24798512089274638,
+          "atr_pct": 0.23211546861869845
+        },
+        "quartiles": {
+          "width": 75,
+          "body": 50,
+          "atr": 25
+        },
+        "pattern": "exact_5_DUUDU"
+      },
+      "n_candidates": 72,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 55,
+            "wins": 30,
+            "losses": 25,
+            "net_usdt": -0.4107802,
+            "net_pct": -2.0539,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.01507,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 9,
+            "wins": 6,
+            "losses": 3,
+            "net_usdt": -0.0249595,
+            "net_pct": -0.1248,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 72,
+            "wins": 41,
+            "losses": 31,
+            "net_usdt": -0.4387543,
+            "net_pct": -2.19377,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "100": {
+          "train": {
+            "n": 55,
+            "wins": 30,
+            "losses": 25,
+            "net_usdt": -0.4107802,
+            "net_pct": -0.41078,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.00301,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 9,
+            "wins": 6,
+            "losses": 3,
+            "net_usdt": -0.0249595,
+            "net_pct": -0.02496,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 72,
+            "wins": 41,
+            "losses": 31,
+            "net_usdt": -0.4387543,
+            "net_pct": -0.43875,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "500": {
+          "train": {
+            "n": 55,
+            "wins": 30,
+            "losses": 25,
+            "net_usdt": -0.4107802,
+            "net_pct": -0.08216,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.0006,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 9,
+            "wins": 6,
+            "losses": 3,
+            "net_usdt": -0.0249595,
+            "net_pct": -0.00499,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 72,
+            "wins": 41,
+            "losses": 31,
+            "net_usdt": -0.4387543,
+            "net_pct": -0.08775,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 55,
+            "wins": 30,
+            "losses": 25,
+            "net_usdt": -0.4107802,
+            "net_pct": -0.04108,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.0003,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 9,
+            "wins": 6,
+            "losses": 3,
+            "net_usdt": -0.0249595,
+            "net_pct": -0.0025,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 72,
+            "wins": 41,
+            "losses": 31,
+            "net_usdt": -0.4387543,
+            "net_pct": -0.04388,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        }
+      }
+    },
+    {
+      "side": "LONG",
+      "rank": 5,
+      "passed_validation": false,
+      "rule": {
+        "side": "LONG",
+        "thresholds": {
+          "width_pct": 0.8371468809134524,
+          "body_pct": 0.14514006092769538,
+          "atr_pct": 0.315881748382805
+        },
+        "quartiles": {
+          "width": 75,
+          "body": 25,
+          "atr": 50
+        },
+        "pattern": "exact_5_DUUDU"
+      },
+      "n_candidates": 70,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 55,
+            "wins": 30,
+            "losses": 25,
+            "net_usdt": -0.4419445,
+            "net_pct": -2.20972,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.01507,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 7,
+            "wins": 5,
+            "losses": 2,
+            "net_usdt": 0.0079449,
+            "net_pct": 0.03972,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 70,
+            "wins": 40,
+            "losses": 30,
+            "net_usdt": -0.4370143,
+            "net_pct": -2.18507,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "100": {
+          "train": {
+            "n": 55,
+            "wins": 30,
+            "losses": 25,
+            "net_usdt": -0.4419445,
+            "net_pct": -0.44194,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.00301,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 7,
+            "wins": 5,
+            "losses": 2,
+            "net_usdt": 0.0079449,
+            "net_pct": 0.00794,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 70,
+            "wins": 40,
+            "losses": 30,
+            "net_usdt": -0.4370143,
+            "net_pct": -0.43701,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "500": {
+          "train": {
+            "n": 55,
+            "wins": 30,
+            "losses": 25,
+            "net_usdt": -0.4419445,
+            "net_pct": -0.08839,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.0006,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 7,
+            "wins": 5,
+            "losses": 2,
+            "net_usdt": 0.0079449,
+            "net_pct": 0.00159,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 70,
+            "wins": 40,
+            "losses": 30,
+            "net_usdt": -0.4370143,
+            "net_pct": -0.0874,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 55,
+            "wins": 30,
+            "losses": 25,
+            "net_usdt": -0.4419445,
+            "net_pct": -0.04419,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.0003,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 7,
+            "wins": 5,
+            "losses": 2,
+            "net_usdt": 0.0079449,
+            "net_pct": 0.00079,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 70,
+            "wins": 40,
+            "losses": 30,
+            "net_usdt": -0.4370143,
+            "net_pct": -0.0437,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        }
+      }
+    },
+    {
+      "side": "LONG",
+      "rank": 6,
+      "passed_validation": false,
+      "rule": {
+        "side": "LONG",
+        "thresholds": {
+          "width_pct": 0.8371468809134524,
+          "body_pct": 0.14514006092769538,
+          "atr_pct": 0.23211546861869845
+        },
+        "quartiles": {
+          "width": 75,
+          "body": 25,
+          "atr": 25
+        },
+        "pattern": "exact_5_DUUDU"
+      },
+      "n_candidates": 78,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 60,
+            "wins": 31,
+            "losses": 29,
+            "net_usdt": -0.4806769,
+            "net_pct": -2.40338,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.01507,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 10,
+            "wins": 7,
+            "losses": 3,
+            "net_usdt": -0.0082861,
+            "net_pct": -0.04143,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 78,
+            "wins": 43,
+            "losses": 35,
+            "net_usdt": -0.4919778,
+            "net_pct": -2.45989,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "100": {
+          "train": {
+            "n": 60,
+            "wins": 31,
+            "losses": 29,
+            "net_usdt": -0.4806769,
+            "net_pct": -0.48068,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.00301,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 10,
+            "wins": 7,
+            "losses": 3,
+            "net_usdt": -0.0082861,
+            "net_pct": -0.00829,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 78,
+            "wins": 43,
+            "losses": 35,
+            "net_usdt": -0.4919778,
+            "net_pct": -0.49198,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "500": {
+          "train": {
+            "n": 60,
+            "wins": 31,
+            "losses": 29,
+            "net_usdt": -0.4806769,
+            "net_pct": -0.09614,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.0006,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 10,
+            "wins": 7,
+            "losses": 3,
+            "net_usdt": -0.0082861,
+            "net_pct": -0.00166,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 78,
+            "wins": 43,
+            "losses": 35,
+            "net_usdt": -0.4919778,
+            "net_pct": -0.0984,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 60,
+            "wins": 31,
+            "losses": 29,
+            "net_usdt": -0.4806769,
+            "net_pct": -0.04807,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0030147,
+            "net_pct": -0.0003,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 10,
+            "wins": 7,
+            "losses": 3,
+            "net_usdt": -0.0082861,
+            "net_pct": -0.00083,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 78,
+            "wins": 43,
+            "losses": 35,
+            "net_usdt": -0.4919778,
+            "net_pct": -0.0492,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        }
+      }
+    },
+    {
+      "side": "LONG",
+      "rank": 7,
+      "passed_validation": false,
+      "rule": {
+        "side": "LONG",
+        "thresholds": {
+          "width_pct": 0.5294890602470128,
+          "body_pct": 0.41404825720368077,
+          "atr_pct": 0.23211546861869845
+        },
+        "quartiles": {
+          "width": 25,
+          "body": 75,
+          "atr": 25
+        },
+        "pattern": "exact_5_DUUDU"
+      },
+      "n_candidates": 82,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 67,
+            "wins": 36,
+            "losses": 31,
+            "net_usdt": -0.4305803,
+            "net_pct": -2.1529,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0056495,
+            "net_pct": -0.02825,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 7,
+            "wins": 6,
+            "losses": 1,
+            "net_usdt": 0.0160736,
+            "net_pct": 0.08037,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 82,
+            "wins": 47,
+            "losses": 35,
+            "net_usdt": -0.4201562,
+            "net_pct": -2.10078,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "100": {
+          "train": {
+            "n": 67,
+            "wins": 36,
+            "losses": 31,
+            "net_usdt": -0.4305803,
+            "net_pct": -0.43058,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0056495,
+            "net_pct": -0.00565,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 7,
+            "wins": 6,
+            "losses": 1,
+            "net_usdt": 0.0160736,
+            "net_pct": 0.01607,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 82,
+            "wins": 47,
+            "losses": 35,
+            "net_usdt": -0.4201562,
+            "net_pct": -0.42016,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "500": {
+          "train": {
+            "n": 67,
+            "wins": 36,
+            "losses": 31,
+            "net_usdt": -0.4305803,
+            "net_pct": -0.08612,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0056495,
+            "net_pct": -0.00113,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 7,
+            "wins": 6,
+            "losses": 1,
+            "net_usdt": 0.0160736,
+            "net_pct": 0.00321,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 82,
+            "wins": 47,
+            "losses": 35,
+            "net_usdt": -0.4201562,
+            "net_pct": -0.08403,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 67,
+            "wins": 36,
+            "losses": 31,
+            "net_usdt": -0.4305803,
+            "net_pct": -0.04306,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": -0.0056495,
+            "net_pct": -0.00056,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 7,
+            "wins": 6,
+            "losses": 1,
+            "net_usdt": 0.0160736,
+            "net_pct": 0.00161,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 82,
+            "wins": 47,
+            "losses": 35,
+            "net_usdt": -0.4201562,
+            "net_pct": -0.04202,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        }
+      }
+    },
+    {
+      "side": "LONG",
+      "rank": 8,
+      "passed_validation": false,
+      "rule": {
+        "side": "LONG",
+        "thresholds": {
+          "width_pct": 0.6668583561886448,
+          "body_pct": 0.14514006092769538,
+          "atr_pct": 0.315881748382805
+        },
+        "quartiles": {
+          "width": 50,
+          "body": 25,
+          "atr": 50
+        },
+        "pattern": "exact_6_DUUUDU"
+      },
+      "n_candidates": 85,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 63,
+            "wins": 24,
+            "losses": 39,
+            "net_usdt": -0.7210747,
+            "net_pct": -3.60537,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 13,
+            "wins": 7,
+            "losses": 6,
+            "net_usdt": -0.0079615,
+            "net_pct": -0.03981,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 9,
+            "wins": 6,
+            "losses": 3,
+            "net_usdt": 0.0310061,
+            "net_pct": 0.15503,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 85,
+            "wins": 37,
+            "losses": 48,
+            "net_usdt": -0.6980301,
+            "net_pct": -3.49015,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "100": {
+          "train": {
+            "n": 63,
+            "wins": 24,
+            "losses": 39,
+            "net_usdt": -0.7210747,
+            "net_pct": -0.72107,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 13,
+            "wins": 7,
+            "losses": 6,
+            "net_usdt": -0.0079615,
+            "net_pct": -0.00796,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 9,
+            "wins": 6,
+            "losses": 3,
+            "net_usdt": 0.0310061,
+            "net_pct": 0.03101,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 85,
+            "wins": 37,
+            "losses": 48,
+            "net_usdt": -0.6980301,
+            "net_pct": -0.69803,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "500": {
+          "train": {
+            "n": 63,
+            "wins": 24,
+            "losses": 39,
+            "net_usdt": -0.7210747,
+            "net_pct": -0.14421,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 13,
+            "wins": 7,
+            "losses": 6,
+            "net_usdt": -0.0079615,
+            "net_pct": -0.00159,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 9,
+            "wins": 6,
+            "losses": 3,
+            "net_usdt": 0.0310061,
+            "net_pct": 0.0062,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 85,
+            "wins": 37,
+            "losses": 48,
+            "net_usdt": -0.6980301,
+            "net_pct": -0.13961,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 63,
+            "wins": 24,
+            "losses": 39,
+            "net_usdt": -0.7210747,
+            "net_pct": -0.07211,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 13,
+            "wins": 7,
+            "losses": 6,
+            "net_usdt": -0.0079615,
+            "net_pct": -0.0008,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 9,
+            "wins": 6,
+            "losses": 3,
+            "net_usdt": 0.0310061,
+            "net_pct": 0.0031,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 85,
+            "wins": 37,
+            "losses": 48,
+            "net_usdt": -0.6980301,
+            "net_pct": -0.0698,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        }
+      }
+    },
+    {
+      "side": "LONG",
+      "rank": 9,
+      "passed_validation": false,
+      "rule": {
+        "side": "LONG",
+        "thresholds": {
+          "width_pct": 0.6668583561886448,
+          "body_pct": 0.14514006092769538,
+          "atr_pct": 0.23211546861869845
+        },
+        "quartiles": {
+          "width": 50,
+          "body": 25,
+          "atr": 25
+        },
+        "pattern": "exact_6_DUUUDU"
+      },
+      "n_candidates": 98,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 76,
+            "wins": 28,
+            "losses": 48,
+            "net_usdt": -0.8507211,
+            "net_pct": -4.25361,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 13,
+            "wins": 7,
+            "losses": 6,
+            "net_usdt": -0.0079615,
+            "net_pct": -0.03981,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 9,
+            "wins": 6,
+            "losses": 3,
+            "net_usdt": 0.0310061,
+            "net_pct": 0.15503,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 98,
+            "wins": 41,
+            "losses": 57,
+            "net_usdt": -0.8276765,
+            "net_pct": -4.13838,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "100": {
+          "train": {
+            "n": 76,
+            "wins": 28,
+            "losses": 48,
+            "net_usdt": -0.8507211,
+            "net_pct": -0.85072,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 13,
+            "wins": 7,
+            "losses": 6,
+            "net_usdt": -0.0079615,
+            "net_pct": -0.00796,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 9,
+            "wins": 6,
+            "losses": 3,
+            "net_usdt": 0.0310061,
+            "net_pct": 0.03101,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 98,
+            "wins": 41,
+            "losses": 57,
+            "net_usdt": -0.8276765,
+            "net_pct": -0.82768,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "500": {
+          "train": {
+            "n": 76,
+            "wins": 28,
+            "losses": 48,
+            "net_usdt": -0.8507211,
+            "net_pct": -0.17014,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 13,
+            "wins": 7,
+            "losses": 6,
+            "net_usdt": -0.0079615,
+            "net_pct": -0.00159,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 9,
+            "wins": 6,
+            "losses": 3,
+            "net_usdt": 0.0310061,
+            "net_pct": 0.0062,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 98,
+            "wins": 41,
+            "losses": 57,
+            "net_usdt": -0.8276765,
+            "net_pct": -0.16554,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 76,
+            "wins": 28,
+            "losses": 48,
+            "net_usdt": -0.8507211,
+            "net_pct": -0.08507,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 13,
+            "wins": 7,
+            "losses": 6,
+            "net_usdt": -0.0079615,
+            "net_pct": -0.0008,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 9,
+            "wins": 6,
+            "losses": 3,
+            "net_usdt": 0.0310061,
+            "net_pct": 0.0031,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 98,
+            "wins": 41,
+            "losses": 57,
+            "net_usdt": -0.8276765,
+            "net_pct": -0.08277,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        }
+      }
+    },
+    {
+      "side": "LONG",
+      "rank": 10,
+      "passed_validation": false,
+      "rule": {
+        "side": "LONG",
+        "thresholds": {
+          "width_pct": 0.8371468809134524,
+          "body_pct": 0.24798512089274638,
+          "atr_pct": 0.23211546861869845
+        },
+        "quartiles": {
+          "width": 75,
+          "body": 50,
+          "atr": 25
+        },
+        "pattern": "exact_6_DUUDDU"
+      },
+      "n_candidates": 89,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 75,
+            "wins": 35,
+            "losses": 40,
+            "net_usdt": -0.9874518,
+            "net_pct": -4.93726,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 10,
+            "wins": 7,
+            "losses": 3,
+            "net_usdt": -0.009159,
+            "net_pct": -0.0458,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 4,
+            "wins": 2,
+            "losses": 2,
+            "net_usdt": -0.0229843,
+            "net_pct": -0.11492,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 89,
+            "wins": 44,
+            "losses": 45,
+            "net_usdt": -1.0195951,
+            "net_pct": -5.09798,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "100": {
+          "train": {
+            "n": 75,
+            "wins": 35,
+            "losses": 40,
+            "net_usdt": -0.9874518,
+            "net_pct": -0.98745,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 10,
+            "wins": 7,
+            "losses": 3,
+            "net_usdt": -0.009159,
+            "net_pct": -0.00916,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 4,
+            "wins": 2,
+            "losses": 2,
+            "net_usdt": -0.0229843,
+            "net_pct": -0.02298,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 89,
+            "wins": 44,
+            "losses": 45,
+            "net_usdt": -1.0195951,
+            "net_pct": -1.0196,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "500": {
+          "train": {
+            "n": 75,
+            "wins": 35,
+            "losses": 40,
+            "net_usdt": -0.9874518,
+            "net_pct": -0.19749,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 10,
+            "wins": 7,
+            "losses": 3,
+            "net_usdt": -0.009159,
+            "net_pct": -0.00183,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 4,
+            "wins": 2,
+            "losses": 2,
+            "net_usdt": -0.0229843,
+            "net_pct": -0.0046,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 89,
+            "wins": 44,
+            "losses": 45,
+            "net_usdt": -1.0195951,
+            "net_pct": -0.20392,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 75,
+            "wins": 35,
+            "losses": 40,
+            "net_usdt": -0.9874518,
+            "net_pct": -0.09875,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "validation": {
+            "n": 10,
+            "wins": 7,
+            "losses": 3,
+            "net_usdt": -0.009159,
+            "net_pct": -0.00092,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 4,
+            "wins": 2,
+            "losses": 2,
+            "net_usdt": -0.0229843,
+            "net_pct": -0.0023,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 89,
+            "wins": 44,
+            "losses": 45,
+            "net_usdt": -1.0195951,
+            "net_pct": -0.10196,
+            "risk_stop": false,
+            "rejected": {}
+          }
+        }
+      }
+    },
+    {
+      "side": "SHORT",
+      "rank": 1,
+      "passed_validation": false,
+      "rule": {
+        "side": "SHORT",
+        "thresholds": {
+          "width_pct": 0.8501689266310642,
+          "body_pct": 0.15904756205131765,
+          "atr_pct": 0.34888716308523454
+        },
+        "quartiles": {
+          "width": 25,
+          "body": 25,
+          "atr": 25
+        },
+        "pattern": "exact_5_DUDDU"
+      },
+      "n_candidates": 68,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 54,
+            "wins": 12,
+            "losses": 42,
+            "net_usdt": -0.9562347,
+            "net_pct": -4.78117,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 2
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 7,
+            "losses": 1,
+            "net_usdt": 0.195922,
+            "net_pct": 0.97961,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 4,
+            "wins": 3,
+            "losses": 1,
+            "net_usdt": 0.036787,
+            "net_pct": 0.18394,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 66,
+            "wins": 22,
+            "losses": 44,
+            "net_usdt": -0.7235257,
+            "net_pct": -3.61763,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 2
+            }
+          }
+        },
+        "100": {
+          "train": {
+            "n": 55,
+            "wins": 13,
+            "losses": 42,
+            "net_usdt": -0.9103206,
+            "net_pct": -0.91032,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 1
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 7,
+            "losses": 1,
+            "net_usdt": 0.195922,
+            "net_pct": 0.19592,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 4,
+            "wins": 3,
+            "losses": 1,
+            "net_usdt": 0.036787,
+            "net_pct": 0.03679,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 67,
+            "wins": 23,
+            "losses": 44,
+            "net_usdt": -0.6776115,
+            "net_pct": -0.67761,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 1
+            }
+          }
+        },
+        "500": {
+          "train": {
+            "n": 55,
+            "wins": 13,
+            "losses": 42,
+            "net_usdt": -0.9103206,
+            "net_pct": -0.18206,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 1
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 7,
+            "losses": 1,
+            "net_usdt": 0.195922,
+            "net_pct": 0.03918,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 4,
+            "wins": 3,
+            "losses": 1,
+            "net_usdt": 0.036787,
+            "net_pct": 0.00736,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 67,
+            "wins": 23,
+            "losses": 44,
+            "net_usdt": -0.6776115,
+            "net_pct": -0.13552,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 1
+            }
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 55,
+            "wins": 13,
+            "losses": 42,
+            "net_usdt": -0.9103206,
+            "net_pct": -0.09103,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 1
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 7,
+            "losses": 1,
+            "net_usdt": 0.195922,
+            "net_pct": 0.01959,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 4,
+            "wins": 3,
+            "losses": 1,
+            "net_usdt": 0.036787,
+            "net_pct": 0.00368,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 67,
+            "wins": 23,
+            "losses": 44,
+            "net_usdt": -0.6776115,
+            "net_pct": -0.06776,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "side": "SHORT",
+      "rank": 2,
+      "passed_validation": false,
+      "rule": {
+        "side": "SHORT",
+        "thresholds": {
+          "width_pct": 0.8501689266310642,
+          "body_pct": 0.5737344032235636,
+          "atr_pct": 0.5211590772924151
+        },
+        "quartiles": {
+          "width": 25,
+          "body": 75,
+          "atr": 50
+        },
+        "pattern": "same_6_3"
+      },
+      "n_candidates": 89,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 74,
+            "wins": 30,
+            "losses": 44,
+            "net_usdt": -1.2944671,
+            "net_pct": -6.47234,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 4
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 6,
+            "losses": 2,
+            "net_usdt": 0.1247974,
+            "net_pct": 0.62399,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 3,
+            "wins": 1,
+            "losses": 2,
+            "net_usdt": -0.0102688,
+            "net_pct": -0.05134,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 85,
+            "wins": 37,
+            "losses": 48,
+            "net_usdt": -1.1799385,
+            "net_pct": -5.89969,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 4
+            }
+          }
+        },
+        "100": {
+          "train": {
+            "n": 75,
+            "wins": 31,
+            "losses": 44,
+            "net_usdt": -1.2462552,
+            "net_pct": -1.24626,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 6,
+            "losses": 2,
+            "net_usdt": 0.1247974,
+            "net_pct": 0.1248,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 3,
+            "wins": 1,
+            "losses": 2,
+            "net_usdt": -0.0102688,
+            "net_pct": -0.01027,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 86,
+            "wins": 38,
+            "losses": 48,
+            "net_usdt": -1.1317266,
+            "net_pct": -1.13173,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        },
+        "500": {
+          "train": {
+            "n": 75,
+            "wins": 31,
+            "losses": 44,
+            "net_usdt": -1.2462552,
+            "net_pct": -0.24925,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 6,
+            "losses": 2,
+            "net_usdt": 0.1247974,
+            "net_pct": 0.02496,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 3,
+            "wins": 1,
+            "losses": 2,
+            "net_usdt": -0.0102688,
+            "net_pct": -0.00205,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 86,
+            "wins": 38,
+            "losses": 48,
+            "net_usdt": -1.1317266,
+            "net_pct": -0.22635,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 75,
+            "wins": 31,
+            "losses": 44,
+            "net_usdt": -1.2462552,
+            "net_pct": -0.12463,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 6,
+            "losses": 2,
+            "net_usdt": 0.1247974,
+            "net_pct": 0.01248,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 3,
+            "wins": 1,
+            "losses": 2,
+            "net_usdt": -0.0102688,
+            "net_pct": -0.00103,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 86,
+            "wins": 38,
+            "losses": 48,
+            "net_usdt": -1.1317266,
+            "net_pct": -0.11317,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        }
+      }
+    },
+    {
+      "side": "SHORT",
+      "rank": 3,
+      "passed_validation": false,
+      "rule": {
+        "side": "SHORT",
+        "thresholds": {
+          "width_pct": 0.8501689266310642,
+          "body_pct": 0.5737344032235636,
+          "atr_pct": 0.34888716308523454
+        },
+        "quartiles": {
+          "width": 25,
+          "body": 75,
+          "atr": 25
+        },
+        "pattern": "same_6_3"
+      },
+      "n_candidates": 98,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 80,
+            "wins": 30,
+            "losses": 50,
+            "net_usdt": -1.5486771,
+            "net_pct": -7.74339,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 4
+            }
+          },
+          "validation": {
+            "n": 10,
+            "wins": 7,
+            "losses": 3,
+            "net_usdt": 0.1154262,
+            "net_pct": 0.57713,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 4,
+            "wins": 1,
+            "losses": 3,
+            "net_usdt": -0.0411011,
+            "net_pct": -0.20551,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 94,
+            "wins": 38,
+            "losses": 56,
+            "net_usdt": -1.4743519,
+            "net_pct": -7.37176,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 4
+            }
+          }
+        },
+        "100": {
+          "train": {
+            "n": 81,
+            "wins": 31,
+            "losses": 50,
+            "net_usdt": -1.5004651,
+            "net_pct": -1.50047,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 10,
+            "wins": 7,
+            "losses": 3,
+            "net_usdt": 0.1154262,
+            "net_pct": 0.11543,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 4,
+            "wins": 1,
+            "losses": 3,
+            "net_usdt": -0.0411011,
+            "net_pct": -0.0411,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 95,
+            "wins": 39,
+            "losses": 56,
+            "net_usdt": -1.42614,
+            "net_pct": -1.42614,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        },
+        "500": {
+          "train": {
+            "n": 81,
+            "wins": 31,
+            "losses": 50,
+            "net_usdt": -1.5004651,
+            "net_pct": -0.30009,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 10,
+            "wins": 7,
+            "losses": 3,
+            "net_usdt": 0.1154262,
+            "net_pct": 0.02309,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 4,
+            "wins": 1,
+            "losses": 3,
+            "net_usdt": -0.0411011,
+            "net_pct": -0.00822,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 95,
+            "wins": 39,
+            "losses": 56,
+            "net_usdt": -1.42614,
+            "net_pct": -0.28523,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 81,
+            "wins": 31,
+            "losses": 50,
+            "net_usdt": -1.5004651,
+            "net_pct": -0.15005,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 10,
+            "wins": 7,
+            "losses": 3,
+            "net_usdt": 0.1154262,
+            "net_pct": 0.01154,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 4,
+            "wins": 1,
+            "losses": 3,
+            "net_usdt": -0.0411011,
+            "net_pct": -0.00411,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 95,
+            "wins": 39,
+            "losses": 56,
+            "net_usdt": -1.42614,
+            "net_pct": -0.14261,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        }
+      }
+    },
+    {
+      "side": "SHORT",
+      "rank": 4,
+      "passed_validation": false,
+      "rule": {
+        "side": "SHORT",
+        "thresholds": {
+          "width_pct": 1.3339765235568453,
+          "body_pct": 0.5737344032235636,
+          "atr_pct": 0.34888716308523454
+        },
+        "quartiles": {
+          "width": 50,
+          "body": 75,
+          "atr": 25
+        },
+        "pattern": "same_6_3"
+      },
+      "n_candidates": 86,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 72,
+            "wins": 27,
+            "losses": 45,
+            "net_usdt": -1.4197584,
+            "net_pct": -7.09879,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 4
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": 0.1067214,
+            "net_pct": 0.53361,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 2,
+            "wins": 1,
+            "losses": 1,
+            "net_usdt": 0.0200063,
+            "net_pct": 0.10003,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 82,
+            "wins": 33,
+            "losses": 49,
+            "net_usdt": -1.2930307,
+            "net_pct": -6.46515,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 4
+            }
+          }
+        },
+        "100": {
+          "train": {
+            "n": 73,
+            "wins": 28,
+            "losses": 45,
+            "net_usdt": -1.3715464,
+            "net_pct": -1.37155,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": 0.1067214,
+            "net_pct": 0.10672,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 2,
+            "wins": 1,
+            "losses": 1,
+            "net_usdt": 0.0200063,
+            "net_pct": 0.02001,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 83,
+            "wins": 34,
+            "losses": 49,
+            "net_usdt": -1.2448188,
+            "net_pct": -1.24482,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        },
+        "500": {
+          "train": {
+            "n": 73,
+            "wins": 28,
+            "losses": 45,
+            "net_usdt": -1.3715464,
+            "net_pct": -0.27431,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": 0.1067214,
+            "net_pct": 0.02134,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 2,
+            "wins": 1,
+            "losses": 1,
+            "net_usdt": 0.0200063,
+            "net_pct": 0.004,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 83,
+            "wins": 34,
+            "losses": 49,
+            "net_usdt": -1.2448188,
+            "net_pct": -0.24896,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 73,
+            "wins": 28,
+            "losses": 45,
+            "net_usdt": -1.3715464,
+            "net_pct": -0.13715,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": 0.1067214,
+            "net_pct": 0.01067,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 2,
+            "wins": 1,
+            "losses": 1,
+            "net_usdt": 0.0200063,
+            "net_pct": 0.002,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 83,
+            "wins": 34,
+            "losses": 49,
+            "net_usdt": -1.2448188,
+            "net_pct": -0.12448,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        }
+      }
+    },
+    {
+      "side": "SHORT",
+      "rank": 5,
+      "passed_validation": false,
+      "rule": {
+        "side": "SHORT",
+        "thresholds": {
+          "width_pct": 0.8501689266310642,
+          "body_pct": 0.5737344032235636,
+          "atr_pct": 0.5211590772924151
+        },
+        "quartiles": {
+          "width": 25,
+          "body": 75,
+          "atr": 50
+        },
+        "pattern": "same_5_2"
+      },
+      "n_candidates": 67,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 52,
+            "wins": 21,
+            "losses": 31,
+            "net_usdt": -0.3367481,
+            "net_pct": -1.68374,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 4
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": 0.1006068,
+            "net_pct": 0.50303,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 3,
+            "wins": 2,
+            "losses": 1,
+            "net_usdt": 0.0493806,
+            "net_pct": 0.2469,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 63,
+            "wins": 28,
+            "losses": 35,
+            "net_usdt": -0.1867607,
+            "net_pct": -0.9338,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 4
+            }
+          }
+        },
+        "100": {
+          "train": {
+            "n": 53,
+            "wins": 22,
+            "losses": 31,
+            "net_usdt": -0.2885362,
+            "net_pct": -0.28854,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": 0.1006068,
+            "net_pct": 0.10061,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 3,
+            "wins": 2,
+            "losses": 1,
+            "net_usdt": 0.0493806,
+            "net_pct": 0.04938,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 64,
+            "wins": 29,
+            "losses": 35,
+            "net_usdt": -0.1385488,
+            "net_pct": -0.13855,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        },
+        "500": {
+          "train": {
+            "n": 53,
+            "wins": 22,
+            "losses": 31,
+            "net_usdt": -0.2885362,
+            "net_pct": -0.05771,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": 0.1006068,
+            "net_pct": 0.02012,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 3,
+            "wins": 2,
+            "losses": 1,
+            "net_usdt": 0.0493806,
+            "net_pct": 0.00988,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 64,
+            "wins": 29,
+            "losses": 35,
+            "net_usdt": -0.1385488,
+            "net_pct": -0.02771,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 53,
+            "wins": 22,
+            "losses": 31,
+            "net_usdt": -0.2885362,
+            "net_pct": -0.02885,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 5,
+            "losses": 3,
+            "net_usdt": 0.1006068,
+            "net_pct": 0.01006,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 3,
+            "wins": 2,
+            "losses": 1,
+            "net_usdt": 0.0493806,
+            "net_pct": 0.00494,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 64,
+            "wins": 29,
+            "losses": 35,
+            "net_usdt": -0.1385488,
+            "net_pct": -0.01385,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        }
+      }
+    },
+    {
+      "side": "SHORT",
+      "rank": 6,
+      "passed_validation": false,
+      "rule": {
+        "side": "SHORT",
+        "thresholds": {
+          "width_pct": 0.8501689266310642,
+          "body_pct": 0.5737344032235636,
+          "atr_pct": 0.34888716308523454
+        },
+        "quartiles": {
+          "width": 25,
+          "body": 75,
+          "atr": 25
+        },
+        "pattern": "same_5_2"
+      },
+      "n_candidates": 78,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 59,
+            "wins": 21,
+            "losses": 38,
+            "net_usdt": -0.6459723,
+            "net_pct": -3.22986,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 4
+            }
+          },
+          "validation": {
+            "n": 11,
+            "wins": 6,
+            "losses": 5,
+            "net_usdt": 0.0911558,
+            "net_pct": 0.45578,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 4,
+            "wins": 2,
+            "losses": 2,
+            "net_usdt": 0.0185483,
+            "net_pct": 0.09274,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 74,
+            "wins": 29,
+            "losses": 45,
+            "net_usdt": -0.5362682,
+            "net_pct": -2.68134,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 4
+            }
+          }
+        },
+        "100": {
+          "train": {
+            "n": 60,
+            "wins": 22,
+            "losses": 38,
+            "net_usdt": -0.5977604,
+            "net_pct": -0.59776,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 11,
+            "wins": 6,
+            "losses": 5,
+            "net_usdt": 0.0911558,
+            "net_pct": 0.09116,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 4,
+            "wins": 2,
+            "losses": 2,
+            "net_usdt": 0.0185483,
+            "net_pct": 0.01855,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 75,
+            "wins": 30,
+            "losses": 45,
+            "net_usdt": -0.4880563,
+            "net_pct": -0.48806,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        },
+        "500": {
+          "train": {
+            "n": 60,
+            "wins": 22,
+            "losses": 38,
+            "net_usdt": -0.5977604,
+            "net_pct": -0.11955,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 11,
+            "wins": 6,
+            "losses": 5,
+            "net_usdt": 0.0911558,
+            "net_pct": 0.01823,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 4,
+            "wins": 2,
+            "losses": 2,
+            "net_usdt": 0.0185483,
+            "net_pct": 0.00371,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 75,
+            "wins": 30,
+            "losses": 45,
+            "net_usdt": -0.4880563,
+            "net_pct": -0.09761,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 60,
+            "wins": 22,
+            "losses": 38,
+            "net_usdt": -0.5977604,
+            "net_pct": -0.05978,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 11,
+            "wins": 6,
+            "losses": 5,
+            "net_usdt": 0.0911558,
+            "net_pct": 0.00912,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 4,
+            "wins": 2,
+            "losses": 2,
+            "net_usdt": 0.0185483,
+            "net_pct": 0.00185,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 75,
+            "wins": 30,
+            "losses": 45,
+            "net_usdt": -0.4880563,
+            "net_pct": -0.04881,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        }
+      }
+    },
+    {
+      "side": "SHORT",
+      "rank": 7,
+      "passed_validation": false,
+      "rule": {
+        "side": "SHORT",
+        "thresholds": {
+          "width_pct": 0.8501689266310642,
+          "body_pct": 0.5737344032235636,
+          "atr_pct": 0.5211590772924151
+        },
+        "quartiles": {
+          "width": 25,
+          "body": 75,
+          "atr": 50
+        },
+        "pattern": "momentum3"
+      },
+      "n_candidates": 195,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 166,
+            "wins": 75,
+            "losses": 91,
+            "net_usdt": -0.9141291,
+            "net_pct": -4.57065,
+            "risk_stop": false,
+            "rejected": {
+              "restart_pivots": 1,
+              "free_bankroll_below_5": 5
+            }
+          },
+          "validation": {
+            "n": 15,
+            "wins": 10,
+            "losses": 5,
+            "net_usdt": 0.0876169,
+            "net_pct": 0.43808,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 8,
+            "wins": 4,
+            "losses": 4,
+            "net_usdt": -0.0258202,
+            "net_pct": -0.1291,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 189,
+            "wins": 89,
+            "losses": 100,
+            "net_usdt": -0.8523324,
+            "net_pct": -4.26166,
+            "risk_stop": false,
+            "rejected": {
+              "restart_pivots": 1,
+              "free_bankroll_below_5": 5
+            }
+          }
+        },
+        "100": {
+          "train": {
+            "n": 168,
+            "wins": 77,
+            "losses": 91,
+            "net_usdt": -0.7365143,
+            "net_pct": -0.73651,
+            "risk_stop": false,
+            "rejected": {
+              "restart_pivots": 1,
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 15,
+            "wins": 10,
+            "losses": 5,
+            "net_usdt": 0.0876169,
+            "net_pct": 0.08762,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 8,
+            "wins": 4,
+            "losses": 4,
+            "net_usdt": -0.0258202,
+            "net_pct": -0.02582,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 191,
+            "wins": 91,
+            "losses": 100,
+            "net_usdt": -0.6747176,
+            "net_pct": -0.67472,
+            "risk_stop": false,
+            "rejected": {
+              "restart_pivots": 1,
+              "four_slots": 3
+            }
+          }
+        },
+        "500": {
+          "train": {
+            "n": 168,
+            "wins": 77,
+            "losses": 91,
+            "net_usdt": -0.7365143,
+            "net_pct": -0.1473,
+            "risk_stop": false,
+            "rejected": {
+              "restart_pivots": 1,
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 15,
+            "wins": 10,
+            "losses": 5,
+            "net_usdt": 0.0876169,
+            "net_pct": 0.01752,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 8,
+            "wins": 4,
+            "losses": 4,
+            "net_usdt": -0.0258202,
+            "net_pct": -0.00516,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 191,
+            "wins": 91,
+            "losses": 100,
+            "net_usdt": -0.6747176,
+            "net_pct": -0.13494,
+            "risk_stop": false,
+            "rejected": {
+              "restart_pivots": 1,
+              "four_slots": 3
+            }
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 168,
+            "wins": 77,
+            "losses": 91,
+            "net_usdt": -0.7365143,
+            "net_pct": -0.07365,
+            "risk_stop": false,
+            "rejected": {
+              "restart_pivots": 1,
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 15,
+            "wins": 10,
+            "losses": 5,
+            "net_usdt": 0.0876169,
+            "net_pct": 0.00876,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 8,
+            "wins": 4,
+            "losses": 4,
+            "net_usdt": -0.0258202,
+            "net_pct": -0.00258,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 191,
+            "wins": 91,
+            "losses": 100,
+            "net_usdt": -0.6747176,
+            "net_pct": -0.06747,
+            "risk_stop": false,
+            "rejected": {
+              "restart_pivots": 1,
+              "four_slots": 3
+            }
+          }
+        }
+      }
+    },
+    {
+      "side": "SHORT",
+      "rank": 8,
+      "passed_validation": false,
+      "rule": {
+        "side": "SHORT",
+        "thresholds": {
+          "width_pct": 1.3339765235568453,
+          "body_pct": 0.5737344032235636,
+          "atr_pct": 0.34888716308523454
+        },
+        "quartiles": {
+          "width": 50,
+          "body": 75,
+          "atr": 25
+        },
+        "pattern": "same_5_2"
+      },
+      "n_candidates": 69,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 54,
+            "wins": 20,
+            "losses": 34,
+            "net_usdt": -0.5068225,
+            "net_pct": -2.53411,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 4
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 4,
+            "losses": 4,
+            "net_usdt": 0.0825308,
+            "net_pct": 0.41265,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 3,
+            "wins": 2,
+            "losses": 1,
+            "net_usdt": 0.0493806,
+            "net_pct": 0.2469,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 65,
+            "wins": 26,
+            "losses": 39,
+            "net_usdt": -0.374911,
+            "net_pct": -1.87456,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 4
+            }
+          }
+        },
+        "100": {
+          "train": {
+            "n": 55,
+            "wins": 21,
+            "losses": 34,
+            "net_usdt": -0.4586106,
+            "net_pct": -0.45861,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 4,
+            "losses": 4,
+            "net_usdt": 0.0825308,
+            "net_pct": 0.08253,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 3,
+            "wins": 2,
+            "losses": 1,
+            "net_usdt": 0.0493806,
+            "net_pct": 0.04938,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 66,
+            "wins": 27,
+            "losses": 39,
+            "net_usdt": -0.3266991,
+            "net_pct": -0.3267,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        },
+        "500": {
+          "train": {
+            "n": 55,
+            "wins": 21,
+            "losses": 34,
+            "net_usdt": -0.4586106,
+            "net_pct": -0.09172,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 4,
+            "losses": 4,
+            "net_usdt": 0.0825308,
+            "net_pct": 0.01651,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 3,
+            "wins": 2,
+            "losses": 1,
+            "net_usdt": 0.0493806,
+            "net_pct": 0.00988,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 66,
+            "wins": 27,
+            "losses": 39,
+            "net_usdt": -0.3266991,
+            "net_pct": -0.06534,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 55,
+            "wins": 21,
+            "losses": 34,
+            "net_usdt": -0.4586106,
+            "net_pct": -0.04586,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 8,
+            "wins": 4,
+            "losses": 4,
+            "net_usdt": 0.0825308,
+            "net_pct": 0.00825,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 3,
+            "wins": 2,
+            "losses": 1,
+            "net_usdt": 0.0493806,
+            "net_pct": 0.00494,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 66,
+            "wins": 27,
+            "losses": 39,
+            "net_usdt": -0.3266991,
+            "net_pct": -0.03267,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        }
+      }
+    },
+    {
+      "side": "SHORT",
+      "rank": 9,
+      "passed_validation": false,
+      "rule": {
+        "side": "SHORT",
+        "thresholds": {
+          "width_pct": 1.3339765235568453,
+          "body_pct": 0.15904756205131765,
+          "atr_pct": 0.5211590772924151
+        },
+        "quartiles": {
+          "width": 50,
+          "body": 25,
+          "atr": 50
+        },
+        "pattern": "same_5_2"
+      },
+      "n_candidates": 137,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 109,
+            "wins": 37,
+            "losses": 72,
+            "net_usdt": -0.7164099,
+            "net_pct": -3.58205,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 4
+            }
+          },
+          "validation": {
+            "n": 14,
+            "wins": 7,
+            "losses": 7,
+            "net_usdt": 0.0741096,
+            "net_pct": 0.37055,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 10,
+            "wins": 4,
+            "losses": 6,
+            "net_usdt": 0.0186148,
+            "net_pct": 0.09307,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 133,
+            "wins": 48,
+            "losses": 85,
+            "net_usdt": -0.6236854,
+            "net_pct": -3.11843,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 4
+            }
+          }
+        },
+        "100": {
+          "train": {
+            "n": 110,
+            "wins": 38,
+            "losses": 72,
+            "net_usdt": -0.6681979,
+            "net_pct": -0.6682,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 14,
+            "wins": 7,
+            "losses": 7,
+            "net_usdt": 0.0741096,
+            "net_pct": 0.07411,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 10,
+            "wins": 4,
+            "losses": 6,
+            "net_usdt": 0.0186148,
+            "net_pct": 0.01861,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 134,
+            "wins": 49,
+            "losses": 85,
+            "net_usdt": -0.5754735,
+            "net_pct": -0.57547,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        },
+        "500": {
+          "train": {
+            "n": 110,
+            "wins": 38,
+            "losses": 72,
+            "net_usdt": -0.6681979,
+            "net_pct": -0.13364,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 14,
+            "wins": 7,
+            "losses": 7,
+            "net_usdt": 0.0741096,
+            "net_pct": 0.01482,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 10,
+            "wins": 4,
+            "losses": 6,
+            "net_usdt": 0.0186148,
+            "net_pct": 0.00372,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 134,
+            "wins": 49,
+            "losses": 85,
+            "net_usdt": -0.5754735,
+            "net_pct": -0.11509,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 110,
+            "wins": 38,
+            "losses": 72,
+            "net_usdt": -0.6681979,
+            "net_pct": -0.06682,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 14,
+            "wins": 7,
+            "losses": 7,
+            "net_usdt": 0.0741096,
+            "net_pct": 0.00741,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 10,
+            "wins": 4,
+            "losses": 6,
+            "net_usdt": 0.0186148,
+            "net_pct": 0.00186,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 134,
+            "wins": 49,
+            "losses": 85,
+            "net_usdt": -0.5754735,
+            "net_pct": -0.05755,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        }
+      }
+    },
+    {
+      "side": "SHORT",
+      "rank": 10,
+      "passed_validation": false,
+      "rule": {
+        "side": "SHORT",
+        "thresholds": {
+          "width_pct": 0.8501689266310642,
+          "body_pct": 0.15904756205131765,
+          "atr_pct": 0.5211590772924151
+        },
+        "quartiles": {
+          "width": 25,
+          "body": 25,
+          "atr": 50
+        },
+        "pattern": "same_5_2"
+      },
+      "n_candidates": 154,
+      "outcomes": {
+        "20": {
+          "train": {
+            "n": 121,
+            "wins": 43,
+            "losses": 78,
+            "net_usdt": -0.7697117,
+            "net_pct": -3.84856,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 4
+            }
+          },
+          "validation": {
+            "n": 16,
+            "wins": 8,
+            "losses": 8,
+            "net_usdt": 0.0681784,
+            "net_pct": 0.34089,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 13,
+            "wins": 5,
+            "losses": 8,
+            "net_usdt": -0.0271121,
+            "net_pct": -0.13556,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 150,
+            "wins": 56,
+            "losses": 94,
+            "net_usdt": -0.7286454,
+            "net_pct": -3.64323,
+            "risk_stop": false,
+            "rejected": {
+              "free_bankroll_below_5": 4
+            }
+          }
+        },
+        "100": {
+          "train": {
+            "n": 122,
+            "wins": 44,
+            "losses": 78,
+            "net_usdt": -0.7214998,
+            "net_pct": -0.7215,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 16,
+            "wins": 8,
+            "losses": 8,
+            "net_usdt": 0.0681784,
+            "net_pct": 0.06818,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 13,
+            "wins": 5,
+            "losses": 8,
+            "net_usdt": -0.0271121,
+            "net_pct": -0.02711,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 151,
+            "wins": 57,
+            "losses": 94,
+            "net_usdt": -0.6804335,
+            "net_pct": -0.68043,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        },
+        "500": {
+          "train": {
+            "n": 122,
+            "wins": 44,
+            "losses": 78,
+            "net_usdt": -0.7214998,
+            "net_pct": -0.1443,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 16,
+            "wins": 8,
+            "losses": 8,
+            "net_usdt": 0.0681784,
+            "net_pct": 0.01364,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 13,
+            "wins": 5,
+            "losses": 8,
+            "net_usdt": -0.0271121,
+            "net_pct": -0.00542,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 151,
+            "wins": 57,
+            "losses": 94,
+            "net_usdt": -0.6804335,
+            "net_pct": -0.13609,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        },
+        "1000": {
+          "train": {
+            "n": 122,
+            "wins": 44,
+            "losses": 78,
+            "net_usdt": -0.7214998,
+            "net_pct": -0.07215,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          },
+          "validation": {
+            "n": 16,
+            "wins": 8,
+            "losses": 8,
+            "net_usdt": 0.0681784,
+            "net_pct": 0.00682,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "test": {
+            "n": 13,
+            "wins": 5,
+            "losses": 8,
+            "net_usdt": -0.0271121,
+            "net_pct": -0.00271,
+            "risk_stop": false,
+            "rejected": {}
+          },
+          "all90": {
+            "n": 151,
+            "wins": 57,
+            "losses": 94,
+            "net_usdt": -0.6804335,
+            "net_pct": -0.06804,
+            "risk_stop": false,
+            "rejected": {
+              "four_slots": 3
+            }
+          }
+        }
+      }
+    }
+  ],
+  "combined_validated_only": {
+    "20": {
+      "train": {
+        "n": 81,
+        "wins": 44,
+        "losses": 37,
+        "net_usdt": 0.0062861,
+        "net_pct": 0.03143,
+        "risk_stop": false,
+        "rejected": {
+          "free_bankroll_below_5": 1
+        }
+      },
+      "validation": {
+        "n": 11,
+        "wins": 7,
+        "losses": 4,
+        "net_usdt": 0.0001827,
+        "net_pct": 0.00091,
+        "risk_stop": false,
+        "rejected": {}
+      },
+      "test": {
+        "n": 6,
+        "wins": 3,
+        "losses": 3,
+        "net_usdt": -0.0568157,
+        "net_pct": -0.28408,
+        "risk_stop": false,
+        "rejected": {}
+      },
+      "all90": {
+        "n": 98,
+        "wins": 54,
+        "losses": 44,
+        "net_usdt": -0.0503469,
+        "net_pct": -0.25173,
+        "risk_stop": false,
+        "rejected": {
+          "free_bankroll_below_5": 1
+        }
+      }
+    },
+    "100": {
+      "train": {
+        "n": 82,
+        "wins": 45,
+        "losses": 37,
+        "net_usdt": 0.0068023,
+        "net_pct": 0.0068,
+        "risk_stop": false,
+        "rejected": {}
+      },
+      "validation": {
+        "n": 11,
+        "wins": 7,
+        "losses": 4,
+        "net_usdt": 0.0001827,
+        "net_pct": 0.00018,
+        "risk_stop": false,
+        "rejected": {}
+      },
+      "test": {
+        "n": 6,
+        "wins": 3,
+        "losses": 3,
+        "net_usdt": -0.0568157,
+        "net_pct": -0.05682,
+        "risk_stop": false,
+        "rejected": {}
+      },
+      "all90": {
+        "n": 99,
+        "wins": 55,
+        "losses": 44,
+        "net_usdt": -0.0498308,
+        "net_pct": -0.04983,
+        "risk_stop": false,
+        "rejected": {}
+      }
+    },
+    "500": {
+      "train": {
+        "n": 82,
+        "wins": 45,
+        "losses": 37,
+        "net_usdt": 0.0068023,
+        "net_pct": 0.00136,
+        "risk_stop": false,
+        "rejected": {}
+      },
+      "validation": {
+        "n": 11,
+        "wins": 7,
+        "losses": 4,
+        "net_usdt": 0.0001827,
+        "net_pct": 4e-05,
+        "risk_stop": false,
+        "rejected": {}
+      },
+      "test": {
+        "n": 6,
+        "wins": 3,
+        "losses": 3,
+        "net_usdt": -0.0568157,
+        "net_pct": -0.01136,
+        "risk_stop": false,
+        "rejected": {}
+      },
+      "all90": {
+        "n": 99,
+        "wins": 55,
+        "losses": 44,
+        "net_usdt": -0.0498308,
+        "net_pct": -0.00997,
+        "risk_stop": false,
+        "rejected": {}
+      }
+    },
+    "1000": {
+      "train": {
+        "n": 82,
+        "wins": 45,
+        "losses": 37,
+        "net_usdt": 0.0068023,
+        "net_pct": 0.00068,
+        "risk_stop": false,
+        "rejected": {}
+      },
+      "validation": {
+        "n": 11,
+        "wins": 7,
+        "losses": 4,
+        "net_usdt": 0.0001827,
+        "net_pct": 2e-05,
+        "risk_stop": false,
+        "rejected": {}
+      },
+      "test": {
+        "n": 6,
+        "wins": 3,
+        "losses": 3,
+        "net_usdt": -0.0568157,
+        "net_pct": -0.00568,
+        "risk_stop": false,
+        "rejected": {}
+      },
+      "all90": {
+        "n": 99,
+        "wins": 55,
+        "losses": 44,
+        "net_usdt": -0.0498308,
+        "net_pct": -0.00498,
+        "risk_stop": false,
+        "rejected": {}
+      }
+    }
+  },
+  "cautions": [
+    "No historical bid/ask or funding; assumes 0.06% per side commissions and 0.025% per side modeled slippage.",
+    "No future bars in signals. Candle patterns use signal candle and up to five older candles.",
+    "ALL90 includes in-sample and must not be used to select strategies.",
+    "Small validation samples or failure to validate mean do not infer profit.",
+    "Only frozen current-TOP200 universe; not historical dynamic ranking.",
+    "Trades use original LIVE replay counterfactual fills; possible model artifacts remain.",
+    "Filter search bounded to the declared thresholds and candle pattern family, not exhaustive across all indicators."
+  ]
+}
