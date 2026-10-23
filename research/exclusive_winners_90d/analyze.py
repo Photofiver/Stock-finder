@@ -114,7 +114,7 @@ def main():
         trainwin=mask(side,'train','win');trainloss=mask(side,'train','loss')
         valwin=mask(side,'validation','win');valloss=mask(side,'validation','loss')
         testwin=mask(side,'test','win');testloss=mask(side,'test','loss')
-        allwin=scope&masks[('outcome','win');allloss=scope&masks[('outcome','loss')
+        allwin=scope&masks[('outcome','win')];allloss=scope&masks[('outcome','loss')]
         atom_counts=[]
         for feat,op,t,b in choices:
             tw,tl=count(b,trainwin,trainloss)
@@ -143,7 +143,7 @@ def main():
             aw,al=count(b,allwin,allloss)
             atoms=[[choices[z][0],choices[z][1],round(choices[z][2],10)] for z in ids]
             row=dict(rule=atoms,train=[tw,tl],validation=[vw,vl],test=[hw,hl],all90=[aw,al],
-                     training_net=round(sum(d[i]['net'] for i in range(len(d)) if (b>>i)&1 and d[i]['side']==side and split(d[i])=='train'),6) if tw>=6 and n<=2 else None)
+                     training_net=None)
             if aw>=2 and al==0:full_exclusive.append(row)
             if tw>=8 and tl==0:training_exclusive.append(row)
             if tw>=10 and tl<=1 and vw>=3 and vl==0:
