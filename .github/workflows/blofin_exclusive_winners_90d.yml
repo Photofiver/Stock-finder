@@ -1,0 +1,60 @@
+name: BloFin winner-exclusive 90d audit (READ ONLY)
+on:
+  push:
+    branches:
+      - research/exclusive-winners-90d-20261023
+    paths:
+      - '.github/workflows/blofin_exclusive_winners_90d.yml'
+      - 'research/exclusive_winners_90d/analyze.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: exclusive-win-90d
+  cancel-in-progress: false
+
+jobs:
+  exclusive-win-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 59
+    steps:
+      - name: Checkout frozen previous 90-day candidate dataset and analyzer
+        uses: actions/checkout@v4
+        with:
+          ref: research/exclusive-winners-90d-20261023
+          sparse-checkout: |
+            research/capital_replay_20261023/candidate_parts
+            research/exclusive_winners_90d
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Execute read-only exact 90d historical winner overlap analysis
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile research/exclusive_winners_90d/analyze.py
+          python research/exclusive_winners_90d/analyze.py
+      - name: Upload report as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blofin-exclusive-winners-90d
+          path: |
+            research/exclusive_winners_90d/result.json
+            research/exclusive_winners_90d/README.md
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Commit research outcomes to separate branch, never LIVE
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add research/exclusive_winners_90d/result.json research/exclusive_winners_90d/README.md
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Save exact winner-only indicator overlaps and forward-holdout check [skip ci]'
+          git push origin HEAD:research/exclusive-winners-90d-20261023
