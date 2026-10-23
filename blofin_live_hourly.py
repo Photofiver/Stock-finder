@@ -102,6 +102,18 @@ def clean_decimal(value):
     return text.rstrip("0").rstrip(".") if "." in text else text
 
 
+def format_closed_pnl_pct(amount_usdt, notional_usdt):
+    """Signed return as % of filled position notional; never estimate missing values."""
+    try:
+        amount = d(amount_usdt)
+        notional = d(notional_usdt or "0")
+        if not amount.is_finite() or not notional.is_finite() or notional <= 0:
+            return "n/a"
+        return f"{amount * Decimal('100') / notional:+.3f}%"
+    except (ArithmeticError, ValueError, TypeError):
+        return "n/a"
+
+
 def floor_step(value, step):
     value, step = d(value), d(step)
     if step <= 0:
@@ -2186,10 +2198,15 @@ def record_closed(state, reason_hint=None):
 
     append_pattern_audit(pos, result, closed_ms, net_pnl)
 
+    notional_usdt = pos.get("notional_usdt")
+    gross_pct = format_closed_pnl_pct(gross_pnl, notional_usdt)
+    fee_pct = format_closed_pnl_pct(fee, notional_usdt)
+    net_pct = format_closed_pnl_pct(net_pnl, notional_usdt)
     notify(
         f"{result} {pos['side']} {pos['inst']} | {reason} | "
-        f"gross {gross_pnl:+.4f} USDT | fee {fee:.4f} USDT | "
-        f"NET {net_pnl:+.4f} USDT | held {hold_minutes:.1f} min | "
+        f"gross {gross_pnl:+.4f} USDT ({gross_pct}) | "
+        f"fee {fee:.4f} USDT ({fee_pct}) | "
+        f"NET {net_pnl:+.4f} USDT ({net_pct}) | held {hold_minutes:.1f} min | "
         f"exit {hist.get('closeAveragePrice')}" + review_note,
         "BloFin LIVE RESULT",
         attachment_path=exit_chart,
