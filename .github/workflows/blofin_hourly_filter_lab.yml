@@ -92,3 +92,23 @@ jobs:
             -H 'Priority: 3' \
             --data-binary @research/blofin_hourly_filter_lab/latest.txt \
             "https://ntfy.sh/$NTFY_TOPIC"
+
+
+  smoke:
+    name: Analyze real saved trades without publishing
+    if: github.ref != 'refs/heads/main'
+    needs: tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            blofin_live_state.json
+            blofin_hourly_filter_lab.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dry run analysis on current historical state
+        run: python blofin_hourly_filter_lab.py --out /tmp/hourly-research-smoke
