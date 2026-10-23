@@ -11,19 +11,19 @@ Baseline reproduction (all 90 days): {"20": {"observed_net": -2.050609, "expecte
 ## Top variations chosen on training/validation, NEVER on independent test
 1. tp1.2_sl0.2_h60: validation 831 trades, 174W/657L, -4.67364 USDT; TEST 777 trades, 172W/605L, -4.18101 USDT
 2. tp0.8_sl0.2_h60: validation 841 trades, 200W/641L, -4.82142 USDT; TEST 786 trades, 182W/604L, -5.15065 USDT
-3. tp0.6_sl0.2_h60: validation 848 trades, 232W/616L, -5.00323 USDT; TEST 790 trades, 208W/582L, -5.40030 USDT
-4. tp1.2_sl0.2_h30_be0.35: validation 852 trades, 162W/690L, -5.00462 USDT; TEST 792 trades, 159W/633L, -4.46518 USDT
-5. tp1.2_sl0.35_h60: validation 808 trades, 229W/579L, -5.05865 USDT; TEST 752 trades, 241W/511L, -3.91368 USDT
-6. tp0.8_sl0.2_h30_be0.5: validation 853 trades, 198W/655L, -5.05998 USDT; TEST 792 trades, 183W/609L, -4.93725 USDT
-7. tp0.8_sl0.2_h30_be0.35: validation 854 trades, 178W/676L, -5.07052 USDT; TEST 793 trades, 165W/628L, -4.95036 USDT
-8. tp1.2_sl0.2_h30_be0.5: validation 851 trades, 180W/671L, -5.08176 USDT; TEST 790 trades, 177W/613L, -4.41966 USDT
-9. tp1.2_sl0.2_h20_be0.35: validation 858 trades, 188W/670L, -5.21627 USDT; TEST 793 trades, 185W/608L, -4.67783 USDT
-10. tp0.8_sl0.35_h60: validation 825 trades, 264W/561L, -5.26574 USDT; TEST 764 trades, 255W/509L, -4.83872 USDT
-11. tp1.2_sl0.2_h30_be0.2: validation 858 trades, 124W/734L, -5.26890 USDT; TEST 793 trades, 129W/664L, -4.34921 USDT
-12. tp1.2_sl0.2_h20_be0.5: validation 858 trades, 199W/659L, -5.28470 USDT; TEST 793 trades, 200W/593L, -4.62675 USDT
-13. tp0.8_sl0.2_h30_be0.2: validation 858 trades, 139W/719L, -5.31792 USDT; TEST 794 trades, 134W/660L, -4.83791 USDT
-14. tp0.8_sl0.2_h30: validation 852 trades, 208W/644L, -5.32475 USDT; TEST 792 trades, 194W/598L, -5.01670 USDT
-15. tp0.6_sl0.2_h30_be0.35: validation 857 trades, 202W/655L, -5.33626 USDT; TEST 793 trades, 180W/613L, -5.26661 USDT
+3. tp1.2_sl0.2_h30_be0.35: validation 852 trades, 272W/580L, -4.91955 USDT; TEST 791 trades, 244W/547L, -4.33945 USDT
+4. tp0.8_sl0.2_h30_be0.35: validation 853 trades, 272W/581L, -4.96351 USDT; TEST 793 trades, 244W/549L, -4.83527 USDT
+5. tp0.6_sl0.2_h60: validation 848 trades, 232W/616L, -5.00323 USDT; TEST 790 trades, 208W/582L, -5.40030 USDT
+6. tp1.2_sl0.2_h30_be0.2: validation 856 trades, 303W/553L, -5.03057 USDT; TEST 792 trades, 286W/506L, -4.06778 USDT
+7. tp0.8_sl0.2_h30_be0.5: validation 853 trades, 244W/609L, -5.05050 USDT; TEST 792 trades, 217W/575L, -4.84588 USDT
+8. tp1.2_sl0.35_h60: validation 808 trades, 229W/579L, -5.05865 USDT; TEST 752 trades, 241W/511L, -3.91368 USDT
+9. tp0.8_sl0.2_h30_be0.2: validation 856 trades, 303W/553L, -5.06739 USDT; TEST 794 trades, 286W/508L, -4.54732 USDT
+10. tp1.2_sl0.2_h30_be0.5: validation 852 trades, 244W/608L, -5.09160 USDT; TEST 789 trades, 217W/572L, -4.27259 USDT
+11. tp1.2_sl0.2_h20_be0.2: validation 859 trades, 287W/572L, -5.15080 USDT; TEST 794 trades, 276W/518L, -4.24944 USDT
+12. tp1.2_sl0.2_h20_be0.35: validation 858 trades, 256W/602L, -5.17110 USDT; TEST 793 trades, 235W/558L, -4.52368 USDT
+13. tp0.8_sl0.35_h60: validation 825 trades, 264W/561L, -5.26574 USDT; TEST 764 trades, 255W/509L, -4.83872 USDT
+14. tp1.2_sl0.2_h20_be0.5: validation 858 trades, 238W/620L, -5.28018 USDT; TEST 793 trades, 222W/571L, -4.48967 USDT
+15. tp0.6_sl0.2_h30_be0.35: validation 856 trades, 273W/583L, -5.29101 USDT; TEST 793 trades, 244W/549L, -5.16165 USDT
 
 ## Limitations
 5m OHLC cannot reproduce broker fills or unknown intra-bar order; cost model is estimated, not verified exact fills.
