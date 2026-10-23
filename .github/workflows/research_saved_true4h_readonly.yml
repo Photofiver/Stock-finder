@@ -1,0 +1,39 @@
+name: Audit archived real 4H (read-only)
+
+on:
+  push:
+    branches:
+      - research-real-4h-20261023
+    paths:
+      - research_saved_true4h_readonly.py
+      - .github/workflows/research_saved_true4h_readonly.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  archive-4h:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            /research_real_4h_profit_readonly.py
+            /research_saved_true4h_readonly.py
+            /blofin_live_scans/
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check scripts compile
+        run: python -m py_compile research_real_4h_profit_readonly.py research_saved_true4h_readonly.py
+      - name: Reconstruct true 4H from confirmed archived JSON
+        run: python -u research_saved_true4h_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: research-archived-4h-result
+          path: research_saved_true4h_result.json
+          retention-days: 7
