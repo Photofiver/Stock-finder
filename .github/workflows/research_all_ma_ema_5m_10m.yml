@@ -1,0 +1,36 @@
+name: All 5m SMA EMA touch replay (read-only)
+on:
+  push:
+    branches:
+      - research-real-4h-20261023
+    paths:
+      - research_all_ma_ema_5m_10m_readonly.py
+      - .github/workflows/research_all_ma_ema_5m_10m.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            /research_past_34_entries.json
+            /research_extend_5m_10m_ma_readonly.py
+            /research_all_ma_ema_5m_10m_readonly.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile research scripts
+        run: python -m py_compile research_extend_5m_10m_ma_readonly.py research_all_ma_ema_5m_10m_readonly.py
+      - name: Recheck all SMA and EMA with original trades
+        run: python -u research_all_ma_ema_5m_10m_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: all-sma-ema-actual-trades
+          path: research_all_ma_ema_5m_10m_results.json
+          retention-days: 7
