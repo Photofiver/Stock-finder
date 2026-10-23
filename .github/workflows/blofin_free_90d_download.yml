@@ -1,0 +1,151 @@
+name: Download free BloFin 90-day 5m futures history (read-only)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - research/blofin-free-90d-candles-20261023
+    paths:
+      - '.github/workflows/blofin_free_90d_download.yml'
+      - 'research/blofin_free_90d_download.py'
+
+permissions:
+  contents: write
+
+jobs:
+  branch-smoke:
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: research/blofin_free_90d_download.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Free API smoke test 2 symbols 2 days
+        shell: bash
+        run: |
+          set -euo pipefail
+          python research/blofin_free_90d_download.py universe --out universe.json --limit 2 --days 2
+          python research/blofin_free_90d_download.py shard --universe universe.json --idx 0 --shards 1 --out smoke-data
+          python research/blofin_free_90d_download.py summary --universe universe.json --meta smoke-data/meta --out smoke-summary.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blofin-free-smoke-2days
+          path: |
+            universe.json
+            smoke-summary.json
+            smoke-data/candles/*.json.gz
+          retention-days: 90
+
+  universe:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: research/blofin_free_90d_download.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Select 200 USDT crypto futures ranked by CURRENT 24h change
+        run: python research/blofin_free_90d_download.py universe --out universe.json --limit 200 --days 90
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blofin-free-90d-universe
+          path: universe.json
+          retention-days: 90
+
+  history:
+    needs: universe
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: research/blofin_free_90d_download.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: blofin-free-90d-universe
+          path: .
+      - name: Download 90-day 5m OHLCV for shard
+        shell: bash
+        run: |
+          set -euo pipefail
+          python research/blofin_free_90d_download.py shard \
+            --universe universe.json --idx ${{ matrix.shard }} --shards 10 \
+            --out data
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blofin-free-90d-shard-${{ matrix.shard }}
+          path: |
+            data/meta/shard-*.json
+            data/candles/*.json.gz
+          if-no-files-found: warn
+          retention-days: 90
+
+  report:
+    needs: [universe, history]
+    if: always() && needs.universe.result == 'success' && needs.history.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          sparse-checkout: |
+            research/blofin_free_90d_download.py
+            research/blofin_free_history
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: blofin-free-90d-universe
+          path: .
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: blofin-free-90d-shard-*
+          path: data
+          merge-multiple: true
+      - name: Check completeness and persist accessible JSON report
+        shell: bash
+        run: |
+          set -euo pipefail
+          python research/blofin_free_90d_download.py summary \
+            --universe universe.json --meta data/meta \
+            --out research/blofin_free_history/latest_summary.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add --sparse research/blofin_free_history/latest_summary.json
+          git commit -m 'Save free BloFin candle download quality report [skip ci]' || exit 0
+          for attempt in 1 2 3 4 5 6; do
+            git fetch origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then
+              echo 'Published verified candle download summary to GitHub.'
+              exit 0
+            fi
+            sleep 4
+          done
+          echo 'Could not publish summary to main.' >&2
+          exit 1
