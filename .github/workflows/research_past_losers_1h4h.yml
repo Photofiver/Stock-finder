@@ -1,0 +1,40 @@
+name: Actual past losers 1H 4H replay (read-only)
+
+on:
+  push:
+    branches:
+      - research-real-4h-20261023
+    paths:
+      - research_past_34_entries.json
+      - research_past_34_extended_hold_readonly.py
+      - .github/workflows/research_past_losers_1h4h.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            /research_past_34_entries.json
+            /research_past_34_extended_hold_readonly.py
+            /blofin_live_scans/
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify offline analyzer compiles
+        run: python -m py_compile research_past_34_extended_hold_readonly.py
+      - name: Compare executed entries versus holding 1H and 4H
+        run: python -u research_past_34_extended_hold_readonly.py
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: past-34-trades-hold1h-hold4h
+          path: research_past_34_extended_hold_result.json
+          retention-days: 7
