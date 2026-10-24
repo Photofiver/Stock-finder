@@ -1,0 +1,68 @@
+name: BloFin XGBoost SHAP win-loss (READ ONLY)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/blofin-ml-winloss-20261025
+    paths:
+      - 'research/blofin_ml_winloss.py'
+      - '.github/workflows/blofin_ml_winloss_readonly.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: blofin-ml-winloss-research
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout verified trades and read-only scripts ONLY
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          persist-credentials: false
+          sparse-checkout: |
+            research/blofin_ml_winloss.py
+            blofin_hourly_filter_lab.py
+            blofin_live_state.json
+            blofin_fast_scan_events/trade_reviews
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install free open-source CPU libraries
+        run: python -m pip install 'numpy>=1.26,<3' 'pandas>=2.2,<3' 'scikit-learn>=1.5,<2' 'xgboost>=2.1,<4' 'shap>=0.46,<1'
+      - name: Verify causal candle selection and snapshot protections
+        run: python research/blofin_ml_winloss.py --self-test
+      - name: Reuse already-downloaded 90-day data; NEVER query BloFin
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39994070142
+          github-token: ${{ github.token }}
+          pattern: blofin-free-90d-shard-*
+          merge-multiple: true
+          path: existing-90d
+      - name: Train XGBoost; compare medians and SHAP on holdout
+        env:
+          BLOFIN_LIVE_ENABLED: 'false'
+        run: |
+          python -u research/blofin_ml_winloss.py \
+            --state blofin_live_state.json \
+            --reviews blofin_fast_scan_events/trade_reviews \
+            --candles existing-90d/candles \
+            --out ml-report
+      - name: Upload READ-ONLY report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blofin-ml-winloss-report
+          path: ml-report/
+          if-no-files-found: warn
+          retention-days: 7
