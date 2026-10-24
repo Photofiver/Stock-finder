@@ -11,6 +11,10 @@ import math
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
+import sys
+
+# Scripts are launched as research/foo.py; repository-root module must be importable.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np
 import pandas as pd
@@ -219,7 +223,8 @@ def run(args):
         test=list(range(b,n))
         y=np.asarray([1 if t['net']>0 else 0 for t in trades])
         cols=sorted({str(k) for t in trades for k,v in t['features'].items()
-                     if isinstance(v,(int,float,bool)) and math.isfinite(float(v))})
+                     if isinstance(v,(int,float,bool)) and math.isfinite(float(v))
+                     and not any(ch in str(k) for ch in '[]<')})
         X=pd.DataFrame([{k:float(v) for k,v in t['features'].items()
                          if k in cols and isinstance(v,(int,float,bool)) and math.isfinite(float(v))}
                         for t in trades],columns=cols,dtype=float)
