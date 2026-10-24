@@ -8,6 +8,9 @@ import csv
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+import sys
+
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
 from blofin_hourly_filter_lab import load as load_verified_history
 from research.blofin_ml_winloss import add_archive_features
