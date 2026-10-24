@@ -1,0 +1,60 @@
+name: BloFin ADX body real trades validation READ ONLY
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/blofin-ml-winloss-20261025
+    paths:
+      - 'research/blofin_adx_body_filter_check.py'
+      - '.github/workflows/blofin_adx_body_filter_readonly.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  validate-adx-body:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          persist-credentials: false
+          sparse-checkout: |
+            research/blofin_adx_body_filter_check.py
+            research/blofin_ml_winloss.py
+            blofin_hourly_filter_lab.py
+            blofin_live_state.json
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install analysis-only open-source packages
+        run: python -m pip install 'numpy>=1.26,<3' 'pandas>=2.2,<3'
+      - name: Check only closed candles were read
+        run: python research/blofin_ml_winloss.py --self-test
+      - name: Reuse previously saved 90-day candles (no BloFin calls)
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39994070142
+          github-token: ${{ github.token }}
+          pattern: blofin-free-90d-shard-*
+          merge-multiple: true
+          path: existing-90d
+      - name: Compare separate and combined ADX/body thresholds on later LIVE trades
+        run: |
+          python -u research/blofin_adx_body_filter_check.py \
+            --state blofin_live_state.json \
+            --candles existing-90d/candles \
+            --out adx-body-report
+      - name: Upload numbers and comparison as downloadable report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blofin-adx-body-result
+          path: adx-body-report/
+          retention-days: 7
+          if-no-files-found: warn
