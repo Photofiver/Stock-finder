@@ -125,15 +125,24 @@ class TestSelectedLongEntryFilter(unittest.TestCase):
                     self.signal(), {"expected_fill": price})["allowed"])
         self.assertFalse(pivot_long_entry_filter(self.signal(), {})["allowed"])
 
-    def test_new_short_no_long_only_rejection(self):
+    def test_legacy_entries_blocked_and_rsi89_short_checks_risk(self):
         from unittest.mock import Mock, patch
         import blofin_volume_flip_both_live as live
         bot = Mock()
         bot.risk_stop_active.return_value = True
         with patch.object(live, "PIVOT_ENABLED", True):
-            sig = {"inst": "TEST-USDT", "side": "SHORT"}
-            self.assertFalse(live._open_one(bot, {}, sig, {}))
-        self.assertNotEqual(sig.get("preorder_rejection"), "PIVOT_LONG_ONLY")
+            for side in ("LONG", "SHORT"):
+                with self.subTest(side=side):
+                    legacy = {"inst": "TEST-USDT", "side": side}
+                    self.assertFalse(live._open_one(bot, {}, legacy, {}))
+                    self.assertEqual(
+                        legacy.get("preorder_rejection"),
+                        "RSI89_SHORT_ONLY_NEW_ENTRIES",
+                    )
+            bot.risk_stop_active.assert_not_called()
+            rsi89 = {"inst": "TEST-USDT", "side": "SHORT",
+                     "rsi89_short_entry": True}
+            self.assertFalse(live._open_one(bot, {}, rsi89, {}))
         bot.risk_stop_active.assert_called_once()
 
 class TestSecondUpperBounce(unittest.TestCase):
