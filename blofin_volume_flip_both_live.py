@@ -1015,6 +1015,32 @@ def _readonly_rsi89_top200_audit(top200, confirmed, expected_close_ms, scan,
                     if previous:
                         record["previous_candle"] = dict(zip(
                             ("open", "high", "low", "close", "volume"), previous))
+                    record["candle_body_pct"] = (
+                        100 * (candle[3] - candle[0]) / candle[0])
+                    record["bar_range_pct"] = (
+                        100 * (candle[1] - candle[2]) / candle[3])
+                    record["volume_last5"] = [
+                        {
+                            "close_ms": ts - i * FIVE + FIVE,
+                            "volume": rows[ts - i * FIVE][4],
+                            "color": ("GREEN" if rows[ts - i * FIVE][3] >
+                                      rows[ts - i * FIVE][0] else
+                                      "RED" if rows[ts - i * FIVE][3] <
+                                      rows[ts - i * FIVE][0] else "DOJI"),
+                        }
+                        for i in range(5) if ts - i * FIVE in rows
+                    ]
+                    recent_volumes = [
+                        rows[ts - i * FIVE][4]
+                        for i in range(20) if ts - i * FIVE in rows
+                    ]
+                    for period in (5, 10, 20):
+                        record[f"volume_ma{period}"] = (
+                            sum(recent_volumes[:period]) / period
+                            if len(recent_volumes) >= period else None)
+                    if len(recent_volumes) >= 20:
+                        ordered = sorted(recent_volumes[:20])
+                        record["volume_median20"] = (ordered[9] + ordered[10]) / 2
                     mean20 = _previous20_mean(rows, ts)
                     record["volume_ma20_previous"] = mean20
                     record["volume_strength_20"] = (
@@ -1022,6 +1048,11 @@ def _readonly_rsi89_top200_audit(top200, confirmed, expected_close_ms, scan,
                     indicators = _readonly_entry_indicators(
                         bars, expected_close_ms, "SHORT", candle[3])
                     record["indicators"] = indicators
+                    for length in (10, 20):
+                        sma = indicators.get(f"sma{length}")
+                        record[f"close_vs_sma{length}_pct"] = (
+                            100 * (candle[3] / float(sma) - 1)
+                            if sma is not None and float(sma) > 0 else None)
                     before, current = (indicators.get("rsi14_previous"),
                                        indicators.get("rsi14"))
                     if (before is None or current is None
