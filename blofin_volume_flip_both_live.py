@@ -27,6 +27,7 @@ from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 STRATEGY = "VOLUME_FLIP_BOTH_5M_V1"
 PIVOT_ENABLED = os.getenv("LIVE_PIVOT_TUNNEL_ENABLED", "false").strip().lower() == "true"
 SHORT_RSI_TRIGGER = 89.0
+RSI89_SHORT_ONLY_NEW_ENTRIES = True  # Disable all new legacy LONG/tunnel entries; preserve existing positions.
 RSI89_TP_ONLY_MODE = "RSI89_SHORT_TP_ONLY"
 RSI89_TP_GROSS_PCT = Decimal("0.01")  # 1% gross price move, no SL.
 RSI89_RISK_RESET_TOKEN = "rsi89-short-2026-10-26"
@@ -1591,6 +1592,9 @@ def _open_one(bot, state, sig, instruments):
     if side not in ("LONG","SHORT"):
         return False
     rsi89_short_entry = side == "SHORT" and sig.get("rsi89_short_entry") is True
+    if RSI89_SHORT_ONLY_NEW_ENTRIES and not rsi89_short_entry:
+        sig["preorder_rejection"] = "RSI89_SHORT_ONLY_NEW_ENTRIES"
+        return False
     pivot_mode = (PIVOT_ENABLED or bool(sig.get("pivot_tunnel_entry"))) and not rsi89_short_entry
     if bot.risk_stop_active(state):
         return False
@@ -2237,6 +2241,10 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
             if rsi_short is not None:
                 matches.append(rsi_short)
                 continue
+            if RSI89_SHORT_ONLY_NEW_ENTRIES:
+                # Existing LONG positions retain broker TP/SL and original exits.
+                # New entries use only RSI89 SHORT with exchange TP 1% gross, no SL.
+                continue
             tunnel = evaluate_tunnel(
                 rows, expected_close_ms, int(pivot_restart.get(inst) or 0))
             if not tunnel["entry_allowed"]:
@@ -2308,7 +2316,8 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         matches = sorted(matches, key=lambda sig: (
             0 if sig.get("rsi89_short_entry") else 1,
             -sig["volume_strength_20"], sig["rank"], sig["inst"]))
-        scan["selection_priority"] = "RSI89_SHORT_FIRST_THEN_PIVOT_LONG_VOLUME_STRENGTH"
+        scan["selection_priority"] = ("RSI89_SHORT_ONLY" if RSI89_SHORT_ONLY_NEW_ENTRIES
+                                      else "RSI89_SHORT_FIRST_THEN_PIVOT_LONG_VOLUME_STRENGTH")
         scan["entry_volume_trend_filter"] = "PREVIOUS_RED_TO_LARGER_GREEN_OR_GREEN_TO_LARGER_RED"
         scan["matched"] = len(matches)
         scan["candidates"] = matches[:20]
