@@ -26,6 +26,8 @@ from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 
 STRATEGY = "VOLUME_FLIP_BOTH_5M_V1"
 PIVOT_ENABLED = os.getenv("LIVE_PIVOT_TUNNEL_ENABLED", "false").strip().lower() == "true"
+SHORT_RSI_TRIGGER = 89.0
+RSI89_RISK_RESET_TOKEN = "rsi89-short-2026-10-26"
 LEGACY_STRATEGY = "REV_SHORT_20W_LONG_VOLUME_V1"
 HOLD_POLICY = "VOLUME_FLIP_BOTH_NO_TPSL"
 TUNNEL_TPSL_MODE = "TUNNEL_LINES_AT_ENTRY"
@@ -912,6 +914,56 @@ def entry_signal(bot, bars, expected_close_ms):
     }
 
 
+def short_rsi89_signal(bot, bars, expected_close_ms, rank, inst):
+    """SHORT solely when closed 5m RSI14 crosses upward through 89."""
+    ts = int(expected_close_ms) - FIVE
+    rows = _by_ts(bars, int(expected_close_ms))
+    recent = []
+    for offset in range(200):
+        bar = rows.get(ts - offset * FIVE)
+        if bar is None:
+            break
+        recent.append({"c": bar[3]})
+    if len(recent) < 16:
+        return None
+    recent.reverse()
+    rsi = bot.rsi_wilder(recent, 14)
+    previous, current = rsi[-2], rsi[-1]
+    if (previous is None or current is None
+            or not (previous < SHORT_RSI_TRIGGER <= current)):
+        return None
+    candle = rows[ts]
+    mean20 = _previous20_mean(rows, ts)
+    return {
+        "inst": inst, "rank": rank, "side": "SHORT",
+        "strategy": STRATEGY, "rsi89_short_entry": True,
+        "signal_close_ms": int(expected_close_ms),
+        "signal_candle_ts": ts, "close": candle[3],
+        "signal_volume": candle[4],
+        "signal_mean20_prev": mean20,
+        "volume_strength_20": candle[4] / mean20 if mean20 and mean20 > 0 else 0.0,
+        "rsi14": current, "rsi14_previous": previous,
+        "indicator_timeframe": "5m",
+        "indicator_signal_close_ms": int(expected_close_ms),
+        "indicator_status": "OK",
+    }
+
+
+def reset_rsi89_risk_limit_once(bot, state):
+    """One-time risk reset without erasing realized profit/loss history."""
+    if state.get("rsi89_risk_reset_token") == RSI89_RISK_RESET_TOKEN:
+        return
+    state["bankroll_start_usdt"] = bot.clean_decimal(bot.MAX_NOTIONAL_USDT)
+    state["bankroll_pnl_baseline_usdt"] = str(state.get("realized_pnl_usdt") or "0")
+    state["risk_stop_triggered"] = False
+    for field in ("risk_stop_triggered_ms", "risk_stop_bankroll_usdt",
+                  "risk_stop_threshold_usdt"):
+        state.pop(field, None)
+    state["rsi89_risk_reset_token"] = RSI89_RISK_RESET_TOKEN
+    state["rsi89_risk_reset_at_ms"] = bot.now_ms()
+    bot.save_state(state)
+
+
 LONG_ENTRY_MAX_RANK = 200
 
 
@@ -1516,7 +1568,8 @@ def _open_one(bot, state, sig, instruments):
     side = sig["side"]
     if side not in ("LONG","SHORT"):
         return False
-    pivot_mode = PIVOT_ENABLED or bool(sig.get("pivot_tunnel_entry"))
+    rsi89_short_entry = side == "SHORT" and sig.get("rsi89_short_entry") is True
+    pivot_mode = (PIVOT_ENABLED or bool(sig.get("pivot_tunnel_entry"))) and not rsi89_short_entry
     if bot.risk_stop_active(state):
         return False
     if bot.get_tracked_positions(state).get(inst):
@@ -1557,7 +1610,8 @@ def _open_one(bot, state, sig, instruments):
     target = min(MAX_PER_COIN_USDT, spendable)
     quote = bot.checked_preorder_quote(inst, side, sig["close"],
                                       enforce_adverse_gap=False)
-    quote_rejection = short_entry_extra_rejection(side, quote)
+    quote_rejection = (None if rsi89_short_entry
+                       else short_entry_extra_rejection(side, quote))
     if quote_rejection:
         # Reject before market order POST; broker protection stays untouched.
         sig["preorder_rejection"] = quote_rejection
@@ -1570,21 +1624,30 @@ def _open_one(bot, state, sig, instruments):
     # If the fill unexpectedly crosses a line, protect that filled position
     # with the existing fixed emergency levels rather than leaving it naked.
     tunnel = sig.get("volume_price_tunnel") or {}
-    if (tunnel.get("status") != "VALID"
+    if not rsi89_short_entry and (tunnel.get("status") != "VALID"
             or tunnel.get("tunnel_direction") != side
             or not tunnel.get("entry_allowed")):
         sig["preorder_rejection"] = "TUNNEL_TPSL_NOT_VALID"
         return False
     try:
-        frozen_tp = tunnel["upper_price"] if side == "LONG" else tunnel["lower_price"]
-        frozen_sl = tunnel["lower_price"] if side == "LONG" else tunnel["upper_price"]
-        tunnel_pos = {
-            "side":side, "reference_entry":str(quote["expected_fill"]),
-            "tp_sl_mode":(EARLY_TUNNEL_TP_MODE if sig.get("second_bounce_entry") else TUNNEL_TPSL_MODE),
-            "tunnel_tp_line":str(frozen_tp),
-            "tunnel_sl_line":str(frozen_sl),
-        }
-        _protection_prices(bot,tunnel_pos,meta)
+        frozen_tp = frozen_sl = None
+        if rsi89_short_entry:
+            # RSI-only entry has no tunnel. Preserve existing emergency
+            # fixed broker protection at TP +0.55% / SL -0.50% price move.
+            _protection_prices(bot, {
+                "side": "SHORT", "reference_entry": str(quote["expected_fill"]),
+                "tp_sl_mode": EMERGENCY_TPSL_MODE,
+            }, meta)
+        else:
+            frozen_tp = tunnel["upper_price"] if side == "LONG" else tunnel["lower_price"]
+            frozen_sl = tunnel["lower_price"] if side == "LONG" else tunnel["upper_price"]
+            tunnel_pos = {
+                "side":side, "reference_entry":str(quote["expected_fill"]),
+                "tp_sl_mode":(EARLY_TUNNEL_TP_MODE if sig.get("second_bounce_entry") else TUNNEL_TPSL_MODE),
+                "tunnel_tp_line":str(frozen_tp),
+                "tunnel_sl_line":str(frozen_sl),
+            }
+            _protection_prices(bot,tunnel_pos,meta)
     except (KeyError, ValueError, TypeError, ArithmeticError, RuntimeError) as exc:
         sig["preorder_rejection"] = "TUNNEL_TPSL_UNTRADEABLE"
         sig["preorder_tpsl_error"] = f"{type(exc).__name__}: {exc}"[:200]
@@ -1638,6 +1701,7 @@ def _open_one(bot, state, sig, instruments):
         "signal_rank":int(sig["rank"]),
         "signal_snapshot":dict(sig,pre_order_quote=quote),
         "strategy":STRATEGY,
+        "rsi89_short_entry": bool(rsi89_short_entry),
         "hold_policy":("PIVOT_5M_CLOSE_BREAK" if sig.get("pivot_tunnel_entry") else HOLD_POLICY),
         "pivot_tunnel":sig.get("pivot_tunnel_info"),
         "last_same_volume":sig["signal_volume"],
@@ -1648,18 +1712,22 @@ def _open_one(bot, state, sig, instruments):
         "reference_entry":"",
         "filled_size":"",
         "notional_usdt":bot.clean_decimal(expected_notional),
-        "tp":"","sl":"","tp_policy":"TUNNEL_LINE","sl_policy":"TUNNEL_LINE",
-        "tp_sl_mode":(EARLY_TUNNEL_TP_MODE if sig.get("second_bounce_entry") else TUNNEL_TPSL_MODE),
+        "tp":"","sl":"",
+        "tp_policy":(TP_POLICY if rsi89_short_entry else "TUNNEL_LINE"),
+        "sl_policy":(SL_POLICY if rsi89_short_entry else "TUNNEL_LINE"),
+        "tp_sl_mode":(EMERGENCY_TPSL_MODE if rsi89_short_entry else
+                      EARLY_TUNNEL_TP_MODE if sig.get("second_bounce_entry") else TUNNEL_TPSL_MODE),
         "second_bounce_exit": bool(sig.get("second_bounce_entry")),  # Keep second-touch as fallback; active broker TP can fill earlier.
         "tp_offset_from_tunnel_line_pct": ("0.05" if sig.get("second_bounce_entry") else "0"),
         "second_bounce_upper_count": 0,
         "second_bounce_last_upper_pivot_ms": 0,
         "second_bounce_lower_count": 0,
         "second_bounce_last_lower_pivot_ms": 0,
-        "tunnel_tp_line":str(frozen_tp),
-        "tunnel_sl_line":str(frozen_sl),
+        "tunnel_tp_line":str(frozen_tp) if frozen_tp is not None else "",
+        "tunnel_sl_line":str(frozen_sl) if frozen_sl is not None else "",
         "tunnel_reference_close_ms":int(sig["signal_close_ms"]),
-        "risk_profile":("1X_PIVOT_TUNNEL_LINES" if sig.get("pivot_tunnel_entry")
+        "risk_profile":("1X_RSI89_SHORT_FIXED_TPSL" if rsi89_short_entry else
+                        "1X_PIVOT_TUNNEL_LINES" if sig.get("pivot_tunnel_entry")
                         else "1X_VOLUME_FLIP_TUNNEL_LINES"),
         "protection_status":"AWAITING_VERIFIED_FILL",
         "code_commit":bot.CODE_COMMIT,
@@ -1875,6 +1943,7 @@ def _reconcile_pending_volume_closes(bot, state, broker_rows, scan):
 def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_confirmed_close):
     if bot.SIGNAL_MINUTES!=5 or bot.TOP_N!=200 or len(top200)!=200:
         raise RuntimeError("Volume flip LONG/SHORT requires confirmed 5m and TOP200")
+    reset_rsi89_risk_limit_once(bot, state)
     if int(state.get("last_scan_close_ms") or 0)==expected_close_ms:
         print(f"{STRATEGY}: duplicate scan skipped")
         return
@@ -2126,6 +2195,11 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
             if not bars or int(bot.bar_close_ms(bars[-1])) != expected_close_ms:
                 continue
             rows = _by_ts(bars, expected_close_ms)
+            rsi_short = short_rsi89_signal(
+                bot, bars, expected_close_ms, rank, inst)
+            if rsi_short is not None:
+                matches.append(rsi_short)
+                continue
             tunnel = evaluate_tunnel(
                 rows, expected_close_ms, int(pivot_restart.get(inst) or 0))
             if not tunnel["entry_allowed"]:
@@ -2133,6 +2207,9 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
             # LONG enters on the second confirmed LOWER pivot.
             # SHORT enters on the second confirmed UPPER pivot.
             side = tunnel["tunnel_direction"]
+            if side != "LONG":
+                # SHORT enters exclusively on RSI14 89 upward crossing.
+                continue
             entry_anchors = (tunnel.get("lower_anchors") or [] if side == "LONG"
                              else tunnel.get("upper_anchors") or [])
             if (len(entry_anchors) != 2
@@ -2191,8 +2268,10 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                 **_readonly_entry_indicators(bars, expected_close_ms, side, candle[3]),
             }
             matches.append(sig)
-        matches = prioritize_volume_signals(matches)
-        scan["selection_priority"] = "PIVOT_FOURTH_CONFIRM_CLOSE_VOLUME_STRENGTH_TIE_RANK"
+        matches = sorted(matches, key=lambda sig: (
+            0 if sig.get("rsi89_short_entry") else 1,
+            -sig["volume_strength_20"], sig["rank"], sig["inst"]))
+        scan["selection_priority"] = "RSI89_SHORT_FIRST_THEN_PIVOT_LONG_VOLUME_STRENGTH"
         scan["entry_volume_trend_filter"] = "PREVIOUS_RED_TO_LARGER_GREEN_OR_GREEN_TO_LARGER_RED"
         scan["matched"] = len(matches)
         scan["candidates"] = matches[:20]
