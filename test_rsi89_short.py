@@ -1,0 +1,77 @@
+"""Offline RSI89-only SHORT signal and one-time risk reset tests."""
+import unittest
+from decimal import Decimal
+from types import SimpleNamespace
+import blofin_live_hourly as live
+import blofin_volume_flip_both_live as strategy
+
+
+def candle_data(closes):
+    result = []
+    for i, close in enumerate(closes):
+        opening = closes[i - 1] if i else close
+        result.append({
+            "ts": i * strategy.FIVE,
+            "o": opening,
+            "h": max(opening, close) + 0.01,
+            "l": min(opening, close) - 0.01,
+            "c": close,
+            "v": 100 + i,
+        })
+    return result
+
+
+class TestShortRsi89(unittest.TestCase):
+    def setUp(self):
+        self.bot = SimpleNamespace(rsi_wilder=live.rsi_wilder)
+
+    def test_upward_crossing_opens_one_short_without_volume_or_tunnel_gate(self):
+        closes = [100 + i * 0.05 for i in range(70)] + [103.3, 104.3]
+        bars = candle_data(closes)
+        close_ms = len(bars) * strategy.FIVE
+        sig = strategy.short_rsi89_signal(self.bot, bars, close_ms, 17, "TEST-USDT")
+        self.assertIsNotNone(sig)
+        self.assertEqual(sig["side"], "SHORT")
+        self.assertTrue(sig["rsi89_short_entry"])
+        self.assertLess(sig["rsi14_previous"], 89)
+        self.assertGreaterEqual(sig["rsi14"], 89)
+        # A subsequent candle staying above 89 must not repeat the entry.
+        more = candle_data(closes + [104.35])
+        self.assertIsNone(strategy.short_rsi89_signal(
+            self.bot, more, len(more) * strategy.FIVE, 17, "TEST-USDT"))
+
+    def test_never_use_unclosed_future_candle(self):
+        closes = [100 + i * 0.05 for i in range(70)] + [103.3, 104.3]
+        bars = candle_data(closes)
+        prior_close = (len(bars) - 1) * strategy.FIVE
+        self.assertIsNone(strategy.short_rsi89_signal(
+            self.bot, bars, prior_close, 1, "TEST-USDT"))
+
+    def test_reset_is_once_and_keeps_trade_history(self):
+        saves = []
+        bot = SimpleNamespace(
+            MAX_NOTIONAL_USDT=Decimal("20"),
+            clean_decimal=lambda v: format(v, "f"),
+            now_ms=lambda: 123,
+            save_state=lambda state: saves.append(dict(state)),
+        )
+        state = {
+            "realized_pnl_usdt": "-3.5",
+            "bankroll_pnl_baseline_usdt": "0",
+            "risk_stop_triggered": True,
+            "trades": {"total": 100},
+            "trade_history": [1, 2],
+        }
+        strategy.reset_rsi89_risk_limit_once(bot, state)
+        self.assertFalse(state["risk_stop_triggered"])
+        self.assertEqual(state["bankroll_pnl_baseline_usdt"], "-3.5")
+        self.assertEqual(state["bankroll_start_usdt"], "20")
+        self.assertEqual(state["trade_history"], [1, 2])
+        state["realized_pnl_usdt"] = "-4"
+        strategy.reset_rsi89_risk_limit_once(bot, state)
+        self.assertEqual(len(saves), 1)
+        self.assertEqual(state["bankroll_pnl_baseline_usdt"], "-3.5")
+
+
+if __name__ == "__main__":
+    unittest.main()
