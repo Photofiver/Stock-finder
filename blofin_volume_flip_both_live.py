@@ -972,6 +972,191 @@ def short_rsi89_signal(bot, bars, expected_close_ms, rank, inst):
     }
 
 
+
+
+def _readonly_adx_di14(rows, signal_close_ms):
+    """Wilder ADX(14), +DI(14), -DI(14) from closed, contiguous 5m OHLC."""
+    period = 14
+    ts = int(signal_close_ms) - FIVE
+    recent = []
+    for offset in range(200):
+        bar = rows.get(ts - offset * FIVE)
+        if bar is None:
+            break
+        recent.append(bar)
+    if len(recent) < 2 * period:
+        return {"adx14": None, "di_plus14": None, "di_minus14": None}
+    recent.reverse()
+    smoothed_tr = smoothed_plus = smoothed_minus = 0.0
+    dx_values = []
+    plus_di = minus_di = 0.0
+    for i in range(1, len(recent)):
+        prev, current = recent[i-1], recent[i]
+        up = current[1] - prev[1]
+        down = prev[2] - current[2]
+        plus_dm = up if up > down and up > 0 else 0.0
+        minus_dm = down if down > up and down > 0 else 0.0
+        tr = max(current[1] - current[2],
+                 abs(current[1] - prev[3]), abs(current[2] - prev[3]))
+        if i <= period:
+            smoothed_tr += tr
+            smoothed_plus += plus_dm
+            smoothed_minus += minus_dm
+        else:
+            smoothed_tr = smoothed_tr - smoothed_tr / period + tr
+            smoothed_plus = smoothed_plus - smoothed_plus / period + plus_dm
+            smoothed_minus = smoothed_minus - smoothed_minus / period + minus_dm
+        if i >= period:
+            plus_di = 100 * smoothed_plus / smoothed_tr if smoothed_tr else 0.0
+            minus_di = 100 * smoothed_minus / smoothed_tr if smoothed_tr else 0.0
+            di_sum = plus_di + minus_di
+            dx_values.append(100 * abs(plus_di - minus_di) / di_sum if di_sum else 0.0)
+    adx = sum(dx_values[:period]) / period
+    for dx in dx_values[period:]:
+        adx = (adx * (period - 1) + dx) / period
+    return {"adx14": adx, "di_plus14": plus_di, "di_minus14": minus_di}
+
+
+def _readonly_rsi89_top200_audit(top200, confirmed, expected_close_ms, scan,
+                                 active_instruments, volume_trends):
+    """Record EVERY TOP200 coin after LIVE decisions, without any extra API calls.
+
+    All calculations use candles already confirmed at this scan's 5m close.
+    Nothing in this function may approve, reject, place or close an order.
+    """
+    ts = int(expected_close_ms) - FIVE
+    entered = set(scan.get("entries") or [])
+    candidates = {row.get("inst") for row in scan.get("candidates", [])
+                  if isinstance(row, dict)}
+    rejections = {}
+    for item in scan.get("rejections") or []:
+        if isinstance(item, dict) and item.get("inst"):
+            rejections.setdefault(item["inst"], []).append({
+                key: value for key, value in item.items()
+                if key not in ("pre_order_quote", "volume_tunnel")
+            })
+    coins = []
+    reasons = {}
+    for rank, inst in enumerate(top200, 1):
+        record = {
+            "inst": inst, "rank": rank, "signal_close_ms": int(expected_close_ms),
+            "open_position": inst in active_instruments,
+            "candidate": inst in candidates, "entry_placed": inst in entered,
+            "order_rejections": rejections.get(inst, []),
+            "volume_trend": (volume_trends.get(inst) or {}).get("trend"),
+            "rsi89_trigger": False, "rsi89_gap_points": None,
+            "reason": "NO_CONFIRMED_5M_CANDLE",
+        }
+        try:
+            bars = confirmed.get(inst)
+            if bars and int(bars[-1]["ts"]) + FIVE == expected_close_ms:
+                rows = _by_ts(bars, expected_close_ms)
+                candle, previous = rows.get(ts), rows.get(ts - FIVE)
+                if candle is None:
+                    record["reason"] = "INVALID_CONFIRMED_CANDLE"
+                else:
+                    record["candle"] = dict(zip(("open", "high", "low", "close", "volume"), candle))
+                    if previous:
+                        record["previous_candle"] = dict(zip(
+                            ("open", "high", "low", "close", "volume"), previous))
+                    record["candle_body_pct"] = (
+                        100 * (candle[3] - candle[0]) / candle[0])
+                    record["bar_range_pct"] = (
+                        100 * (candle[1] - candle[2]) / candle[3])
+                    record["volume_last5"] = [
+                        {
+                            "close_ms": ts - i * FIVE + FIVE,
+                            "volume": rows[ts - i * FIVE][4],
+                            "color": ("GREEN" if rows[ts - i * FIVE][3] >
+                                      rows[ts - i * FIVE][0] else
+                                      "RED" if rows[ts - i * FIVE][3] <
+                                      rows[ts - i * FIVE][0] else "DOJI"),
+                        }
+                        for i in range(5) if ts - i * FIVE in rows
+                    ]
+                    recent_volumes = [
+                        rows[ts - i * FIVE][4]
+                        for i in range(20) if ts - i * FIVE in rows
+                    ]
+                    for period in (5, 10, 20):
+                        record[f"volume_ma{period}"] = (
+                            sum(recent_volumes[:period]) / period
+                            if len(recent_volumes) >= period else None)
+                    if len(recent_volumes) >= 20:
+                        ordered = sorted(recent_volumes[:20])
+                        record["volume_median20"] = (ordered[9] + ordered[10]) / 2
+                    mean20 = _previous20_mean(rows, ts)
+                    record["volume_ma20_previous"] = mean20
+                    record["volume_strength_20"] = (
+                        candle[4] / mean20 if mean20 and mean20 > 0 else None)
+                    indicators = _readonly_entry_indicators(
+                        bars, expected_close_ms, "SHORT", candle[3])
+                    indicators.update(_readonly_adx_di14(rows, expected_close_ms))
+                    record["indicators"] = indicators
+                    for length in (10, 20):
+                        sma = indicators.get(f"sma{length}")
+                        record[f"close_vs_sma{length}_pct"] = (
+                            100 * (candle[3] / float(sma) - 1)
+                            if sma is not None and float(sma) > 0 else None)
+                    before, current = (indicators.get("rsi14_previous"),
+                                       indicators.get("rsi14"))
+                    if (before is None or current is None
+                            or not all(math.isfinite(float(v))
+                                       for v in (before, current))):
+                        record["reason"] = "RSI14_UNAVAILABLE"
+                    else:
+                        before, current = float(before), float(current)
+                        record["rsi89_gap_points"] = round(SHORT_RSI_TRIGGER - current, 8)
+                        record["rsi89_trigger"] = before < SHORT_RSI_TRIGGER <= current
+                        if record["rsi89_trigger"]:
+                            record["reason"] = (
+                                "RSI89_CROSS_ENTRY_PLACED" if inst in entered
+                                else "RSI89_CROSS_NO_ENTRY")
+                        elif before >= SHORT_RSI_TRIGGER:
+                            record["reason"] = "RSI89_ALREADY_HIGH_NO_FRESH_CROSS"
+                        else:
+                            record["reason"] = "RSI89_NOT_REACHED"
+        except Exception as exc:
+            record["reason"] = "AUDIT_ERROR"
+            record["error"] = f"{type(exc).__name__}: {exc}"[:180]
+        reasons[record["reason"]] = reasons.get(record["reason"], 0) + 1
+        coins.append(record)
+
+    with_rsi = [
+        item for item in coins if item["rsi89_gap_points"] is not None
+    ]
+    # The closest numerical RSI is not necessarily an actionable crossing.
+    closest = sorted(with_rsi, key=lambda x: (
+        abs(x["rsi89_gap_points"]), x["rank"]))[:10]
+    approaching = sorted(
+        (item for item in with_rsi
+         if item["reason"] == "RSI89_NOT_REACHED"
+         and item["rsi89_gap_points"] > 0),
+        key=lambda x: (x["rsi89_gap_points"], x["rank"]))[:10]
+
+    def brief(item):
+        return {
+            "inst": item["inst"], "rank": item["rank"],
+            "rsi14": item.get("indicators", {}).get("rsi14"),
+            "rsi14_previous": item.get("indicators", {}).get("rsi14_previous"),
+            "gap_to_89_points": item["rsi89_gap_points"],
+            "reason": item["reason"],
+            "open_position": item["open_position"],
+        }
+
+    return {
+        "version": 1, "signal_close_ms": int(expected_close_ms),
+        "timeframe": "5m", "rsi14_trigger": SHORT_RSI_TRIGGER,
+        "top200_count": len(top200), "confirmed_count": len(coins) -
+        reasons.get("NO_CONFIRMED_5M_CANDLE", 0),
+        "rsi_available_count": len(with_rsi),
+        "reason_counts": reasons,
+        "closest_rsi89": [brief(item) for item in closest],
+        "nearest_approaching_from_below": [brief(item) for item in approaching],
+        "coins": coins,
+    }
+
+
 def reset_rsi89_risk_limit_once(bot, state):
     """One-time risk reset without erasing realized profit/loss history."""
     if state.get("rsi89_risk_reset_token") == RSI89_RISK_RESET_TOKEN:
@@ -2478,6 +2663,18 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                     break
                 scan["rejections"].append({"inst":sig["inst"],
                     "reason":"PREORDER_REJECTION","error":str(exc)[:240]})
+    # Read-only diagnostics AFTER every order/exit decision. Failures never
+    # change execution decisions; log the audit error in the saved scan.
+    try:
+        scan["rsi89_audit"] = _readonly_rsi89_top200_audit(
+            top200, confirmed, expected_close_ms, scan,
+            set(bot.get_tracked_positions(state)) | broker_set, confirmed_trends)
+    except Exception as exc:
+        scan["rsi89_audit"] = {
+            "version": 1, "signal_close_ms": int(expected_close_ms),
+            "status": "AUDIT_ERROR", "coins": [],
+            "error": f"{type(exc).__name__}: {exc}"[:240],
+        }
     state.pop("_volume_long_post_started",None)
     state["volume_long_last_scan"]=scan
     state["last_scan_close_ms"]=int(expected_close_ms)

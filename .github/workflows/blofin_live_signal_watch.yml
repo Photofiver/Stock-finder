@@ -73,7 +73,7 @@ jobs:
           fi
 
       - name: Verify four-pivot tunnel candle rules
-        run: python -m unittest -q test_pivot_tunnel.py
+        run: python -m unittest -q test_pivot_tunnel.py test_rsi89_audit.py
 
       - name: Scan 5m LIVE signal and execute AUTO after revalidation
         env:
