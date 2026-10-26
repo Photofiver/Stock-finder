@@ -27,6 +27,8 @@ from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 STRATEGY = "VOLUME_FLIP_BOTH_5M_V1"
 PIVOT_ENABLED = os.getenv("LIVE_PIVOT_TUNNEL_ENABLED", "false").strip().lower() == "true"
 SHORT_RSI_TRIGGER = 89.0
+RSI89_TP_ONLY_MODE = "RSI89_SHORT_TP_ONLY"
+RSI89_TP_GROSS_PCT = Decimal("0.01")  # 1% gross price move, no SL.
 RSI89_RISK_RESET_TOKEN = "rsi89-short-2026-10-26"
 LEGACY_STRATEGY = "REV_SHORT_20W_LONG_VOLUME_V1"
 HOLD_POLICY = "VOLUME_FLIP_BOTH_NO_TPSL"
@@ -85,6 +87,14 @@ def _protection_prices(bot, pos, meta):
     tick=bot.d((meta or {}).get("tickSize") or "0")
     if entry<=0 or tick<=0 or not entry.is_finite() or not tick.is_finite():
         raise RuntimeError("Verified entry and tickSize are required for TP/SL")
+    if pos.get("tp_sl_mode") == RSI89_TP_ONLY_MODE:
+        if pos.get("side") != "SHORT":
+            raise RuntimeError("RSI89 TP-only mode is SHORT-only")
+        tp = ((entry * (Decimal("1") - RSI89_TP_GROSS_PCT) / tick)
+              .to_integral_value(rounding=ROUND_FLOOR) * tick)
+        if not (Decimal("0") < tp < entry):
+            raise RuntimeError("RSI89 TP-only is untradeable at this tick size")
+        return tp, Decimal("0")
     if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, EARLY_TUNNEL_TP_MODE):
         tp_line = bot.d(pos.get("tunnel_tp_line") or "0")
         sl_line = bot.d(pos.get("tunnel_sl_line") or "0")
@@ -145,7 +155,7 @@ def _protection_prices(bot, pos, meta):
 def _ensure_mark_trigger(bot, state, pos, tp, sl):
     """Verify OCO and amend old MARK tunnel triggers to candle-aligned LAST."""
     inst=pos["inst"]
-    desired = (TRIGGER_TYPE if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, SECOND_BOUNCE_SL_MODE, EARLY_TUNNEL_TP_MODE)
+    desired = (TRIGGER_TYPE if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, SECOND_BOUNCE_SL_MODE, EARLY_TUNNEL_TP_MODE, RSI89_TP_ONLY_MODE)
                else "mark")  # Preserve legacy / non-tunnel protections.
     try:
         detail=bot.private_request("GET","/api/v1/trade/order-tpsl-detail",
@@ -159,6 +169,15 @@ def _ensure_mark_trigger(bot, state, pos, tp, sl):
             raise RuntimeError("Active broker TP/SL is missing or differs from tracked levels")
         types=(str(detail.get("tpTriggerPriceType") or "").lower(),
                str(detail.get("slTriggerPriceType") or "").lower())
+        if pos.get("tp_sl_mode") == RSI89_TP_ONLY_MODE:
+            if types[0] != "last" or bot.d(detail.get("slTriggerPrice") or "0") != 0:
+                raise RuntimeError("RSI89 TP-only broker order has wrong trigger or an SL")
+            pos.update(tp_trigger_type="last", sl_trigger_type="none",
+                       tp_policy="TP1", sl_policy="NONE", sl="",
+                       protection_status="RSI89_TP1_ONLY_LAST_ACTIVE")
+            pos.pop("protection_error", None)
+            bot.save_state(state)
+            return True
         if types==(desired,desired) or (pos.get("tp_sl_mode")==SECOND_BOUNCE_SL_MODE and types[1]==desired):
             pos.update(tp_trigger_type=desired,sl_trigger_type=desired,
                        protection_status=("TUNNEL_LINES_LAST_ACTIVE"
@@ -235,9 +254,9 @@ def _ensure_protection(bot,state,pos,meta):
                     and bot.d(detail.get("tpTriggerPrice") or "0")==tp
                     and bot.d(detail.get("slTriggerPrice") or "0")==sl):
                 pos.update(tpsl_id=str(detail["tpslId"]),tp=bot.clean_decimal(tp),
-                           sl=bot.clean_decimal(sl),
-                           tp_policy=("TUNNEL_LINE" if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, EARLY_TUNNEL_TP_MODE) else TP_POLICY),
-                           sl_policy=("TUNNEL_LINE" if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, EARLY_TUNNEL_TP_MODE) else SL_POLICY))
+                           sl=("" if pos.get("tp_sl_mode") == RSI89_TP_ONLY_MODE else bot.clean_decimal(sl)),
+                           tp_policy=("TP1" if pos.get("tp_sl_mode") == RSI89_TP_ONLY_MODE else "TUNNEL_LINE" if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, EARLY_TUNNEL_TP_MODE) else TP_POLICY),
+                           sl_policy=("NONE" if pos.get("tp_sl_mode") == RSI89_TP_ONLY_MODE else "TUNNEL_LINE" if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, EARLY_TUNNEL_TP_MODE) else SL_POLICY))
                 bot.save_state(state)
                 return _ensure_mark_trigger(bot,state,pos,tp,sl)
         except Exception as exc:
@@ -245,18 +264,18 @@ def _ensure_protection(bot,state,pos,meta):
         pos["protection_status"]="TPSL_UNCERTAIN_NEEDS_BROKER_CONFIRMATION"
         bot.save_state(state)
         return False
-    client=("voltp055"+uuid.uuid4().hex)[:32]
+    client=(("rsi89tp1" if pos.get("tp_sl_mode") == RSI89_TP_ONLY_MODE else "voltp055")+uuid.uuid4().hex)[:32]
     pos.update(tpsl_client_order_id=client,protection_status="TPSL_POST_STARTED",
-               tp=bot.clean_decimal(tp),sl=bot.clean_decimal(sl),
-               tp_policy=("TUNNEL_LINE" if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, EARLY_TUNNEL_TP_MODE) else TP_POLICY),
-               sl_policy=("TUNNEL_LINE" if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, EARLY_TUNNEL_TP_MODE) else SL_POLICY))
+               tp=bot.clean_decimal(tp),sl=("" if pos.get("tp_sl_mode") == RSI89_TP_ONLY_MODE else bot.clean_decimal(sl)),
+               tp_policy=("TP1" if pos.get("tp_sl_mode") == RSI89_TP_ONLY_MODE else "TUNNEL_LINE" if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, EARLY_TUNNEL_TP_MODE) else TP_POLICY),
+               sl_policy=("NONE" if pos.get("tp_sl_mode") == RSI89_TP_ONLY_MODE else "TUNNEL_LINE" if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, EARLY_TUNNEL_TP_MODE) else SL_POLICY))
     bot.save_state(state)
     try:
         request_body={
             "instId":inst,"marginMode":bot.MARGIN_MODE,"positionSide":"net",
             "side":"sell" if pos["side"]=="LONG" else "buy",
             "tpTriggerPrice":bot.clean_decimal(tp),"tpOrderPrice":"-1",
-            "tpTriggerPriceType":(TRIGGER_TYPE if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, SECOND_BOUNCE_SL_MODE, EARLY_TUNNEL_TP_MODE) else "mark"),
+            "tpTriggerPriceType":(TRIGGER_TYPE if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, SECOND_BOUNCE_SL_MODE, EARLY_TUNNEL_TP_MODE, RSI89_TP_ONLY_MODE) else "mark"),
             "slTriggerPrice":bot.clean_decimal(sl),
             "slOrderPrice":"-1",
             "slTriggerPriceType":(TRIGGER_TYPE if pos.get("tp_sl_mode") in (TUNNEL_TPSL_MODE, SECOND_BOUNCE_SL_MODE, EARLY_TUNNEL_TP_MODE) else "mark"),
@@ -264,6 +283,9 @@ def _ensure_protection(bot,state,pos,meta):
         }
         if pos.get("tp_sl_mode") == SECOND_BOUNCE_SL_MODE:
             for key in ("tpTriggerPrice","tpOrderPrice","tpTriggerPriceType"):
+                request_body.pop(key,None)
+        elif pos.get("tp_sl_mode") == RSI89_TP_ONLY_MODE:
+            for key in ("slTriggerPrice","slOrderPrice","slTriggerPriceType"):
                 request_body.pop(key,None)
         response=bot.private_request("POST","/api/v1/trade/order-tpsl",body=request_body)
         row=response[0] if isinstance(response,list) and response else (response or {})
@@ -1632,11 +1654,10 @@ def _open_one(bot, state, sig, instruments):
     try:
         frozen_tp = frozen_sl = None
         if rsi89_short_entry:
-            # RSI-only entry has no tunnel. Preserve existing emergency
-            # fixed broker protection at TP +0.55% / SL -0.50% price move.
+            # RSI-only entry has no tunnel: exchange TP +1% gross only.
             _protection_prices(bot, {
                 "side": "SHORT", "reference_entry": str(quote["expected_fill"]),
-                "tp_sl_mode": EMERGENCY_TPSL_MODE,
+                "tp_sl_mode": RSI89_TP_ONLY_MODE,
             }, meta)
         else:
             frozen_tp = tunnel["upper_price"] if side == "LONG" else tunnel["lower_price"]
@@ -1713,9 +1734,9 @@ def _open_one(bot, state, sig, instruments):
         "filled_size":"",
         "notional_usdt":bot.clean_decimal(expected_notional),
         "tp":"","sl":"",
-        "tp_policy":(TP_POLICY if rsi89_short_entry else "TUNNEL_LINE"),
-        "sl_policy":(SL_POLICY if rsi89_short_entry else "TUNNEL_LINE"),
-        "tp_sl_mode":(EMERGENCY_TPSL_MODE if rsi89_short_entry else
+        "tp_policy":("TP1" if rsi89_short_entry else "TUNNEL_LINE"),
+        "sl_policy":("NONE" if rsi89_short_entry else "TUNNEL_LINE"),
+        "tp_sl_mode":(RSI89_TP_ONLY_MODE if rsi89_short_entry else
                       EARLY_TUNNEL_TP_MODE if sig.get("second_bounce_entry") else TUNNEL_TPSL_MODE),
         "second_bounce_exit": bool(sig.get("second_bounce_entry")),  # Keep second-touch as fallback; active broker TP can fill earlier.
         "tp_offset_from_tunnel_line_pct": ("0.05" if sig.get("second_bounce_entry") else "0"),
@@ -1726,7 +1747,7 @@ def _open_one(bot, state, sig, instruments):
         "tunnel_tp_line":str(frozen_tp) if frozen_tp is not None else "",
         "tunnel_sl_line":str(frozen_sl) if frozen_sl is not None else "",
         "tunnel_reference_close_ms":int(sig["signal_close_ms"]),
-        "risk_profile":("1X_RSI89_SHORT_FIXED_TPSL" if rsi89_short_entry else
+        "risk_profile":("1X_RSI89_SHORT_TP1_ONLY_NO_SL" if rsi89_short_entry else
                         "1X_PIVOT_TUNNEL_LINES" if sig.get("pivot_tunnel_entry")
                         else "1X_VOLUME_FLIP_TUNNEL_LINES"),
         "protection_status":"AWAITING_VERIFIED_FILL",
@@ -1762,6 +1783,15 @@ def _open_one(bot, state, sig, instruments):
     try:
         _protection_prices(bot,pos,meta)
     except (ValueError, TypeError, ArithmeticError, RuntimeError) as exc:
+        if rsi89_short_entry:
+            pos["protection_error"] = f"TP1 untradeable after fill: {exc}"[:250]
+            attempt["status"] = "PROTECTION_UNCERTAIN"
+            bot.save_state(state)
+            _emergency_close_unprotected(bot, state, inst)
+            bot.notify(f"CRITICAL {inst}: TP1 cannot be placed after fill; "
+                       "broker-verified emergency close attempted.",
+                       "BloFin RSI89 TP-only safety")
+            return True
         pos["tp_sl_mode"] = EMERGENCY_TPSL_MODE
         pos["risk_profile"] = "1X_EMERGENCY_FIXED_AFTER_TUNNEL_FILL"
         pos["tunnel_protection_fallback"] = f"{type(exc).__name__}: {exc}"[:200]
@@ -1788,7 +1818,9 @@ def _open_one(bot, state, sig, instruments):
         f"OPEN {side} {inst} | rank {sig['rank']}/200 | vol ratio {sig['volume_ratio'] or 0:.2f}x "
         f"| 1x isolated, notional {pos['notional_usdt']} USDT | "
         f"TP {pos['tp']} / SL {pos['sl']} (Last Price, {pos.get('tp_sl_mode')}) | " +
-        ("EXIT: broker TP/SL or CLOSED 5m breaks last confirmed swing."
+        ("EXIT: broker TP +1% gross ONLY; no SL or volume exit."
+         if rsi89_short_entry else
+         "EXIT: broker TP/SL or CLOSED 5m breaks last confirmed swing."
          if sig.get("pivot_tunnel_entry") else
          "EXIT: broker TP/SL or opposite CLOSED 5m volume > ENTRY candle volume."),
         "BloFin LIVE both sides volume flip",
@@ -2092,6 +2124,11 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                                     or pos.get("pivot_tunnel"))):
             continue
         if pos.get("exit_pending"):
+            continue
+        if (pos.get("rsi89_short_entry") is True
+                and pos.get("tp_sl_mode") == RSI89_TP_ONLY_MODE):
+            # No automatic volume/pivot/time exit for RSI89; broker TP only.
+            pos["last_checked_signal_close_ms"] = int(expected_close_ms)
             continue
         if int(pos.get("signal_close_ms") or 0)>=expected_close_ms:
             continue
