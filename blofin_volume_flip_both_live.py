@@ -973,6 +973,50 @@ def short_rsi89_signal(bot, bars, expected_close_ms, rank, inst):
 
 
 
+
+def _readonly_adx_di14(rows, signal_close_ms):
+    """Wilder ADX(14), +DI(14), -DI(14) from closed, contiguous 5m OHLC."""
+    period = 14
+    ts = int(signal_close_ms) - FIVE
+    recent = []
+    for offset in range(200):
+        bar = rows.get(ts - offset * FIVE)
+        if bar is None:
+            break
+        recent.append(bar)
+    if len(recent) < 2 * period:
+        return {"adx14": None, "di_plus14": None, "di_minus14": None}
+    recent.reverse()
+    smoothed_tr = smoothed_plus = smoothed_minus = 0.0
+    dx_values = []
+    plus_di = minus_di = 0.0
+    for i in range(1, len(recent)):
+        prev, current = recent[i-1], recent[i]
+        up = current[1] - prev[1]
+        down = prev[2] - current[2]
+        plus_dm = up if up > down and up > 0 else 0.0
+        minus_dm = down if down > up and down > 0 else 0.0
+        tr = max(current[1] - current[2],
+                 abs(current[1] - prev[3]), abs(current[2] - prev[3]))
+        if i <= period:
+            smoothed_tr += tr
+            smoothed_plus += plus_dm
+            smoothed_minus += minus_dm
+        else:
+            smoothed_tr = smoothed_tr - smoothed_tr / period + tr
+            smoothed_plus = smoothed_plus - smoothed_plus / period + plus_dm
+            smoothed_minus = smoothed_minus - smoothed_minus / period + minus_dm
+        if i >= period:
+            plus_di = 100 * smoothed_plus / smoothed_tr if smoothed_tr else 0.0
+            minus_di = 100 * smoothed_minus / smoothed_tr if smoothed_tr else 0.0
+            di_sum = plus_di + minus_di
+            dx_values.append(100 * abs(plus_di - minus_di) / di_sum if di_sum else 0.0)
+    adx = sum(dx_values[:period]) / period
+    for dx in dx_values[period:]:
+        adx = (adx * (period - 1) + dx) / period
+    return {"adx14": adx, "di_plus14": plus_di, "di_minus14": minus_di}
+
+
 def _readonly_rsi89_top200_audit(top200, confirmed, expected_close_ms, scan,
                                  active_instruments, volume_trends):
     """Record EVERY TOP200 coin after LIVE decisions, without any extra API calls.
@@ -1047,6 +1091,7 @@ def _readonly_rsi89_top200_audit(top200, confirmed, expected_close_ms, scan,
                         candle[4] / mean20 if mean20 and mean20 > 0 else None)
                     indicators = _readonly_entry_indicators(
                         bars, expected_close_ms, "SHORT", candle[3])
+                    indicators.update(_readonly_adx_di14(rows, expected_close_ms))
                     record["indicators"] = indicators
                     for length in (10, 20):
                         sma = indicators.get(f"sma{length}")
