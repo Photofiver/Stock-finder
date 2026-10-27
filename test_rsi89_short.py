@@ -73,5 +73,44 @@ class TestShortRsi89(unittest.TestCase):
         self.assertEqual(state["bankroll_pnl_baseline_usdt"], "-3.5")
 
 
+class TestCompoundedBankroll(unittest.TestCase):
+    def test_initial_capital_uses_five_per_coin(self):
+        self.assertEqual(
+            strategy.compounded_position_target("20", "0", "20"),
+            Decimal("5"))
+
+    def test_realized_net_profit_is_reinvested(self):
+        self.assertEqual(
+            strategy.compounded_position_target("20.45", "0", "20.45"),
+            Decimal("5.1125"))
+        self.assertEqual(
+            strategy.compounded_position_target("24", "0", "24"),
+            Decimal("6"))
+
+    def test_new_deposit_does_not_raise_budget(self):
+        self.assertEqual(
+            strategy.compounded_position_target("20", "0", "100"),
+            Decimal("5"))
+
+    def test_existing_exposure_and_cash_buffer_are_respected(self):
+        self.assertEqual(
+            strategy.compounded_position_target("20.45", "5.1125", "15.3375"),
+            Decimal("5.1125"))
+        self.assertEqual(
+            strategy.compounded_position_target("20.45", "15.3375", "5.1125"),
+            Decimal("0"))
+        self.assertEqual(
+            strategy.compounded_position_target("20.45", "0", "5.25"),
+            Decimal("0"))
+
+    def test_loss_never_unlocks_extra_leverage_or_capital(self):
+        self.assertEqual(
+            strategy.compounded_position_target("19.8", "0", "19.8"),
+            Decimal("5"))
+        self.assertEqual(
+            strategy.compounded_position_target("4", "0", "100"),
+            Decimal("0"))
+
+
 if __name__ == "__main__":
     unittest.main()

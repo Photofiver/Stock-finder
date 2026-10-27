@@ -55,6 +55,25 @@ MAX_PER_COIN_USDT = Decimal("5")
 MIN_PER_COIN_USDT = Decimal("5")
 CASH_BUFFER_USDT = Decimal("0.50")
 AGE_MAX_MS = 120_000
+
+
+def compounded_position_target(bankroll, committed, available):
+    """Size one position from the strategy bankroll plus verified realized NET PnL.
+
+    Uses at most one quarter of the compounded bankroll per coin, with the
+    historical 5-USDT minimum needed for the exchange's contract sizing.
+    Free exchange funds and the 0.50-USDT cash reserve remain hard constraints.
+    Deposits do not increase the strategy bankroll.
+    """
+    bankroll, committed, available = (
+        Decimal(str(bankroll)), Decimal(str(committed)), Decimal(str(available)))
+    spendable = min(bankroll - committed, available - CASH_BUFFER_USDT)
+    if spendable < MIN_PER_COIN_USDT:
+        return Decimal("0")
+    per_coin_cap = max(MIN_PER_COIN_USDT, bankroll / Decimal(MAX_POSITIONS))
+    return min(per_coin_cap, spendable)
+
+
 def _early_tunnel_tp(bot, side, line, tick):
     """0.05% before the opposite boundary, tick-aligned toward entry."""
     boundary, tick = bot.d(line), bot.d(tick)
@@ -1809,16 +1828,14 @@ def _open_one(bot, state, sig, instruments):
         Decimal("0"),
     )
     available = bot.get_available_usdt()
-    remaining = min(bot.MAX_NOTIONAL_USDT, bankroll) - committed
-    spendable = min(remaining, available-CASH_BUFFER_USDT)
-    if spendable < MIN_PER_COIN_USDT:
+    spendable = min(bankroll - committed, available - CASH_BUFFER_USDT)
+    target = compounded_position_target(bankroll, committed, available)
+    if target <= 0:
         print(f"{STRATEGY}: insufficient free bankroll for {inst}: {spendable}")
         return False
 
-    # Shared test capital: up to 20 USDT total across four positions.
-    # Each new order uses at most 5 USDT while respecting exchange funds,
-    # the shared cap, and the cash buffer.
-    target = min(MAX_PER_COIN_USDT, spendable)
+    # Reinvest verified realized NET PnL across at most four 1x positions.
+    # Never use deposits outside the strategy bankroll; keep cash buffer.
     quote = bot.checked_preorder_quote(inst, side, sig["close"],
                                       enforce_adverse_gap=False)
     quote_rejection = (None if rsi89_short_entry

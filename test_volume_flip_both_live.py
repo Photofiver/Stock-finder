@@ -489,6 +489,15 @@ class VolumeTrend(unittest.TestCase):
 class Broker(unittest.TestCase):
     def setUp(self):
         self.bot=FakeBot()
+        # These regression cases exercise the older LONG/SHORT tunnel entry
+        # logic independently of the production RSI89-SHORT-only feature gate.
+        older_mode = patch.object(live, "RSI89_SHORT_ONLY_NEW_ENTRIES", False)
+        older_mode.start()
+        self.addCleanup(older_mode.stop)
+        # Keep the historical test bankroll at 20; compounding is verified
+        # separately in test_rsi89_short.TestCompoundedBankroll.
+        self.bot.MAX_NOTIONAL_USDT = Decimal("20")
+        self.bot.current_live_bankroll = lambda state: Decimal("20")
         self.state={"positions":{}}
         # Other LIVE tests cover order and volume gates without dependence on
         # UK's midnight time; dedicated VolumeTrend tests use real logic.
