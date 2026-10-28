@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-10-27T20:44:10.170151+00:00",
+  "generated_utc": "2026-10-28T00:09:47.849063+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -11,23 +11,10 @@
   ],
   "last_known_state": {
     "bankroll_start_usdt": "20",
-    "current_bankroll_estimated_usdt": "20.551851472593375",
-    "fees_usdt": -10.87624206528,
-    "gross_realized_pnl_usdt": -9.846698692386834,
+    "current_bankroll_estimated_usdt": "15.83911037545226",
+    "fees_usdt": -10.884721714098708,
+    "gross_realized_pnl_usdt": -14.55096014070924,
     "last_12_trades": [
-      {
-        "closed_utc": "2026-10-26T13:02:31.832000+00:00",
-        "exit_reason": "external close",
-        "gross_pnl_usdt": -0.01768,
-        "inst": "AXS-USDT",
-        "net_pnl_usdt": -0.023580544,
-        "opened_utc": "2026-10-26T12:51:27.111000+00:00",
-        "order_book_confirmed": null,
-        "order_book_directional_pct": null,
-        "rank": 137,
-        "result": "LOSS",
-        "side": "LONG"
-      },
       {
         "closed_utc": "2026-10-26T13:01:05.896000+00:00",
         "exit_reason": "external close",
@@ -170,10 +157,23 @@
         "rank": 64,
         "result": "WIN",
         "side": "SHORT"
+      },
+      {
+        "closed_utc": "2026-10-27T23:29:21.194000+00:00",
+        "exit_reason": "external close",
+        "gross_pnl_usdt": -4.704261448322407,
+        "inst": "EVAA-USDT",
+        "net_pnl_usdt": -4.712741097141115,
+        "opened_utc": "2026-10-27T13:50:58.898000+00:00",
+        "order_book_confirmed": null,
+        "order_book_directional_pct": null,
+        "rank": 7,
+        "result": "LOSS",
+        "side": "SHORT"
       }
     ],
-    "last_live_scan_utc": "2026-10-27T20:40:00+00:00",
-    "last_run_utc": "2026-10-27T20:41:02.342000+00:00",
+    "last_live_scan_utc": "2026-10-28T00:05:00+00:00",
+    "last_run_utc": "2026-10-28T00:05:56.716000+00:00",
     "last_scan_rejections": [
       {
         "inst": "HUMA-USDT",
@@ -263,22 +263,22 @@
     "last_scan_status": "RANK_NOT_ALLOWED_TRY_NEXT",
     "lifetime_counters": {
       "flat": 0,
-      "losses": 645,
-      "total": 1001,
+      "losses": 646,
+      "total": 1002,
       "unverified": 4,
       "wins": 352
     },
-    "net_realized_pnl_usdt": -20.722940757666855,
+    "net_realized_pnl_usdt": -25.43568185480797,
     "open_positions": [
       {
         "hold_policy": "VOLUME_FLIP_BOTH_NO_TPSL",
-        "inst": "EVAA-USDT",
-        "opened_utc": "2026-10-27T13:50:58.898000+00:00",
+        "inst": "BLESS-USDT",
+        "opened_utc": "2026-10-27T21:30:58.041000+00:00",
         "side": "SHORT"
       }
     ],
-    "risk_stop_triggered": false,
-    "trade_history_records": 995
+    "risk_stop_triggered": true,
+    "trade_history_records": 996
   },
   "live_strategy": {
     "additional_entry_filters": [
@@ -355,7 +355,7 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-10-27T20:41:02.342000+00:00",
+    "latest_live_run_utc": "2026-10-28T00:05:56.716000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
