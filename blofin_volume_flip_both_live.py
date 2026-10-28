@@ -29,8 +29,8 @@ PIVOT_ENABLED = os.getenv("LIVE_PIVOT_TUNNEL_ENABLED", "false").strip().lower() 
 SHORT_RSI_TRIGGER = 89.0
 RSI89_SHORT_ONLY_NEW_ENTRIES = True  # Disable all new legacy LONG/tunnel entries; preserve existing positions.
 RSI89_TP_ONLY_MODE = "RSI89_SHORT_TP_ONLY"
-RSI89_TP_GROSS_PCT = Decimal("0.0143")  # 1.43% take profit, new RSI89 entries.
-RSI89_SL_GROSS_PCT = Decimal("0.0525")  # 5.25% maximum stop loss, new RSI89 entries; legacy mode name retained.
+RSI89_TP_GROSS_PCT = Decimal("0.01")  # 1% take profit for new RSI89 entries.
+RSI89_SL_GROSS_PCT = Decimal("0.08")  # 8% stop loss for new RSI89 entries.
 RSI89_RISK_RESET_TOKEN = "rsi89-sl8-user-reset-drawdown-2026-10-28-0701"
 LEGACY_STRATEGY = "REV_SHORT_20W_LONG_VOLUME_V1"
 HOLD_POLICY = "VOLUME_FLIP_BOTH_NO_TPSL"
@@ -144,8 +144,8 @@ def _protection_prices(bot, pos, meta):
         tp_pct, sl_pct = _rsi89_rates(bot, pos)
         tp = ((entry * (Decimal("1") - tp_pct) / tick)
               .to_integral_value(rounding=ROUND_FLOOR) * tick)
-        # Preserve pre-existing short SL tick rounding; new SL must never
-        # exceed the user-specified 5.25% cap because of tick alignment.
+        # Preserve the original 8% SL tick rounding for new and legacy trades;
+        # other frozen profiles retain their own tick alignment.
         sl_rounding = (ROUND_CEILING if (tp_pct, sl_pct) == (
             Decimal("0.01"), Decimal("0.08")) else ROUND_FLOOR)
         sl = ((entry * (Decimal("1") + sl_pct) / tick)
@@ -1926,7 +1926,7 @@ def _open_one(bot, state, sig, instruments):
     try:
         frozen_tp = frozen_sl = None
         if rsi89_short_entry:
-            # RSI-only entry: exchange TP +1.43% gross and SL -5.25% gross.
+            # RSI-only entry: exchange TP +1% gross and SL -8% gross.
             _protection_prices(bot, {
                 "side": "SHORT", "reference_entry": str(quote["expected_fill"]),
                 "tp_sl_mode": RSI89_TP_ONLY_MODE,
@@ -2006,8 +2006,8 @@ def _open_one(bot, state, sig, instruments):
         "filled_size":"",
         "notional_usdt":bot.clean_decimal(expected_notional),
         "tp":"","sl":"",
-        "tp_policy":("TP1_43" if rsi89_short_entry else "TUNNEL_LINE"),
-        "sl_policy":("SL5_25" if rsi89_short_entry else "TUNNEL_LINE"),
+        "tp_policy":("TP1" if rsi89_short_entry else "TUNNEL_LINE"),
+        "sl_policy":("SL8" if rsi89_short_entry else "TUNNEL_LINE"),
         "tp_sl_mode":(RSI89_TP_ONLY_MODE if rsi89_short_entry else
                       EARLY_TUNNEL_TP_MODE if sig.get("second_bounce_entry") else TUNNEL_TPSL_MODE),
         "second_bounce_exit": bool(sig.get("second_bounce_entry")),  # Keep second-touch as fallback; active broker TP can fill earlier.
@@ -2019,7 +2019,7 @@ def _open_one(bot, state, sig, instruments):
         "tunnel_tp_line":str(frozen_tp) if frozen_tp is not None else "",
         "tunnel_sl_line":str(frozen_sl) if frozen_sl is not None else "",
         "tunnel_reference_close_ms":int(sig["signal_close_ms"]),
-        "risk_profile":("1X_RSI89_SHORT_TP1_43_SL5_25" if rsi89_short_entry else
+        "risk_profile":("1X_RSI89_SHORT_TP1_SL8" if rsi89_short_entry else
                         "1X_PIVOT_TUNNEL_LINES" if sig.get("pivot_tunnel_entry")
                         else "1X_VOLUME_FLIP_TUNNEL_LINES"),
         "protection_status":"AWAITING_VERIFIED_FILL",
@@ -2093,7 +2093,7 @@ def _open_one(bot, state, sig, instruments):
         f"OPEN {side} {inst} | rank {sig['rank']}/200 | vol ratio {sig['volume_ratio'] or 0:.2f}x "
         f"| 1x isolated, notional {pos['notional_usdt']} USDT | "
         f"TP {pos['tp']} / SL {pos['sl']} (Last Price, {pos.get('tp_sl_mode')}) | " +
-        ("EXIT: broker TP +1.43% gross / SL -5.25% gross; no volume exit."
+        ("EXIT: broker TP +1% gross / SL -8% gross; no volume exit."
          if rsi89_short_entry else
          "EXIT: broker TP/SL or CLOSED 5m breaks last confirmed swing."
          if sig.get("pivot_tunnel_entry") else
@@ -2514,7 +2514,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                 continue
             if RSI89_SHORT_ONLY_NEW_ENTRIES:
                 # Existing LONG positions retain broker TP/SL and original exits.
-                # New entries use only RSI89 SHORT with exchange TP 1.43% / SL 5.25%.
+                # New entries use only RSI89 SHORT with exchange TP 1% / SL 8%.
                 continue
             tunnel = evaluate_tunnel(
                 rows, expected_close_ms, int(pivot_restart.get(inst) or 0))
