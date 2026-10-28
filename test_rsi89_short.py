@@ -73,6 +73,96 @@ class TestShortRsi89(unittest.TestCase):
         self.assertEqual(state["bankroll_pnl_baseline_usdt"], "-3.5")
 
 
+
+class TestRsi89StopLoss8(unittest.TestCase):
+    def setUp(self):
+        self.detail = {
+            "state": "live", "tpslId": "oco-123",
+            "tpTriggerPrice": "99", "tpTriggerPriceType": "last",
+            "slTriggerPrice": "0", "slTriggerPriceType": "",
+        }
+        self.posts = []
+        self.saves = 0
+
+        def private_request(method, path, params=None, body=None):
+            if method == "GET" and path == "/api/v1/trade/order-tpsl-detail":
+                return dict(self.detail)
+            if method == "POST" and path == "/api/v1/trade/amend-tpsl":
+                self.posts.append((path, dict(body)))
+                self.detail.update(
+                    slTriggerPrice=body["newSlTriggerPrice"],
+                    slTriggerPriceType=body["newSlTriggerPriceType"])
+                return [{"code": "0", "tpslId": "oco-123"}]
+            if method == "POST" and path == "/api/v1/trade/order-tpsl":
+                self.posts.append((path, dict(body)))
+                self.detail.update(
+                    tpTriggerPrice=body["tpTriggerPrice"],
+                    tpTriggerPriceType=body["tpTriggerPriceType"],
+                    slTriggerPrice=body["slTriggerPrice"],
+                    slTriggerPriceType=body["slTriggerPriceType"])
+                return [{"code": "0", "tpslId": "oco-123"}]
+            raise AssertionError((method, path))
+
+        self.bot = SimpleNamespace(
+            d=live.d, clean_decimal=live.clean_decimal, MARGIN_MODE="isolated",
+            private_request=private_request, save_state=lambda _: None)
+        self.pos = {
+            "inst": "TEST-USDT", "side": "SHORT",
+            "strategy": strategy.STRATEGY,
+            "reference_entry": "100",
+            "tp_sl_mode": strategy.RSI89_TP_ONLY_MODE,
+            "tpsl_id": "oco-123",
+        }
+        self.meta = {"tickSize": "0.01"}
+
+    def test_short_stop_loss_is_eight_percent_above_entry(self):
+        self.assertEqual(
+            strategy._protection_prices(self.bot, self.pos, self.meta),
+            (Decimal("99"), Decimal("108")))
+
+    def test_existing_tp_only_order_adds_stop_without_cancelling_tp(self):
+        self.assertTrue(strategy._ensure_protection(
+            self.bot, {}, self.pos, self.meta))
+        self.assertEqual(len(self.posts), 1)
+        path, body = self.posts[0]
+        self.assertEqual(path, "/api/v1/trade/amend-tpsl")
+        self.assertEqual(body["newSlTriggerPrice"], "108")
+        self.assertEqual(body["newSlTriggerPriceType"], "last")
+        self.assertEqual(self.detail["tpTriggerPrice"], "99")
+        self.assertEqual(self.pos["sl_policy"], "SL8")
+        self.assertEqual(self.pos["protection_status"], "RSI89_TP1_SL8_LAST_ACTIVE")
+        self.assertTrue(strategy._ensure_protection(self.bot, {}, self.pos, self.meta))
+        self.assertEqual(len(self.posts), 1)
+
+    def test_new_order_places_broker_tp_and_sl_together(self):
+        self.pos.pop("tpsl_id")
+        self.assertTrue(strategy._ensure_protection(
+            self.bot, {}, self.pos, self.meta))
+        self.assertEqual(len(self.posts), 1)
+        path, body = self.posts[0]
+        self.assertEqual(path, "/api/v1/trade/order-tpsl")
+        self.assertEqual(body["tpTriggerPrice"], "99")
+        self.assertEqual(body["slTriggerPrice"], "108")
+        self.assertEqual(body["slTriggerPriceType"], "last")
+        self.assertEqual(body["slOrderPrice"], "-1")
+        self.assertEqual(self.pos["sl_policy"], "SL8")
+
+    def test_unconfirmed_amend_never_claims_stop_loss_active(self):
+        original_request = self.bot.private_request
+
+        def rejects(method, path, params=None, body=None):
+            if method == "POST" and path == "/api/v1/trade/amend-tpsl":
+                return [{"code": "500", "msg": "not accepted"}]
+            return original_request(method, path, params=params, body=body)
+
+        self.bot.private_request = rejects
+        self.assertFalse(strategy._ensure_protection(
+            self.bot, {}, self.pos, self.meta))
+        self.assertNotEqual(self.pos.get("protection_status"),
+                            "RSI89_TP1_SL8_LAST_ACTIVE")
+        self.assertEqual(self.detail["slTriggerPrice"], "0")
+
+
 class TestCompoundedBankroll(unittest.TestCase):
     def test_initial_capital_uses_five_per_coin(self):
         self.assertEqual(
