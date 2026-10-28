@@ -202,18 +202,18 @@ class TestCompoundedBankroll(unittest.TestCase):
             Decimal("0"))
 
 
-class TestRsi89UpdatedTargets(unittest.TestCase):
+class TestRsi89RestoredTargets(unittest.TestCase):
     def setUp(self):
         self.bot = SimpleNamespace(d=live.d)
         self.meta = {"tickSize": "0.01"}
 
-    def test_new_rsi89_short_has_tp143_and_sl525(self):
+    def test_new_rsi89_short_has_restored_tp1_and_sl8(self):
         pos = {"side": "SHORT", "reference_entry": "100",
                "tp_sl_mode": strategy.RSI89_TP_ONLY_MODE}
         self.assertEqual(strategy._protection_prices(self.bot, pos, self.meta),
-                         (Decimal("98.57"), Decimal("105.25")))
+                         (Decimal("99"), Decimal("108")))
         self.assertEqual(strategy._rsi89_policy_labels(self.bot, pos),
-                         ("TP1_43", "SL5_25"))
+                         ("TP1", "SL8"))
 
     def test_legacy_open_rsi89_short_keeps_broker_levels(self):
         pos = {"side": "SHORT", "reference_entry": "100",
@@ -223,7 +223,7 @@ class TestRsi89UpdatedTargets(unittest.TestCase):
         self.assertEqual(strategy._rsi89_policy_labels(self.bot, pos),
                          ("TP1", "SL8"))
 
-    def test_new_saved_target_survives_later_constant_changes(self):
+    def test_previous_tp143_sl525_position_keeps_broker_targets(self):
         pos = {"side": "SHORT", "reference_entry": "100",
                "tp_sl_mode": strategy.RSI89_TP_ONLY_MODE, "order_id": "new-live",
                "rsi89_tp_gross_pct": "0.0143", "rsi89_sl_gross_pct": "0.0525"}
@@ -232,12 +232,11 @@ class TestRsi89UpdatedTargets(unittest.TestCase):
         self.assertEqual(strategy._rsi89_policy_labels(self.bot, pos),
                          ("TP1_43", "SL5_25"))
 
-    def test_stop_tick_rounding_never_exceeds_5_25_percent(self):
+    def test_restored_target_uses_original_tick_alignment(self):
         pos = {"side": "SHORT", "reference_entry": "100.01",
                "tp_sl_mode": strategy.RSI89_TP_ONLY_MODE}
         tp, sl = strategy._protection_prices(self.bot, pos, self.meta)
-        self.assertLessEqual(sl / Decimal("100.01") - 1, Decimal("0.0525"))
-        self.assertGreaterEqual(1 - tp / Decimal("100.01"), Decimal("0.0143"))
+        self.assertEqual((tp, sl), (Decimal("99.00"), Decimal("108.02")))
 
 
 if __name__ == "__main__":
