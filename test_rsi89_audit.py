@@ -39,12 +39,18 @@ class TestRsi89FullScanAudit(unittest.TestCase):
         self.assertEqual(result["nearest_approaching_from_below"][0]["inst"], "COIN0-USDT")
         self.assertAlmostEqual(result["nearest_approaching_from_below"][0]["gap_to_89_points"], 0.05)
 
-    def test_exact_upward_cross_only_and_no_broker_calls(self):
+    def test_above_89_is_eligible_without_cross_and_no_broker_calls(self):
         result = self.audit(88.5, 89.0)
-        self.assertEqual(result["reason_counts"]["RSI89_CROSS_NO_ENTRY"], 1)
+        self.assertEqual(result["reason_counts"]["RSI89_NOT_REACHED"], 1)
+        self.assertFalse(result["coins"][0]["rsi89_trigger"])
+        result = self.audit(88.5, 89.01)
+        self.assertEqual(result["reason_counts"]["RSI89_ABOVE_NO_ENTRY"], 1)
         self.assertTrue(result["coins"][0]["rsi89_trigger"])
         result = self.audit(89.5, 89.1)
-        self.assertEqual(result["reason_counts"]["RSI89_ALREADY_HIGH_NO_FRESH_CROSS"], 1)
+        self.assertEqual(result["reason_counts"]["RSI89_ABOVE_NO_ENTRY"], 1)
+        self.assertTrue(result["coins"][0]["rsi89_trigger"])
+        result = self.audit(90.1, 88.9)
+        self.assertEqual(result["reason_counts"]["RSI89_NOT_REACHED"], 1)
         self.assertFalse(result["coins"][0]["rsi89_trigger"])
 
     def test_future_bar_not_used(self):
