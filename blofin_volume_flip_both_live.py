@@ -1118,7 +1118,7 @@ def entry_signal(bot, bars, expected_close_ms):
 
 
 def short_rsi89_signal(bot, bars, expected_close_ms, rank, inst):
-    """SHORT solely when closed 5m RSI14 crosses upward through 89."""
+    """SHORT whenever the latest fully closed 5m RSI14 is strictly above 89."""
     ts = int(expected_close_ms) - FIVE
     rows = _by_ts(bars, int(expected_close_ms))
     recent = []
@@ -1132,8 +1132,7 @@ def short_rsi89_signal(bot, bars, expected_close_ms, rank, inst):
     recent.reverse()
     rsi = bot.rsi_wilder(recent, 14)
     previous, current = rsi[-2], rsi[-1]
-    if (previous is None or current is None
-            or not (previous < SHORT_RSI_TRIGGER <= current)):
+    if current is None or not (math.isfinite(float(current)) and float(current) > SHORT_RSI_TRIGGER):
         return None
     candle = rows[ts]
     mean20 = _previous20_mean(rows, ts)
@@ -1280,20 +1279,16 @@ def _readonly_rsi89_top200_audit(top200, confirmed, expected_close_ms, scan,
                             if sma is not None and float(sma) > 0 else None)
                     before, current = (indicators.get("rsi14_previous"),
                                        indicators.get("rsi14"))
-                    if (before is None or current is None
-                            or not all(math.isfinite(float(v))
-                                       for v in (before, current))):
+                    if current is None or not math.isfinite(float(current)):
                         record["reason"] = "RSI14_UNAVAILABLE"
                     else:
-                        before, current = float(before), float(current)
+                        current = float(current)
                         record["rsi89_gap_points"] = round(SHORT_RSI_TRIGGER - current, 8)
-                        record["rsi89_trigger"] = before < SHORT_RSI_TRIGGER <= current
+                        record["rsi89_trigger"] = current > SHORT_RSI_TRIGGER
                         if record["rsi89_trigger"]:
                             record["reason"] = (
-                                "RSI89_CROSS_ENTRY_PLACED" if inst in entered
-                                else "RSI89_CROSS_NO_ENTRY")
-                        elif before >= SHORT_RSI_TRIGGER:
-                            record["reason"] = "RSI89_ALREADY_HIGH_NO_FRESH_CROSS"
+                                "RSI89_ABOVE_ENTRY_PLACED" if inst in entered
+                                else "RSI89_ABOVE_NO_ENTRY")
                         else:
                             record["reason"] = "RSI89_NOT_REACHED"
         except Exception as exc:
@@ -1305,7 +1300,7 @@ def _readonly_rsi89_top200_audit(top200, confirmed, expected_close_ms, scan,
     with_rsi = [
         item for item in coins if item["rsi89_gap_points"] is not None
     ]
-    # The closest numerical RSI is not necessarily an actionable crossing.
+    # The closest RSI is not necessarily actionable (existing position or risk blocks).
     closest = sorted(with_rsi, key=lambda x: (
         abs(x["rsi89_gap_points"]), x["rank"]))[:10]
     approaching = sorted(
@@ -2021,7 +2016,7 @@ def _open_one(bot, state, sig, instruments):
     try:
         frozen_tp = frozen_sl = None
         if rsi89_short_entry:
-            # RSI-only entry: exchange TP +1% gross and SL -8% gross.
+            # RSI-only entry: exchange TP +2.5% gross and SL -3% gross.
             _protection_prices(bot, {
                 "side": "SHORT", "reference_entry": str(quote["expected_fill"]),
                 "tp_sl_mode": RSI89_TP_ONLY_MODE,
@@ -2351,7 +2346,9 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
     if int(state.get("last_scan_close_ms") or 0)==expected_close_ms:
         print(f"{entry_label}: duplicate scan skipped")
         return
-    scan={"strategy":STRATEGY,"entry_strategy":entry_mode,"selection_priority":"SIGNAL_VOLUME_DIV_PREVIOUS_20_BAR_MEAN_DESC",
+    scan={"strategy":STRATEGY,"entry_strategy":entry_mode,
+          "entry_rule":"CLOSED_5M_RSI14_GT_89" if entry_mode == "RSI89_SHORT" else "LEGACY",
+          "selection_priority":"SIGNAL_VOLUME_DIV_PREVIOUS_20_BAR_MEAN_DESC",
           "entry_volume_trend_filter":"DAY_UK_DOMINANT_COLOUR_VOLUME",
           "entry_price_tunnel_filter":("FOUR_CONFIRMED_PRICE_PIVOTS"
                                       if PIVOT_ENABLED else
@@ -2611,7 +2608,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                 continue
             if RSI89_SHORT_ONLY_NEW_ENTRIES:
                 # Existing LONG positions retain broker TP/SL and original exits.
-                # New entries use only RSI89 SHORT with exchange TP 1% / SL 8%.
+                # New entries use only RSI14 > 89 SHORT with broker TP 2.5% / SL 3%.
                 continue
             tunnel = evaluate_tunnel(
                 rows, expected_close_ms, int(pivot_restart.get(inst) or 0))
@@ -2621,7 +2618,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
             # SHORT enters on the second confirmed UPPER pivot.
             side = tunnel["tunnel_direction"]
             if side != "LONG":
-                # SHORT enters exclusively on RSI14 89 upward crossing.
+                # SHORT enters exclusively with RSI14 above 89.
                 continue
             entry_anchors = (tunnel.get("lower_anchors") or [] if side == "LONG"
                              else tunnel.get("upper_anchors") or [])
