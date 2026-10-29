@@ -2344,12 +2344,13 @@ def _reconcile_pending_volume_closes(bot, state, broker_rows, scan):
 
 def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_confirmed_close):
     if bot.SIGNAL_MINUTES!=5 or bot.TOP_N!=200 or len(top200)!=200:
-        raise RuntimeError("Volume flip LONG/SHORT requires confirmed 5m and TOP200")
+        raise RuntimeError("LIVE entry scanner requires confirmed 5m and TOP200")
     reset_rsi89_risk_limit_once(bot, state)
+    entry_label = "RSI89_SHORT_5M" if bot.ENTRY_STRATEGY == "RSI89_SHORT" else STRATEGY
     if int(state.get("last_scan_close_ms") or 0)==expected_close_ms:
-        print(f"{STRATEGY}: duplicate scan skipped")
+        print(f"{entry_label}: duplicate scan skipped")
         return
-    scan={"strategy":STRATEGY,"selection_priority":"SIGNAL_VOLUME_DIV_PREVIOUS_20_BAR_MEAN_DESC",
+    scan={"strategy":STRATEGY,"entry_strategy":bot.ENTRY_STRATEGY,"selection_priority":"SIGNAL_VOLUME_DIV_PREVIOUS_20_BAR_MEAN_DESC",
           "entry_volume_trend_filter":"DAY_UK_DOMINANT_COLOUR_VOLUME",
           "entry_price_tunnel_filter":("FOUR_CONFIRMED_PRICE_PIVOTS"
                                       if PIVOT_ENABLED else
@@ -2862,7 +2863,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
     state["last_run_ms"]=bot.now_ms()
     state["last_top200"]=list(top200)
     bot.save_state(state)
-    print(f"{STRATEGY}: {scan['status']} | scanned {scan['scanned_confirmed']}/200 "
+    print(f"{entry_label}: {scan['status']} | scanned {scan['scanned_confirmed']}/200 "
           f"| signals {scan['matched']} | entries {len(scan['entries'])} | exits {len(scan['exits'])}")
 
 
