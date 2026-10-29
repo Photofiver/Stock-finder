@@ -197,7 +197,7 @@ class TestRsi89StopLoss3(unittest.TestCase):
             sl="108", tp="99",
             rsi89_tp_gross_pct="0.01", rsi89_sl_gross_pct="0.08")
         self.detail.update(
-            slTriggerPrice="108", slTriggerPriceType="last")
+            tpTriggerPrice="99", slTriggerPrice="108", slTriggerPriceType="last")
         self.assertTrue(strategy._ensure_protection(
             self.bot, {}, self.pos, self.meta))
         self.assertEqual(len(self.posts), 1)
@@ -218,7 +218,7 @@ class TestRsi89StopLoss3(unittest.TestCase):
             sl="108", tp="99",
             rsi89_tp_gross_pct="0.01", rsi89_sl_gross_pct="0.08")
         self.detail.update(
-            slTriggerPrice="108", slTriggerPriceType="last")
+            tpTriggerPrice="99", slTriggerPrice="108", slTriggerPriceType="last")
         original_request = self.bot.private_request
 
         def rejects(method, path, params=None, body=None):
