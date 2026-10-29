@@ -577,10 +577,17 @@ def main():
         raise RuntimeError("BloFin TOP7 is empty")
 
     expected_close_ms = expected_signal_close_ms()
-    if bot.ENTRY_STRATEGY == "VOLUME_FLIP_BOTH":
-        if os.getenv("LIVE_VOLUME_FLIP_BOTH", "").strip().lower() != "true":
-            raise RuntimeError("VOLUME_FLIP_BOTH strategy not explicitly enabled; fail closed")
+    if bot.ENTRY_STRATEGY in ("VOLUME_FLIP_BOTH", "RSI89_SHORT"):
+        rsi89_enabled = os.getenv("LIVE_RSI89_SHORT", "").strip().lower() == "true"
+        volume_enabled = os.getenv("LIVE_VOLUME_FLIP_BOTH", "").strip().lower() == "true"
+        if bot.ENTRY_STRATEGY == "RSI89_SHORT":
+            if not rsi89_enabled or volume_enabled:
+                raise RuntimeError("RSI89_SHORT must be explicitly enabled without VOLUME_FLIP_BOTH; fail closed")
+        elif not volume_enabled or rsi89_enabled:
+            raise RuntimeError("VOLUME_FLIP_BOTH strategy flags do not match; fail closed")
         import blofin_volume_flip_both_live as volume_flip
+        if bot.ENTRY_STRATEGY == "RSI89_SHORT" and not volume_flip.RSI89_SHORT_ONLY_NEW_ENTRIES:
+            raise RuntimeError("RSI89_SHORT-only entry safety gate disabled; fail closed")
         volume_flip.run(
             bot, state, top7, tickers, instruments, expected_close_ms,
             wait_for_confirmed_signal_close,
@@ -598,6 +605,8 @@ def main():
         return
     if os.getenv("LIVE_VOLUME_FLIP_BOTH", "").strip().lower() == "true":
         raise RuntimeError("LIVE_VOLUME_FLIP_BOTH flag set for nonmatching entry strategy; fail closed")
+    if os.getenv("LIVE_RSI89_SHORT", "").strip().lower() == "true":
+        raise RuntimeError("LIVE_RSI89_SHORT flag set for nonmatching entry strategy; fail closed")
     if (bot.ENTRY_STRATEGY == "VOLUME_REVERSE_LONG"
             and os.getenv("LIVE_VOLUME_REVERSE_LONG", "").strip().lower() != "true"):
         raise RuntimeError("VOLUME_REVERSE_LONG requested but not explicitly enabled; fail closed")
