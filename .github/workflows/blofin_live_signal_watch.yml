@@ -73,7 +73,7 @@ jobs:
           fi
 
       - name: Verify four-pivot tunnel candle rules
-        run: python -m unittest -q test_pivot_tunnel.py test_rsi89_audit.py
+        run: python -m unittest -q test_pivot_tunnel.py test_rsi89_audit.py test_rsi89_short.py
 
       - name: Scan 5m LIVE signal and execute AUTO after revalidation
         env:
@@ -87,7 +87,8 @@ jobs:
           LIVE_MA_CROSS: 'false'
           LIVE_RED_SMA_REBOUND: 'false'
           LIVE_VOLUME_REVERSE_LONG: 'false'
-          LIVE_VOLUME_FLIP_BOTH: 'true'
+          LIVE_VOLUME_FLIP_BOTH: 'false'
+          LIVE_RSI89_SHORT: 'true'
           LIVE_VOLUME_FLIP_BOTH_PAUSE_ENTRIES: 'false'
           LIVE_PIVOT_TUNNEL_ENABLED: 'true'
           LIVE_CANDLE_CONFIRM_WORKERS: '16'
@@ -97,7 +98,7 @@ jobs:
           BLOFIN_MAX_ENTRY_SPREAD_PCT: '0'
           BLOFIN_SHORT_ENTRY_MAX_SPREAD_PCT: '0'
           BLOFIN_MAX_ADVERSE_ENTRY_GAP_PCT: '0.10'
-          LIVE_ENTRY_STRATEGY: 'VOLUME_FLIP_BOTH'
+          LIVE_ENTRY_STRATEGY: 'RSI89_SHORT'
         run: python blofin_live_signal_watch.py
 
       - name: Save signal and LIVE state
