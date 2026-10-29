@@ -25,7 +25,7 @@ class TestShortRsi89(unittest.TestCase):
     def setUp(self):
         self.bot = SimpleNamespace(rsi_wilder=live.rsi_wilder)
 
-    def test_upward_crossing_opens_one_short_without_volume_or_tunnel_gate(self):
+    def test_rsi_above_89_qualifies_short_without_volume_or_tunnel_gate(self):
         closes = [100 + i * 0.05 for i in range(70)] + [103.3, 104.3]
         bars = candle_data(closes)
         close_ms = len(bars) * strategy.FIVE
@@ -34,11 +34,32 @@ class TestShortRsi89(unittest.TestCase):
         self.assertEqual(sig["side"], "SHORT")
         self.assertTrue(sig["rsi89_short_entry"])
         self.assertLess(sig["rsi14_previous"], 89)
-        self.assertGreaterEqual(sig["rsi14"], 89)
-        # A subsequent candle staying above 89 must not repeat the entry.
+        self.assertGreater(sig["rsi14"], 89)
+        # The next fully closed candle may qualify even if RSI remains above 89.
+        # A second position in the same coin is prevented by the live account gate.
         more = candle_data(closes + [104.35])
-        self.assertIsNone(strategy.short_rsi89_signal(
-            self.bot, more, len(more) * strategy.FIVE, 17, "TEST-USDT"))
+        another = strategy.short_rsi89_signal(
+            self.bot, more, len(more) * strategy.FIVE, 17, "TEST-USDT")
+        self.assertIsNotNone(another)
+        self.assertGreater(another["rsi14"], 89)
+
+    def test_already_above_89_is_eligible_without_upward_cross(self):
+        bars = candle_data([100 + i * 0.05 for i in range(25)])
+        bot = SimpleNamespace(rsi_wilder=lambda rows, period:
+                              [None] * (len(rows)-2) + [90.1, 91.2])
+        sig = strategy.short_rsi89_signal(
+            bot, bars, len(bars) * strategy.FIVE, 1, "TEST-USDT")
+        self.assertIsNotNone(sig)
+        self.assertGreater(sig["rsi14_previous"], 89)
+        self.assertGreater(sig["rsi14"], 89)
+
+    def test_exactly_89_and_below_do_not_qualify(self):
+        bars = candle_data([100 + i * 0.05 for i in range(25)])
+        for last_rsi in (89.0, 88.99):
+            bot = SimpleNamespace(rsi_wilder=lambda rows, period:
+                                  [None] * (len(rows)-2) + [90.1, last_rsi])
+            self.assertIsNone(strategy.short_rsi89_signal(
+                bot, bars, len(bars) * strategy.FIVE, 1, "TEST-USDT"))
 
     def test_never_use_unclosed_future_candle(self):
         closes = [100 + i * 0.05 for i in range(70)] + [103.3, 104.3]
