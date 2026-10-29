@@ -2346,11 +2346,12 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
     if bot.SIGNAL_MINUTES!=5 or bot.TOP_N!=200 or len(top200)!=200:
         raise RuntimeError("LIVE entry scanner requires confirmed 5m and TOP200")
     reset_rsi89_risk_limit_once(bot, state)
-    entry_label = "RSI89_SHORT_5M" if bot.ENTRY_STRATEGY == "RSI89_SHORT" else STRATEGY
+    entry_mode = getattr(bot, "ENTRY_STRATEGY", "VOLUME_FLIP_BOTH")
+    entry_label = "RSI89_SHORT_5M" if entry_mode == "RSI89_SHORT" else STRATEGY
     if int(state.get("last_scan_close_ms") or 0)==expected_close_ms:
         print(f"{entry_label}: duplicate scan skipped")
         return
-    scan={"strategy":STRATEGY,"entry_strategy":bot.ENTRY_STRATEGY,"selection_priority":"SIGNAL_VOLUME_DIV_PREVIOUS_20_BAR_MEAN_DESC",
+    scan={"strategy":STRATEGY,"entry_strategy":entry_mode,"selection_priority":"SIGNAL_VOLUME_DIV_PREVIOUS_20_BAR_MEAN_DESC",
           "entry_volume_trend_filter":"DAY_UK_DOMINANT_COLOUR_VOLUME",
           "entry_price_tunnel_filter":("FOUR_CONFIRMED_PRICE_PIVOTS"
                                       if PIVOT_ENABLED else
