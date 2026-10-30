@@ -2232,9 +2232,21 @@ def close_tracked_position(state, reason):
     record_closed(state, reason)
 
 
+def is_rsi89_managed_position(pos):
+    # RSI entries retain the legacy volume strategy/hold labels in saved state.
+    # Either explicit RSI marker is sufficient; do not infer ownership from
+    # percentage labels, which can change independently of the strategy.
+    return (pos.get("rsi89_short_entry") is True
+            or pos.get("tp_sl_mode") == "RSI89_SHORT_TP_ONLY")
+
+
 def cancel_tracked_tpsl(state):
     pos = state.get("position")
     if not pos:
+        return False
+
+    if is_rsi89_managed_position(pos):
+        # Only the RSI protection manager may reconcile these broker orders.
         return False
 
     if pos.get("hold_policy") == "HOLD_60M":
@@ -2799,6 +2811,9 @@ def ensure_tp1_for_all_tracked_positions(state):
     for inst in list(positions):
         pos = positions.get(inst)
         if not isinstance(pos, dict):
+            continue
+        if is_rsi89_managed_position(pos):
+            # Legacy TP1/SL1 migration must not overwrite RSI-owned targets.
             continue
         if (
             pos.get("hold_policy") == "HOLD_60M"
