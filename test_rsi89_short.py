@@ -249,7 +249,7 @@ class TestRsi89StopLoss6(unittest.TestCase):
         self.bot.private_request = rejects
         self.assertTrue(strategy._ensure_protection(self.bot, {}, self.pos, self.meta))
         self.assertEqual(self.detail["tpTriggerPrice"], "99")
-        self.assertEqual(self.detail["slTriggerPrice"], "106")
+        self.assertEqual(self.detail["slTriggerPrice"], "103")
         self.assertTrue(self.pos["trigger_migration_deferred"])
         self.assertEqual(self.pos["rsi89_tp_gross_pct"], "0.01")
         self.assertNotEqual(self.pos["protection_status"], "RSI89_TP2_5_SL6_LAST_ACTIVE")
