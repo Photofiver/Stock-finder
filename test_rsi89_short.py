@@ -95,7 +95,7 @@ class TestShortRsi89(unittest.TestCase):
 
 
 
-class TestRsi89StopLoss3(unittest.TestCase):
+class TestRsi89StopLoss6(unittest.TestCase):
     def setUp(self):
         self.detail = {
             "state": "live", "tpslId": "oco-123",
@@ -139,10 +139,10 @@ class TestRsi89StopLoss3(unittest.TestCase):
         }
         self.meta = {"tickSize": "0.01"}
 
-    def test_short_stop_loss_is_three_percent_above_entry(self):
+    def test_short_stop_loss_is_six_percent_above_entry(self):
         self.assertEqual(
             strategy._protection_prices(self.bot, self.pos, self.meta),
-            (Decimal("97.50"), Decimal("103")))
+            (Decimal("97.50"), Decimal("106")))
 
     def test_existing_tp_only_order_adds_stop_without_cancelling_tp(self):
         self.assertTrue(strategy._ensure_protection(
@@ -150,11 +150,11 @@ class TestRsi89StopLoss3(unittest.TestCase):
         self.assertEqual(len(self.posts), 1)
         path, body = self.posts[0]
         self.assertEqual(path, "/api/v1/trade/amend-tpsl")
-        self.assertEqual(body["newSlTriggerPrice"], "103")
+        self.assertEqual(body["newSlTriggerPrice"], "106")
         self.assertEqual(body["newSlTriggerPriceType"], "last")
         self.assertEqual(self.detail["tpTriggerPrice"], "97.5")
-        self.assertEqual(self.pos["sl_policy"], "SL3")
-        self.assertEqual(self.pos["protection_status"], "RSI89_TP2_5_SL3_LAST_ACTIVE")
+        self.assertEqual(self.pos["sl_policy"], "SL6")
+        self.assertEqual(self.pos["protection_status"], "RSI89_TP2_5_SL6_LAST_ACTIVE")
         self.assertTrue(strategy._ensure_protection(self.bot, {}, self.pos, self.meta))
         self.assertEqual(len(self.posts), 1)
 
@@ -166,12 +166,12 @@ class TestRsi89StopLoss3(unittest.TestCase):
         path, body = self.posts[0]
         self.assertEqual(path, "/api/v1/trade/order-tpsl")
         self.assertEqual(body["tpTriggerPrice"], "97.5")
-        self.assertEqual(body["slTriggerPrice"], "103")
+        self.assertEqual(body["slTriggerPrice"], "106")
         self.assertEqual(body["slTriggerPriceType"], "last")
         self.assertEqual(body["slOrderPrice"], "-1")
-        self.assertEqual(self.pos["sl_policy"], "SL3")
+        self.assertEqual(self.pos["sl_policy"], "SL6")
 
-    def test_existing_tp1_sl3_is_amended_to_tp2_5_on_same_broker_oco(self):
+    def test_existing_tp1_sl3_is_amended_to_tp2_5_sl6_on_same_broker_oco(self):
         self.pos.update(
             tp="99", sl="103",
             rsi89_tp_gross_pct="0.01", rsi89_sl_gross_pct="0.03")
@@ -183,14 +183,55 @@ class TestRsi89StopLoss3(unittest.TestCase):
         self.assertEqual(path, "/api/v1/trade/amend-tpsl")
         self.assertEqual(body["tpslId"], "oco-123")
         self.assertEqual(body["newTpTriggerPrice"], "97.5")
-        self.assertNotIn("newSlTriggerPrice", body)
+        self.assertEqual(body["newSlTriggerPrice"], "106")
         self.assertEqual(self.detail["tpTriggerPrice"], "97.5")
-        self.assertEqual(self.detail["slTriggerPrice"], "103")
+        self.assertEqual(self.detail["slTriggerPrice"], "106")
         self.assertEqual(self.pos["rsi89_tp_gross_pct"], "0.025")
-        self.assertEqual(self.pos["rsi89_sl_gross_pct"], "0.03")
-        self.assertEqual(self.pos["protection_status"], "RSI89_TP2_5_SL3_LAST_ACTIVE")
+        self.assertEqual(self.pos["rsi89_sl_gross_pct"], "0.06")
+        self.assertEqual(self.pos["protection_status"], "RSI89_TP2_5_SL6_LAST_ACTIVE")
         self.assertTrue(strategy._ensure_protection(self.bot, {}, self.pos, self.meta))
         self.assertEqual(len(self.posts), 1)
+
+    def test_existing_tp2_5_sl3_is_amended_to_sl6_on_same_broker_oco(self):
+        self.pos.update(
+            tp="97.5", sl="103",
+            rsi89_tp_gross_pct="0.025", rsi89_sl_gross_pct="0.03")
+        self.detail.update(
+            tpTriggerPrice="97.5", slTriggerPrice="103", slTriggerPriceType="last")
+        self.assertTrue(strategy._ensure_protection(self.bot, {}, self.pos, self.meta))
+        self.assertEqual(len(self.posts), 1)
+        path, body = self.posts[0]
+        self.assertEqual(path, "/api/v1/trade/amend-tpsl")
+        self.assertEqual(body["tpslId"], "oco-123")
+        self.assertEqual(body["newSlTriggerPrice"], "106")
+        self.assertNotIn("newTpTriggerPrice", body)
+        self.assertEqual(self.detail["tpTriggerPrice"], "97.5")
+        self.assertEqual(self.detail["slTriggerPrice"], "106")
+        self.assertEqual(self.pos["rsi89_tp_gross_pct"], "0.025")
+        self.assertEqual(self.pos["rsi89_sl_gross_pct"], "0.06")
+        self.assertEqual(self.pos["protection_status"], "RSI89_TP2_5_SL6_LAST_ACTIVE")
+        self.assertTrue(strategy._ensure_protection(self.bot, {}, self.pos, self.meta))
+        self.assertEqual(len(self.posts), 1)
+
+    def test_rejected_sl6_amend_preserves_sl3_and_defers_entries(self):
+        self.pos.update(
+            tp="97.5", sl="103",
+            rsi89_tp_gross_pct="0.025", rsi89_sl_gross_pct="0.03")
+        self.detail.update(
+            tpTriggerPrice="97.5", slTriggerPrice="103", slTriggerPriceType="last")
+        original_request = self.bot.private_request
+
+        def rejects(method, path, params=None, body=None):
+            if method == "POST" and path == "/api/v1/trade/amend-tpsl":
+                return [{"code": "500", "msg": "not accepted"}]
+            return original_request(method, path, params=params, body=body)
+
+        self.bot.private_request = rejects
+        self.assertTrue(strategy._ensure_protection(self.bot, {}, self.pos, self.meta))
+        self.assertEqual(self.detail["slTriggerPrice"], "103")
+        self.assertTrue(self.pos["trigger_migration_deferred"])
+        self.assertEqual(self.pos["rsi89_sl_gross_pct"], "0.03")
+        self.assertNotEqual(self.pos["protection_status"], "RSI89_TP2_5_SL6_LAST_ACTIVE")
 
     def test_rejected_tp_2_5_preserves_old_oco_and_defers_entries(self):
         self.pos.update(
@@ -208,12 +249,12 @@ class TestRsi89StopLoss3(unittest.TestCase):
         self.bot.private_request = rejects
         self.assertTrue(strategy._ensure_protection(self.bot, {}, self.pos, self.meta))
         self.assertEqual(self.detail["tpTriggerPrice"], "99")
-        self.assertEqual(self.detail["slTriggerPrice"], "103")
+        self.assertEqual(self.detail["slTriggerPrice"], "106")
         self.assertTrue(self.pos["trigger_migration_deferred"])
         self.assertEqual(self.pos["rsi89_tp_gross_pct"], "0.01")
-        self.assertNotEqual(self.pos["protection_status"], "RSI89_TP2_5_SL3_LAST_ACTIVE")
+        self.assertNotEqual(self.pos["protection_status"], "RSI89_TP2_5_SL6_LAST_ACTIVE")
 
-    def test_existing_sl8_is_amended_to_sl3_on_same_broker_oco(self):
+    def test_existing_sl8_is_amended_to_sl6_on_same_broker_oco(self):
         self.pos.update(
             sl="108", tp="99",
             rsi89_tp_gross_pct="0.01", rsi89_sl_gross_pct="0.08")
@@ -224,12 +265,12 @@ class TestRsi89StopLoss3(unittest.TestCase):
         self.assertEqual(len(self.posts), 1)
         self.assertEqual(self.posts[0][0], "/api/v1/trade/amend-tpsl")
         self.assertEqual(self.posts[0][1]["tpslId"], "oco-123")
-        self.assertEqual(self.posts[0][1]["newSlTriggerPrice"], "103")
+        self.assertEqual(self.posts[0][1]["newSlTriggerPrice"], "106")
         self.assertEqual(self.posts[0][1]["newTpTriggerPrice"], "97.5")
         self.assertEqual(self.detail["tpTriggerPrice"], "97.5")
-        self.assertEqual(self.pos["rsi89_sl_gross_pct"], "0.03")
-        self.assertEqual(self.pos["sl_policy"], "SL3")
-        self.assertEqual(self.pos["protection_status"], "RSI89_TP2_5_SL3_LAST_ACTIVE")
+        self.assertEqual(self.pos["rsi89_sl_gross_pct"], "0.06")
+        self.assertEqual(self.pos["sl_policy"], "SL6")
+        self.assertEqual(self.pos["protection_status"], "RSI89_TP2_5_SL6_LAST_ACTIVE")
         self.assertTrue(strategy._ensure_protection(
             self.bot, {}, self.pos, self.meta))
         self.assertEqual(len(self.posts), 1)
@@ -254,7 +295,7 @@ class TestRsi89StopLoss3(unittest.TestCase):
         self.assertTrue(self.pos["trigger_migration_deferred"])
         self.assertEqual(self.pos["rsi89_sl_gross_pct"], "0.08")
         self.assertNotEqual(self.pos["protection_status"],
-                            "RSI89_TP2_5_SL3_LAST_ACTIVE")
+                            "RSI89_TP2_5_SL6_LAST_ACTIVE")
 
     def test_unconfirmed_amend_never_claims_stop_loss_active(self):
         original_request = self.bot.private_request
@@ -268,7 +309,7 @@ class TestRsi89StopLoss3(unittest.TestCase):
         self.assertFalse(strategy._ensure_protection(
             self.bot, {}, self.pos, self.meta))
         self.assertNotEqual(self.pos.get("protection_status"),
-                            "RSI89_TP2_5_SL3_LAST_ACTIVE")
+                            "RSI89_TP2_5_SL6_LAST_ACTIVE")
         self.assertEqual(self.detail["slTriggerPrice"], "0")
 
 
@@ -311,26 +352,26 @@ class TestCompoundedBankroll(unittest.TestCase):
             Decimal("0"))
 
 
-class TestRsi89Targets3(unittest.TestCase):
+class TestRsi89Targets6(unittest.TestCase):
     def setUp(self):
         self.bot = SimpleNamespace(d=live.d)
         self.meta = {"tickSize": "0.01"}
 
-    def test_new_rsi89_short_has_tp2_5_and_sl3(self):
+    def test_new_rsi89_short_has_tp2_5_and_sl6(self):
         pos = {"side": "SHORT", "reference_entry": "100",
                "tp_sl_mode": strategy.RSI89_TP_ONLY_MODE}
         self.assertEqual(strategy._protection_prices(self.bot, pos, self.meta),
-                         (Decimal("97.50"), Decimal("103")))
+                         (Decimal("97.50"), Decimal("106")))
         self.assertEqual(strategy._rsi89_policy_labels(self.bot, pos),
-                         ("TP2_5", "SL3"))
+                         ("TP2_5", "SL6"))
 
     def test_legacy_open_rsi89_short_uses_requested_new_stop(self):
         pos = {"side": "SHORT", "reference_entry": "100",
                "tp_sl_mode": strategy.RSI89_TP_ONLY_MODE, "order_id": "old-live"}
         self.assertEqual(strategy._protection_prices(self.bot, pos, self.meta),
-                         (Decimal("97.50"), Decimal("103")))
+                         (Decimal("97.50"), Decimal("106")))
         self.assertEqual(strategy._rsi89_policy_labels(self.bot, pos),
-                         ("TP2_5", "SL3"))
+                         ("TP2_5", "SL6"))
 
     def test_previous_tp143_sl525_position_keeps_broker_targets(self):
         pos = {"side": "SHORT", "reference_entry": "100",
@@ -345,7 +386,7 @@ class TestRsi89Targets3(unittest.TestCase):
         pos = {"side": "SHORT", "reference_entry": "100.01",
                "tp_sl_mode": strategy.RSI89_TP_ONLY_MODE}
         tp, sl = strategy._protection_prices(self.bot, pos, self.meta)
-        self.assertEqual((tp, sl), (Decimal("97.50"), Decimal("103.02")))
+        self.assertEqual((tp, sl), (Decimal("97.50"), Decimal("106.02")))
 
 
 if __name__ == "__main__":
