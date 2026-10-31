@@ -1,0 +1,59 @@
+name: BloFin FREE full 90d profit search (READ ONLY)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/blofin-ml-winloss-20261025
+    paths:
+      - research/blofin_full90_profit_search.py
+      - .github/workflows/blofin_full90_profit_search.yml
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - name: Checkout ONLY research script and archive metadata
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          persist-credentials: false
+          sparse-checkout: |
+            research/blofin_full90_profit_search.py
+            research/blofin_free_history/latest_summary.json
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install open source CPU libraries
+        run: python -m pip install 'numpy>=1.26,<3' 'pandas>=2.2,<3'
+      - name: Reuse ALL TEN 90-day candle archives from run 39994070142
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 39994070142
+          github-token: ${{ github.token }}
+          pattern: blofin-free-90d-shard-*
+          merge-multiple: true
+          path: existing-90d
+      - name: Compile research script
+        run: python -m py_compile research/blofin_full90_profit_search.py
+      - name: Run 90-day chronological strategy search WITHOUT BLOFIN ACCESS
+        run: |
+          python -u research/blofin_full90_profit_search.py \
+            --archive existing-90d/candles \
+            --universe research/blofin_free_history/latest_summary.json \
+            --out full90-report
+      - name: Upload independent test and daily results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blofin-free-90d-strategy-profit-report
+          path: full90-report/
+          if-no-files-found: warn
+          retention-days: 7
