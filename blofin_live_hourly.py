@@ -294,6 +294,64 @@ def market_get(path, params=None):
     raise RuntimeError(f"Market request failed {path}: {last_error}")
 
 
+def apply_historical_11_win_credit(state):
+    """Once-only allocation credit for 11 wins verified on 2026-11-04.
+
+    This is NOT a broker transfer. Recheck the historical closure IDs before
+    granting credit; a subsequent loss does not revoke an already earned bonus.
+    The marker is saved in the bot state to prevent any duplicate award.
+    """
+    anchor_id = "119207442"
+    if state.get("bankroll_historical_11_win_credit_id") == anchor_id:
+        return False
+    if int(state.get("bankroll_streak_awards", 0)) > 0 or d(
+            state.get("bankroll_streak_bonus_usdt", 0)) > 0:
+        return False
+
+    history = state.get("trade_history") or []
+    if not isinstance(history, list):
+        return False
+    closed = sorted(
+        (row for row in history if isinstance(row, dict) and row.get("closed_ms")),
+        key=lambda row: int(row["closed_ms"]),
+    )
+    anchors = [i for i, row in enumerate(closed)
+               if str(row.get("history_id")) == anchor_id]
+    if len(anchors) != 1 or anchors[0] < 10:
+        return False
+    at = anchors[0]
+    verified = closed[at - 10:at + 1]
+    ids = [str(row.get("history_id") or "") for row in verified]
+    if (not all(ids) or len(set(ids)) != 11
+            or not all(d(row.get("net_pnl_usdt", 0)) > 0 for row in verified)):
+        return False
+    # The ten-win reward was earned on the trade immediately before the
+    # eleventh, and the streak must follow any later recorded closures.
+    now_streak = 0
+    for row in reversed(closed):
+        if d(row.get("net_pnl_usdt", 0)) <= 0:
+            break
+        now_streak += 1
+    bankroll_now = current_live_bankroll(state)
+    award = min(BANKROLL_WIN_STREAK_BONUS_USDT,
+                max(Decimal("0"), BANKROLL_WIN_STREAK_MAX_USDT - bankroll_now))
+    if award <= 0:
+        return False
+    state["bankroll_streak_bonus_usdt"] = clean_decimal(award)
+    state["bankroll_streak_awards"] = 1
+    state["bankroll_streak_last_award_ms"] = int(verified[-2]["closed_ms"])
+    state["bankroll_streak_last_award_history_id"] = ids[-2]
+    state["bankroll_win_streak"] = now_streak
+    state["bankroll_historical_11_win_credit_id"] = anchor_id
+    state["bankroll_streak_credit_reason"] = (
+        "USER_REQUESTED_PREEXISTING_11_VERIFIED_NET_WINS_2026_11_04"
+    )
+    print(f"LIVE BANKROLL HISTORICAL BONUS: +{award} USDT, "
+          f"bankroll={current_live_bankroll(state)} USDT, "
+          f"winning_streak={now_streak}, verified_anchor={anchor_id}")
+    return True
+
+
 def load_state():
     try:
         with open(STATE_FILE, "r", encoding="utf-8") as f:
@@ -309,6 +367,7 @@ def load_state():
             if isinstance(legacy, dict) and legacy.get("inst"):
                 positions.setdefault(str(legacy["inst"]), legacy)
             state["position"] = None
+            apply_historical_11_win_credit(state)
             return state
     except Exception:
         pass
