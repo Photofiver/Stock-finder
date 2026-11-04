@@ -28,6 +28,9 @@ PATTERN_AUDIT_FILE = os.getenv("LIVE_PATTERN_AUDIT_FILE", "blofin_pattern_learni
 PATTERN_AUDIT_LIMIT = 5000
 LIVE_ENABLED = os.getenv("BLOFIN_LIVE_ENABLED", "").strip().lower() == "true"
 MAX_NOTIONAL_USDT = Decimal(os.getenv("LIVE_MAX_BANKROLL_USDT", "10"))
+BANKROLL_WIN_STREAK_STEP = 10
+BANKROLL_WIN_STREAK_BONUS_USDT = Decimal("10")
+BANKROLL_WIN_STREAK_MAX_USDT = Decimal("70")
 ENTRY_STRATEGY = os.getenv("LIVE_ENTRY_STRATEGY", "STRICT").strip().upper()
 if ENTRY_STRATEGY not in ("STRICT", "NEAREST_VOLUME", "RED_SMA_REBOUND", "VOLUME_REVERSE_LONG", "VOLUME_FLIP_BOTH", "RSI89_SHORT"):
     raise RuntimeError("LIVE_ENTRY_STRATEGY must be STRICT, NEAREST_VOLUME, RED_SMA_REBOUND, VOLUME_REVERSE_LONG, VOLUME_FLIP_BOTH or RSI89_SHORT")
@@ -1735,12 +1738,51 @@ def get_available_usdt():
 
 
 def current_live_bankroll(state):
-    """Starting bankroll compounded only by realized NET PnL since the bankroll reset."""
+    """Starting allocation + verified NET PnL + earned streak bonuses; never above 70 USDT."""
     starting_bankroll = d(state.get("bankroll_start_usdt", MAX_NOTIONAL_USDT))
     realized_net = d(state.get("realized_pnl_usdt", 0))
     pnl_baseline = d(state.get("bankroll_pnl_baseline_usdt", 0))
-    bankroll = starting_bankroll + (realized_net - pnl_baseline)
-    return max(Decimal("0"), bankroll)
+    streak_bonus = d(state.get("bankroll_streak_bonus_usdt", 0))
+    bankroll = starting_bankroll + (realized_net - pnl_baseline) + streak_bonus
+    return max(Decimal("0"), min(BANKROLL_WIN_STREAK_MAX_USDT, bankroll))
+
+
+def register_bankroll_win_streak(state, net_pnl):
+    """Award up to 10 USDT after each 10 consecutive verified net-positive closes.
+
+    Awards are an internal strategy allocation, NOT a deposit or a transfer.
+    Losses and flat closes break the streak. A reached 70-USDT cap is permanent.
+    """
+    pnl = d(net_pnl)
+    if not pnl.is_finite():
+        raise ValueError("Non-finite closed trade PnL")
+    if pnl <= 0:
+        state["bankroll_win_streak"] = 0
+        return Decimal("0")
+
+    streak = max(0, int(state.get("bankroll_win_streak", 0))) + 1
+    state["bankroll_win_streak"] = streak
+    if state.get("bankroll_streak_cap_reached"):
+        return Decimal("0")
+    if current_live_bankroll(state) >= BANKROLL_WIN_STREAK_MAX_USDT:
+        state["bankroll_streak_cap_reached"] = True
+        return Decimal("0")
+    if streak % BANKROLL_WIN_STREAK_STEP:
+        return Decimal("0")
+
+    start = d(state.get("bankroll_start_usdt", MAX_NOTIONAL_USDT))
+    previous_bonus = d(state.get("bankroll_streak_bonus_usdt", 0))
+    bonus_capacity = max(Decimal("0"), BANKROLL_WIN_STREAK_MAX_USDT - start - previous_bonus)
+    bankroll_capacity = max(Decimal("0"), BANKROLL_WIN_STREAK_MAX_USDT - current_live_bankroll(state))
+    award = min(BANKROLL_WIN_STREAK_BONUS_USDT, bonus_capacity, bankroll_capacity)
+    if award > 0:
+        state["bankroll_streak_bonus_usdt"] = clean_decimal(previous_bonus + award)
+        state["bankroll_streak_awards"] = int(state.get("bankroll_streak_awards", 0)) + 1
+        state["bankroll_streak_last_award_ms"] = now_ms()
+    if (previous_bonus + award >= max(Decimal("0"), BANKROLL_WIN_STREAK_MAX_USDT - start)
+            or current_live_bankroll(state) >= BANKROLL_WIN_STREAK_MAX_USDT):
+        state["bankroll_streak_cap_reached"] = True
+    return award
 
 
 def risk_stop_active(state):
@@ -1750,7 +1792,12 @@ def risk_stop_active(state):
     starting_bankroll = d(state.get("bankroll_start_usdt", MAX_NOTIONAL_USDT))
     if starting_bankroll <= 0:
         return True
-    bankroll = current_live_bankroll(state)
+    # Do not let newly awarded allocation mask the original cumulative-loss stop.
+    bankroll = max(
+        Decimal("0"),
+        starting_bankroll + d(state.get("realized_pnl_usdt", 0))
+        - d(state.get("bankroll_pnl_baseline_usdt", 0)),
+    )
     threshold = starting_bankroll * (Decimal("1") - MAX_DRAWDOWN_PCT)
     if bankroll <= threshold:
         state["risk_stop_triggered"] = True
@@ -2044,6 +2091,13 @@ def record_closed(state, reason_hint=None):
     )
     state["fees_usdt"] = float(d(state.get("fees_usdt", 0)) + fee)
     state["realized_pnl_usdt"] = float(d(state.get("realized_pnl_usdt", 0)) + net_pnl)
+    bankroll_award = register_bankroll_win_streak(state, net_pnl)
+    if bankroll_award > 0:
+        print(
+            f"LIVE BANKROLL BONUS: {bankroll_award:+.2f} USDT after "
+            f"{state['bankroll_win_streak']} consecutive wins; "
+            f"bankroll {current_live_bankroll(state):.4f}/70 USDT"
+        )
 
     patterns = (pos.get("signal_snapshot") or {}).get("chart_patterns") or []
     pattern_review = review_chart_patterns(patterns, str(pos.get("side") or ""), result)
@@ -3215,7 +3269,9 @@ def status(state, top10):
     t = state.get("trades", {})
     live_bankroll = current_live_bankroll(state)
     notify(
-        f"LIVE status | bankroll {live_bankroll:.4f} USDT | available {available:.4f} USDT | "
+        f"LIVE status | bankroll {live_bankroll:.4f}/70 USDT | available {available:.4f} USDT | "
+        f"streak {state.get('bankroll_win_streak', 0)} wins | "
+        f"earned bonuses {d(state.get('bankroll_streak_bonus_usdt', 0)):.2f} USDT | "
         f"NET realized {d(state.get('realized_pnl_usdt', 0)):+.4f} | "
         f"fees {d(state.get('fees_usdt', 0)):.4f} | trades {t.get('total', 0)} "
         f"(W{t.get('wins', 0)}/L{t.get('losses', 0)}/F{t.get('flat', 0)}/U{t.get('unverified', 0)}) | "
