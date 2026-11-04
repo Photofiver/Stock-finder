@@ -7,6 +7,7 @@ on:
       - 'blofin_live_approve.py'
       - 'blofin_live_signal_watch.py'
       - 'blofin_live_monitor.py'
+      - 'test_blofin_win_streak_bankroll.py'
       - '.github/workflows/blofin_live_validate.yml'
   workflow_dispatch:
 
@@ -24,5 +25,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Validate LIVE bot syntax only
-        run: python -m py_compile blofin_live_hourly.py blofin_live_approve.py blofin_live_signal_watch.py blofin_live_monitor.py
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Validate LIVE bot syntax and bankroll tests
+        run: |
+          python -m py_compile blofin_live_hourly.py blofin_live_approve.py blofin_live_signal_watch.py blofin_live_monitor.py
+          python -m unittest -q test_blofin_win_streak_bankroll.py
