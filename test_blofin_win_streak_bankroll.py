@@ -72,6 +72,37 @@ class BankrollWinStreakTests(unittest.TestCase):
         self.assertEqual(bot.current_live_bankroll(self.state), Decimal("70"))
         self.assertTrue(self.state["bankroll_streak_cap_reached"])
 
+    def test_preexisting_eleven_wins_credit_once_then_twentieth_win(self):
+        history = [{"closed_ms": 100, "history_id": "loss",
+                    "net_pnl_usdt": -0.10}]
+        for i in range(11):
+            history.append({
+                "closed_ms": 101 + i,
+                "history_id": "119207442" if i == 10 else (
+                    "119207887" if i == 9 else f"win{i}"),
+                "net_pnl_usdt": 0.01,
+            })
+        self.state["trade_history"] = history
+        self.state["realized_pnl_usdt"] = "0.01"
+        self.assertTrue(bot.apply_historical_11_win_credit(self.state))
+        self.assertEqual(self.state["bankroll_streak_bonus_usdt"], "10")
+        self.assertEqual(self.state["bankroll_win_streak"], 11)
+        self.assertEqual(self.state["bankroll_streak_awards"], 1)
+        self.assertEqual(self.state["bankroll_streak_last_award_history_id"], "119207887")
+        self.assertFalse(bot.apply_historical_11_win_credit(self.state))
+        for _ in range(8):
+            self.assertEqual(self.close("0.01"), Decimal("0"))
+        self.assertEqual(self.close("0.01"), Decimal("10"))
+        self.assertEqual(self.state["bankroll_win_streak"], 20)
+        self.assertEqual(self.state["bankroll_streak_awards"], 2)
+
+    def test_historical_credit_not_awarded_without_verifiable_streak(self):
+        self.state["trade_history"] = [
+            {"closed_ms": 100, "history_id": "119207442",
+             "net_pnl_usdt": 0.01}]
+        self.assertFalse(bot.apply_historical_11_win_credit(self.state))
+        self.assertNotIn("bankroll_streak_bonus_usdt", self.state)
+
     def test_missing_state_is_safe_and_does_not_backfill_old_wins(self):
         self.assertEqual(self.state.get("bankroll_win_streak", 0), 0)
         self.assertEqual(self.close("-0.01"), 0)
