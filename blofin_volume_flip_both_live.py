@@ -2373,6 +2373,19 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
     active = bot.get_tracked_positions(state)
     broker = bot.get_open_positions()
     broker_set={str(p.get("instId")) for p in broker}
+    # One-time reconciliation for the stale 2026-11-05 AVAAI market-order latch.
+    # Only release it after the fresh broker snapshot shows no AVAAI position.
+    avaa_attempt = (state.get("volume_long_order_attempts") or {}).get("AVAAI-USDT")
+    if (avaa_attempt and avaa_attempt.get("status") == "UNCERTAIN"
+            and avaa_attempt.get("client_order_id") == "volreverse011a070b7ef44eae9cfe30"
+            and bot.now_ms() - int(avaa_attempt.get("started_ms") or 0) > 3600000
+            and "AVAAI-USDT" not in broker_set
+            and "AVAAI-USDT" not in active):
+        avaa_attempt["status"] = "SAFE_CLOSED"
+        avaa_attempt["resolution"] = "SAFE_CLOSED_USER_VERIFIED_AVAAI_20261105"
+        avaa_attempt["resolved_ms"] = bot.now_ms()
+        bot.save_state(state)
+        print("AVAAI-USDT stale uncertain market order resolved: no open broker position")
     # An exchange-side TP/SL may have already flattened a pivot-tunnel trade.
     # Re-arm only after a fresh four-point configuration; never reuse old pivots.
     pivot_open = state.setdefault("pivot_tunnel_live_positions", {})
