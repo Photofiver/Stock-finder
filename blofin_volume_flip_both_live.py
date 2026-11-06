@@ -16,6 +16,7 @@ Existing positions retain their previously confirmed TP/SL policy.
 Existing legacy red-volume LONG positions retain their original exit.
 1x isolated, up to four different coins, shared bankroll and risk gate.
 """
+import json
 import math
 import os
 import uuid
@@ -1950,6 +1951,12 @@ def pivot_long_entry_filter(sig, quote):
     return dict(audit, allowed=True, reason="PASS")
 
 
+def _restricted_open(rows):
+    return (isinstance(rows, list) and len(rows) == 1
+            and isinstance(rows[0], dict) and str(rows[0].get("code")) == "102167"
+            and "orderId" in rows[0] and rows[0]["orderId"] in (None, ""))
+
+
 def _open_one(bot, state, sig, instruments):
     inst = sig["inst"]
     side = sig["side"]
@@ -2070,11 +2077,27 @@ def _open_one(bot, state, sig, instruments):
             "size":bot.clean_decimal(size),"reduceOnly":"false",
             "clientOrderId":order_id,
         })
-    except Exception:
+    except Exception as exc:
+        message = str(exc)
+        if message.startswith("BloFin API /api/v1/trade/order: ") and " | details=" in message:
+            try:
+                details = json.loads(message.split(" | details=", 1)[1])
+            except ValueError:
+                details = None
+            if _restricted_open(details):
+                attempt["status"] = "REJECTED_102167"
+                sig["preorder_rejection"] = "BROKER_OPEN_RESTRICTED_102167"
+                bot.save_state(state)
+                return False
         attempt["status"] = "UNCERTAIN"
         bot.save_state(state)
         raise
     row = result[0] if isinstance(result,list) and result else (result or {})
+    if _restricted_open([row]):
+        attempt["status"] = "REJECTED_102167"
+        sig["preorder_rejection"] = "BROKER_OPEN_RESTRICTED_102167"
+        bot.save_state(state)
+        return False
     if str(row.get("code","0")) != "0":
         attempt["status"] = "UNCERTAIN"
         bot.save_state(state)
@@ -2129,8 +2152,8 @@ def _open_one(bot, state, sig, instruments):
     if not fill or bot.d(fill.get("averagePrice") or "0")<=0 or bot.d(fill.get("filledSize") or "0")<=0:
         # Do not send new unrelated orders until the fill can be reconciled.
         attempt["status"]="UNCERTAIN_FILL"
-        bot.notify(f"CRITICAL: {inst} LONG accepted but fill not verified; reconcile broker.",
-                   "BloFin LIVE volume LONG safety")
+        bot.notify(f"CRITICAL: {inst} {side} accepted but fill not verified; reconcile broker.",
+                   "BloFin LIVE RSI89 safety" if rsi89_short_entry else "BloFin LIVE volume safety")
         bot.save_state(state)
         return True
     actual_price=bot.d(fill["averagePrice"])
@@ -2183,8 +2206,10 @@ def _open_one(bot, state, sig, instruments):
         pos["entry_chart"]=capture_chart(bot,pos,"ENTRY",now,actual_price)
     except Exception as exc:
         pos["entry_chart_error"]=f"{type(exc).__name__}: {exc}"
+    indicator = (f"RSI14 {sig['rsi14']:.2f}" if rsi89_short_entry
+                 else f"vol ratio {sig.get('volume_ratio') or 0:.2f}x")
     bot.notify(
-        f"OPEN {side} {inst} | rank {sig['rank']}/200 | vol ratio {sig['volume_ratio'] or 0:.2f}x "
+        f"OPEN {side} {inst} | rank {sig['rank']}/200 | {indicator} "
         f"| 1x isolated, notional {pos['notional_usdt']} USDT | "
         f"TP {pos['tp']} / SL {pos['sl']} (Last Price, {pos.get('tp_sl_mode')}) | " +
         ("EXIT: broker TP +2.5% gross / SL -6% gross; no volume exit."
@@ -2192,7 +2217,7 @@ def _open_one(bot, state, sig, instruments):
          "EXIT: broker TP/SL or CLOSED 5m breaks last confirmed swing."
          if sig.get("pivot_tunnel_entry") else
          "EXIT: broker TP/SL or opposite CLOSED 5m volume > ENTRY candle volume."),
-        "BloFin LIVE both sides volume flip",
+        "BloFin LIVE RSI89" if rsi89_short_entry else "BloFin LIVE both sides volume flip",
         attachment_path=pos.get("entry_chart"),
     )
     return True
@@ -2367,12 +2392,24 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
           "scanned_confirmed":0,"matched":0,"candidates":[],
           "entries":[],"exits":[],"sl_updates":[],"rejections":[]}
 
+    if entry_mode == "RSI89_SHORT":
+        scan.update(entry_price_tunnel_filter="DISABLED", entry_volume_trend_filter="DISABLED",
+                    selection_priority="RSI89_SHORT_ONLY")
+
     bot.sync_all_tracked_positions(state)
     bot.evaluate_all_tracked_exit_signals(state, expected_close_ms)
 
     active = bot.get_tracked_positions(state)
     broker = bot.get_open_positions()
     broker_set={str(p.get("instId")) for p in broker}
+    # This specific submission received a definitive 102167 with no order ID.
+    rejected = state.get("volume_long_order_attempts", {}).get("UAI-USDT", {})
+    if (rejected.get("client_order_id") == "volreverse71ce7bae8f7f42b0887981"
+            and rejected.get("status") == "UNCERTAIN"
+            and "UAI-USDT" not in broker_set and "UAI-USDT" not in active):
+        rejected["status"] = "REJECTED_102167"
+        rejected["resolved_ms"] = bot.now_ms()
+        bot.save_state(state)
     # One-time reconciliation for the stale 2026-11-05 AVAAI market-order latch.
     # Only release it after the fresh broker snapshot shows no AVAAI position.
     avaa_attempt = (state.get("volume_long_order_attempts") or {}).get("AVAAI-USDT")
@@ -2607,7 +2644,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
     elif bot.risk_stop_active(state):
         scan["status"]="BLOCKED_10PCT_DRAWDOWN"
 
-    elif PIVOT_ENABLED:
+    elif entry_mode == "RSI89_SHORT" or PIVOT_ENABLED:
         # Enter on the exact closed 5m bar confirming pivot point 4,
         # only when the requested larger opposite-colour Volume bar also confirms.
         matches = []
@@ -2700,7 +2737,8 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
             -sig["volume_strength_20"], sig["rank"], sig["inst"]))
         scan["selection_priority"] = ("RSI89_SHORT_ONLY" if RSI89_SHORT_ONLY_NEW_ENTRIES
                                       else "RSI89_SHORT_FIRST_THEN_PIVOT_LONG_VOLUME_STRENGTH")
-        scan["entry_volume_trend_filter"] = "PREVIOUS_RED_TO_LARGER_GREEN_OR_GREEN_TO_LARGER_RED"
+        if entry_mode != "RSI89_SHORT":
+            scan["entry_volume_trend_filter"] = "PREVIOUS_RED_TO_LARGER_GREEN_OR_GREEN_TO_LARGER_RED"
         scan["matched"] = len(matches)
         scan["candidates"] = matches[:20]
         scan["status"] = "NO_MATCH" if not matches else "MATCHES_NO_ENTRY"
@@ -2731,7 +2769,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                         "inst": sig["inst"], "reason": "BROKER_ORDER_UNCERTAIN",
                         "error": str(exc)[:240]})
                     bot.notify(f"CRITICAL: {sig['inst']} order uncertain: {exc}",
-                               "BloFin LIVE pivot tunnel safety")
+                               "BloFin LIVE RSI89 safety" if sig.get("rsi89_short_entry") else "BloFin LIVE pivot tunnel safety")
                     break
                 scan["rejections"].append({
                     "inst": sig["inst"], "reason": "PREORDER_REJECTION",
@@ -2856,7 +2894,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
                     scan["rejections"].append({"inst":sig["inst"],
                         "reason":"BROKER_ORDER_UNCERTAIN","error":str(exc)[:240]})
                     bot.notify(f"CRITICAL: {sig['inst']} order uncertain: {exc}",
-                               "BloFin LIVE volume LONG safety")
+                               "BloFin LIVE volume safety")
                     break
                 scan["rejections"].append({"inst":sig["inst"],
                     "reason":"PREORDER_REJECTION","error":str(exc)[:240]})
