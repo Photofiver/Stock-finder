@@ -81,18 +81,6 @@ jobs:
           done
           echo 'Could not save report after six pushes' >&2
           exit 1
-      - name: Hourly research summary to existing BloFin notification channel
-        if: success()
-        env:
-          NTFY_TOPIC: 'blofin-nhd0jt7wspfnhtitdlaowk1n'
-        shell: bash
-        run: |
-          curl -fsS --retry 2 --retry-delay 3 --max-time 20 \
-            -H 'Title: BloFin hourly research' \
-            -H 'Priority: 3' \
-            --data-binary @research/blofin_hourly_filter_lab/latest.txt \
-            "https://ntfy.sh/$NTFY_TOPIC"
-
 
   smoke:
     name: Analyze real saved trades without publishing
