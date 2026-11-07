@@ -1,0 +1,86 @@
+name: BloFin LIVE daily report to ntfy
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/blofin_daily_ntfy_report.yml'
+      - 'blofin_daily_ntfy_report.py'
+  schedule:
+    # GitHub cron is UTC; run at both possible UTC hours and keep only 06:00 UK.
+    - cron: '0 5,6 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blofin-live-daily-ntfy-report
+  cancel-in-progress: false
+
+jobs:
+  daily-report:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Check 06:00 Europe/London on scheduled runs
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" != "schedule" ] || [ "$(TZ=Europe/London date +%H)" = "06" ]; then
+            echo 'send=true' >> "$GITHUB_OUTPUT"
+          else
+            echo "Not UK 06:00; skipping duplicate UTC schedule."
+            echo 'send=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout current bot state, without modifying trading
+        if: steps.guard.outputs.send == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            blofin_live_state.json
+            blofin_daily_ntfy_report.py
+          sparse-checkout-cone-mode: false
+
+      - name: Refresh latest bot state
+        if: steps.guard.outputs.send == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=1
+          git reset --hard origin/main
+          test -s blofin_live_state.json
+          test -s blofin_daily_ntfy_report.py
+
+      - name: Build read-only empirical report
+        if: steps.guard.outputs.send == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 blofin_daily_ntfy_report.py | tee /tmp/blofin_daily_ntfy_message.txt
+          test -s /tmp/blofin_daily_ntfy_message.txt
+
+      - name: Send report through existing ntfy topic
+        if: steps.guard.outputs.send == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --show-error --silent \
+            --retry 4 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 30 \
+            -H 'Title: BloFin LIVE - 120000 USDT' \
+            -H 'Priority: 4' \
+            -H 'Tags: chart_with_upwards_trend' \
+            --data-binary @/tmp/blofin_daily_ntfy_message.txt \
+            'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n'
+          echo 'NTFY_REPORT_ACCEPTED_BY_SERVER'
+
+      - name: Notify if report generation failed
+        if: failure() && steps.guard.outputs.send == 'true'
+        shell: bash
+        run: |
+          curl --fail-with-body --show-error --silent --retry 2 --max-time 20 \
+            -H 'Title: BloFin DAILY REPORT ERROR' -H 'Priority: 5' \
+            -d "GitHub daily ntfy report failed; run $GITHUB_RUN_ID." \
+            'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n' || true
