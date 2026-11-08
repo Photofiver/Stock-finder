@@ -7,11 +7,12 @@ on:
       - '.github/workflows/blofin_daily_ntfy_report.yml'
       - 'blofin_daily_ntfy_report.py'
   schedule:
-    # GitHub cron is UTC; run at both possible UTC hours and keep only 06:00 UK.
-    - cron: '0 5,6 * * *'
+    # Main send at 07:00 UK; backup at 07:10 UK. UTC hours cover GMT/BST.
+    - cron: '0,10 6,7 * * *'
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: blofin-live-daily-ntfy-report
@@ -22,17 +23,45 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
-      - name: Check 06:00 Europe/London on scheduled runs
+      - name: Check 07:00 UK and avoid duplicate scheduled reports
         id: guard
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" != "schedule" ] || [ "$(TZ=Europe/London date +%H)" = "06" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            echo "Testing updated workflow after push."
             echo 'send=true' >> "$GITHUB_OUTPUT"
-          else
-            echo "Not UK 06:00; skipping duplicate UTC schedule."
-            echo 'send=false' >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          if [ "$(TZ=Europe/London date +%H)" != "07" ]; then
+            echo "Not UK 07:00-07:59; skipping UTC daylight saving duplicate."
+            echo 'send=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Serialized by workflow concurrency; check previously successful runs
+          # so the 07:10 backup does not send a second notification.
+          TODAY=$(TZ=Europe/London date +%F)
+          URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/blofin_daily_ntfy_report.yml/runs?per_page=30"
+          if RUNS=$(curl --fail-with-body --show-error --silent --retry 3 \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "$URL"); then
+            ALREADY=$(printf '%s' "$RUNS" | jq -r --arg day "$TODAY" --argjson current "$GITHUB_RUN_ID" \
+              '[.workflow_runs[]? | select(.id != $current and .conclusion == "success" and (.event == "schedule" or .event == "workflow_dispatch") and .created_at >= ($day + "T05:00:00Z"))] | length > 0')
+            if [ "$ALREADY" = 'true' ]; then
+              echo "Report already sent today; suppressing duplicate."
+              echo 'send=false' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          else
+            echo "::warning::Cannot verify previous send; trying report to avoid missing it."
+          fi
+
+          echo 'send=true' >> "$GITHUB_OUTPUT"
 
       - name: Checkout current bot state, without modifying trading
         if: steps.guard.outputs.send == 'true'
