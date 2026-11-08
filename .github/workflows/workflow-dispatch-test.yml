@@ -46,6 +46,14 @@ jobs:
               -d '{"ref":"main"}'; then
               echo "::warning::LIVE dispatch failed after retries; continuing watchdog loop"
             fi
+            # Independent 07:00 UK report fallback using the existing watchdog.
+            UK_HM=$(TZ=Europe/London date +%H:%M)
+            case "$UK_HM" in
+              07:00|07:05|07:10|07:15|07:20|07:25)
+                echo "Triggering 07:00 UK daily report fallback at $UK_HM"
+                gh workflow run blofin_daily_ntfy_report.yml --ref main || echo "::warning::Report dispatch retry on next heartbeat"
+                ;;
+            esac
           done
 
       - name: Start next watchdog run
