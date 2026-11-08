@@ -6,10 +6,12 @@ on:
     paths:
       - '.github/workflows/blofin_daily_ntfy_report.yml'
       - 'blofin_daily_ntfy_report.py'
+  workflow_run:
+    workflows: ['BloFin LIVE signal watch']
+    types: [completed]
   schedule:
-    # Stagger GitHub schedule away from the overloaded top of the hour.
-    # Main 07:03 UK; retries 07:13/07:23, watchdog also triggers from 07:00 UK.
-    - cron: '3,13,23 6,7 * * *'
+    # Independent fallback; late runs catch up after 07:00 UK.
+    - cron: '3,23,43 * * * *'
 
 permissions:
   contents: read
@@ -24,50 +26,48 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
-      - name: Check 07:00 UK and avoid duplicate scheduled reports
+      - name: Check due time and confirmed ntfy delivery
         id: guard
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          TODAY=$(TZ=Europe/London date +%F)
+          echo "day=$TODAY" >> "$GITHUB_OUTPUT"
           if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            echo "Testing updated workflow after push."
+            echo "Sending recovery report after configuration update."
             echo 'send=true' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          if [ "$(TZ=Europe/London date +%H)" != "07" ]; then
-            echo "Not UK 07:00-07:59; skipping UTC daylight saving duplicate."
+          HOUR=$(TZ=Europe/London date +%H)
+          if [ "$((10#$HOUR))" -lt 7 ]; then
+            echo "Before 07:00 UK; report not due."
             echo 'send=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # Serialized by workflow concurrency; check previously successful runs
-          # so the 07:10 backup does not send a second notification.
-          TODAY=$(TZ=Europe/London date +%F)
-          URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/blofin_daily_ntfy_report.yml/runs?per_page=30"
-          if RUNS=$(curl --fail-with-body --show-error --silent --retry 3 \
+          # Only a persisted ntfy receipt counts as sent, never a skipped run.
+          # All triggers share concurrency, so receipts are checked serially.
+          URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=blofin-daily-ntfy-sent-${TODAY}&per_page=100"
+          RECEIPTS=$(curl --fail-with-body --show-error --silent --retry 3 \
             -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "$URL"); then
-            ALREADY=$(printf '%s' "$RUNS" | jq -r --arg day "$TODAY" --argjson current "$GITHUB_RUN_ID" \
-              '[.workflow_runs[]? | select(.id != $current and .conclusion == "success" and (.event == "schedule" or .event == "workflow_dispatch") and .created_at >= ($day + "T05:00:00Z"))] | length > 0')
-            if [ "$ALREADY" = 'true' ]; then
-              echo "Report already sent today; suppressing duplicate."
-              echo 'send=false' >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
+            -H "Accept: application/vnd.github+json" "$URL")
+          ALREADY=$(printf '%s' "$RECEIPTS" | jq -er --arg name "blofin-daily-ntfy-sent-${TODAY}" \
+            'if (.artifacts | type) != "array" then error("Invalid artifact response") else ([.artifacts[] | select(.name == $name and .expired == false)] | length > 0 | tostring) end')
+          if [ "$ALREADY" = 'true' ]; then
+            echo "Confirmed report receipt exists for today."
+            echo 'send=false' >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::Cannot verify previous send; trying report to avoid missing it."
+            echo 'send=true' >> "$GITHUB_OUTPUT"
           fi
-
-          echo 'send=true' >> "$GITHUB_OUTPUT"
 
       - name: Checkout current bot state, without modifying trading
         if: steps.guard.outputs.send == 'true'
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 1
           sparse-checkout: |
             blofin_live_state.json
@@ -99,12 +99,23 @@ jobs:
           set -euo pipefail
           curl --fail-with-body --show-error --silent \
             --retry 4 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 30 \
+            --output /tmp/blofin_daily_ntfy_receipt.json \
             -H 'Title: BloFin LIVE - 120000 USDT' \
             -H 'Priority: 4' \
             -H 'Tags: chart_with_upwards_trend' \
             --data-binary @/tmp/blofin_daily_ntfy_message.txt \
             'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n'
+          jq -e '.event == "message" and (.id | type == "string") and (.id | length > 0)' /tmp/blofin_daily_ntfy_receipt.json
           echo 'NTFY_REPORT_ACCEPTED_BY_SERVER'
+
+      - name: Persist confirmed daily delivery
+        if: steps.guard.outputs.send == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: blofin-daily-ntfy-sent-${{ steps.guard.outputs.day }}
+          path: /tmp/blofin_daily_ntfy_receipt.json
+          retention-days: 7
+          if-no-files-found: error
 
       - name: Notify if report generation failed
         if: failure() && steps.guard.outputs.send == 'true'
