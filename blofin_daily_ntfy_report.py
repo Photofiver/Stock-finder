@@ -70,7 +70,8 @@ def report(data, now):
     baseline = amount(data.get('bankroll_pnl_baseline_usdt', '0'), 'bankroll_pnl_baseline_usdt')
     bonus = amount(data.get('bankroll_streak_bonus_usdt', '0'), 'bankroll_streak_bonus_usdt')
     earned = realized - baseline
-    current = start + earned  # streak bonuses are allocation, not trading profit
+    current = start + earned  # Exclude allocations from historical trading returns.
+    operational = current + bonus
     if start <= 0 or current <= 0:
         raise ValueError('Nonpositive strategy capital; cannot report percentage return')
     rows = verified_history(data)
@@ -101,15 +102,15 @@ def report(data, now):
     lines = [
         f"BloFin LIVE - {now_uk.strftime('%d.%m.%Y %H:%M')} UK",
         f'Cel: {fmt(TARGET, 0)} USDT',
-        f'Kapital netto: {fmt(current)} USDT (start {fmt(start)} + wynik {fmt(earned, 4)})',
-        f'Premie alokacji (NIE zysk): {fmt(bonus)} USDT',
+        f'Kapital operacyjny bota: {fmt(operational)} USDT',
+        f'Sklad: start {fmt(start)} + wynik netto {fmt(earned)} + dodatkowy przydzial {fmt(bonus)} USDT',
         f'Wynik netto 24h: {pnl24:+.4f} USDT (W{w24}/L{l24})',
         f'Zamkniete transakcje {"od resetu" if since_reset is not None else "w historii"}: W{wins}/L{losses}; skutecznosc {accuracy:.2f}%',
         f'Otwarte pozycje ({len(opened)}): {", ".join(opened[:4]) if opened else "brak"}',
         f'Skaner: {scanner}; ostatni skan {last_txt} UK',
     ]
 
-    if current >= TARGET:
+    if operational >= TARGET:
         lines.append('Pozostalo do celu: 0 dni (cel osiagniety)')
     elif since_reset is None or not since_reset:
         lines.append('Pozostalo do celu: brak wiarygodnej prognozy liczby dni (nie da sie potwierdzic okresu po resecie)')
@@ -123,9 +124,10 @@ def report(data, now):
             lines.append('Pozostalo do celu: brak wiarygodnej prognozy liczby dni')
             lines.append(f'Proba: {sample_days:.2f} dni; wzrost: {rate_text(daily) if daily is not None else "brak"}')
         else:
-            days_to_go = math.ceil(math.log(float(TARGET / current)) / math.log1p(daily))
+            days_to_go = math.ceil(math.log(float(TARGET / operational)) / math.log1p(daily))
             lines.append(f'Pozostalo do celu: {days_to_go} dni (PROGNOZA, nie gwarancja)')
             lines.append(f'Tempo empiryczne: {rate_text(daily)}; proba {sample_days:.2f} dni')
+            lines.append('Prognoza od kapitalu operacyjnego; zaklada utrzymanie tempa, bez przyszlych przydzialow.')
         for days in (7, 30):
             boundary = int((now - timedelta(days=days)).timestamp() * 1000)
             if opened_ms > boundary:
