@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
   group: blofin-live-signal-watch
@@ -155,3 +156,11 @@ jobs:
             -H 'Priority: 5' \
             -d "LIVE scanner failed. Sprawdz GitHub Actions run ${GITHUB_RUN_ID}." \
             'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n' || true
+
+  daily-report:
+    needs: watch
+    if: always()
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/blofin_daily_ntfy_report.yml
