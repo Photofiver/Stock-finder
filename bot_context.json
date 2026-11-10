@@ -1,6 +1,6 @@
 {
   "description": "Current BloFin LIVE bot context. Read this file first before re-reading full code or trade history.",
-  "generated_utc": "2026-11-10T02:41:34.771270+00:00",
+  "generated_utc": "2026-11-10T10:34:51.358449+00:00",
   "instructions_for_future_analysis": [
     "Read bot_context.json first; use SHA256 checks to tell if code has changed.",
     "Only re-read source files if code hash or task scope requires it.",
@@ -11,23 +11,10 @@
   ],
   "last_known_state": {
     "bankroll_start_usdt": "20",
-    "current_bankroll_estimated_usdt": "22.74576743422772",
-    "fees_usdt": -11.387392958778705,
-    "gross_realized_pnl_usdt": -12.110272093276059,
+    "current_bankroll_estimated_usdt": "22.91156523422772",
+    "fees_usdt": -11.396595158778705,
+    "gross_realized_pnl_usdt": -11.935272093276058,
     "last_12_trades": [
-      {
-        "closed_utc": "2026-11-08T02:05:55.486000+00:00",
-        "exit_reason": "external close",
-        "gross_pnl_usdt": 0.19672166136079142,
-        "inst": "KAT-USDT",
-        "net_pnl_usdt": 0.1873182813607914,
-        "opened_utc": "2026-11-07T09:26:39.359000+00:00",
-        "order_book_confirmed": null,
-        "order_book_directional_pct": null,
-        "rank": 19,
-        "result": "WIN",
-        "side": "SHORT"
-      },
       {
         "closed_utc": "2026-11-08T05:52:30.806000+00:00",
         "exit_reason": "external close",
@@ -170,10 +157,23 @@
         "rank": 141,
         "result": "LOSS",
         "side": "SHORT"
+      },
+      {
+        "closed_utc": "2026-11-10T03:05:36.608000+00:00",
+        "exit_reason": "external close",
+        "gross_pnl_usdt": 0.175,
+        "inst": "GRAM-USDT",
+        "net_pnl_usdt": 0.1657978,
+        "opened_utc": "2026-11-10T02:42:00.102000+00:00",
+        "order_book_confirmed": null,
+        "order_book_directional_pct": null,
+        "rank": 6,
+        "result": "WIN",
+        "side": "SHORT"
       }
     ],
-    "last_live_scan_utc": "2026-11-10T02:35:00+00:00",
-    "last_run_utc": "2026-11-10T02:36:46.941000+00:00",
+    "last_live_scan_utc": "2026-11-10T10:30:00+00:00",
+    "last_run_utc": "2026-11-10T10:31:58.732000+00:00",
     "last_scan_rejections": [
       {
         "inst": "HUMA-USDT",
@@ -264,21 +264,27 @@
     "lifetime_counters": {
       "flat": 0,
       "losses": 660,
-      "total": 1073,
+      "total": 1074,
       "unverified": 4,
-      "wins": 409
+      "wins": 410
     },
-    "net_realized_pnl_usdt": -23.4976650520548,
+    "net_realized_pnl_usdt": -23.3318672520548,
     "open_positions": [
       {
         "hold_policy": "VOLUME_FLIP_BOTH_NO_TPSL",
         "inst": "BTCDOM-USDT",
         "opened_utc": "2026-11-08T21:56:36.666000+00:00",
         "side": "SHORT"
+      },
+      {
+        "hold_policy": "VOLUME_FLIP_BOTH_NO_TPSL",
+        "inst": "XDC-USDT",
+        "opened_utc": "2026-11-10T06:01:59.424000+00:00",
+        "side": "SHORT"
       }
     ],
     "risk_stop_triggered": false,
-    "trade_history_records": 1067
+    "trade_history_records": 1068
   },
   "live_strategy": {
     "additional_entry_filters": [
@@ -355,12 +361,12 @@
     }
   ],
   "provenance": {
-    "latest_live_run_utc": "2026-11-10T02:36:46.941000+00:00",
+    "latest_live_run_utc": "2026-11-10T10:31:58.732000+00:00",
     "main_strategy_file": "blofin_ma10_ma20_live.py",
     "note": "Trading parameters reflect the live workflow and source code at generation. Last run may precede generation.",
     "repository": "Photofiver/Stock-finder",
     "source_sha256": {
-      ".github/workflows/blofin_live_signal_watch.yml": "64a6c370927efc432a03f9161c7fd319df7839929eb55b65d40393b3d3d1b5ec",
+      ".github/workflows/blofin_live_signal_watch.yml": "e86cd93062f7652c9bc134c7277f6299fe74cff07b2638345c96ee7cc95bc86f",
       "blofin_fast_scan_events_writer.py": "a34e3265ce126ca0a1bae3703b3c19a65060bb1003aa4223345c5cc0d11b051b",
       "blofin_live_hourly.py": "46943974a1f17e1e9c45cc5edc3a683c08dd59f885f3efff4c1f786e023f5447",
       "blofin_live_signal_watch.py": "7559346889d71d25383b8dabeb012a59cf16a88ac0a5f7a9bc8c35f63ddfed7d",
