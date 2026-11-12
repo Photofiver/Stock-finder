@@ -20,17 +20,29 @@ jobs:
     timeout-minutes: 20
 
     steps:
+      - name: Identify current UTC RSI archive dates
+        id: rsi_archive_dates
+        shell: bash
+        run: |
+          echo "today=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          echo "tomorrow=$(date -u -d tomorrow +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          # Start with code, current state and append-only order-book logs.
-          # Large scan/chart archives are only needed after LIVE execution.
+          # Fetch the current LIVE state and just today's RSI audit files.
+          # Older RSI archives remain untouched in GitHub; skip them on every 5m scan.
           sparse-checkout: |
             /*
             !/*/
             /.github/
             /blofin_order_books/
             /blofin_fast_scan_events/
+            !/blofin_fast_scan_events/*
+            /blofin_fast_scan_events/rsi89_full_5m_${{ steps.rsi_archive_dates.outputs.today }}.jsonl.gz
+            /blofin_fast_scan_events/rsi89_nearest_5m_${{ steps.rsi_archive_dates.outputs.today }}.jsonl
+            /blofin_fast_scan_events/rsi89_full_5m_${{ steps.rsi_archive_dates.outputs.tomorrow }}.jsonl.gz
+            /blofin_fast_scan_events/rsi89_nearest_5m_${{ steps.rsi_archive_dates.outputs.tomorrow }}.jsonl
           sparse-checkout-cone-mode: false
 
       - name: Refresh repository state
