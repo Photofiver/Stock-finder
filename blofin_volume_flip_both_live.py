@@ -59,6 +59,14 @@ CASH_BUFFER_USDT = Decimal("0.50")
 AGE_MAX_MS = 120_000
 
 
+def signal_age_limit_ms(bot):
+    # RSI scanner uses the configured freshness window (180s in LIVE).
+    # Keep the legacy tunnel limit unchanged.
+    if getattr(bot, "ENTRY_STRATEGY", "") == "RSI89_SHORT":
+        return bot.SIGNAL_MAX_AGE_MS
+    return min(bot.SIGNAL_MAX_AGE_MS, AGE_MAX_MS)
+
+
 def compounded_position_target(bankroll, committed, available):
     """Size one position from the strategy bankroll plus verified realized NET PnL.
 
@@ -1974,7 +1982,7 @@ def _open_one(bot, state, sig, instruments):
         return False
     if bot.get_tracked_positions(state).get(inst):
         return False
-    if not (0 <= bot.now_ms()-int(sig["signal_close_ms"]) <= min(bot.SIGNAL_MAX_AGE_MS, AGE_MAX_MS)):
+    if not (0 <= bot.now_ms()-int(sig["signal_close_ms"]) <= signal_age_limit_ms(bot)):
         return False
     meta = instruments.get(inst)
     if not meta:
@@ -2642,7 +2650,7 @@ def run(bot, state, top200, tickers, instruments, expected_close_ms, wait_for_co
         pass
     elif any(p.get("exit_pending") for p in bot.get_tracked_positions(state).values()):
         scan["status"]="WAIT_FOR_EXIT_RECONCILIATION"
-    elif not (0<=bot.now_ms()-expected_close_ms<=min(bot.SIGNAL_MAX_AGE_MS,AGE_MAX_MS)):
+    elif not (0<=bot.now_ms()-expected_close_ms<=signal_age_limit_ms(bot)):
         scan["status"]="STALE_5M_SCAN"
     elif bot.risk_stop_active(state):
         scan["status"]="BLOCKED_10PCT_DRAWDOWN"
