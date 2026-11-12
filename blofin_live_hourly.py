@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import time
+import threading
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
@@ -273,13 +274,30 @@ def private_request(method, path, params=None, body=None):
     return payload.get("data")
 
 
+# Share one public-request budget across all candle worker threads.
+# 5 requests/second leaves headroom below the exchange's per-IP ceiling.
+_market_request_lock = threading.Lock()
+_market_next_request_at = 0.0
+
+
+def _wait_market_request_slot():
+    global _market_next_request_at
+    with _market_request_lock:
+        delay = _market_next_request_at - time.monotonic()
+        if delay > 0:
+            time.sleep(delay)
+        _market_next_request_at = time.monotonic() + 0.2
+
+
 def market_get(path, params=None):
     last_error = None
     headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
     for attempt in range(MAX_RETRIES):
         try:
+            _wait_market_request_slot()
             response = requests.get(BASE + path, params=params, headers=headers, timeout=HTTP_TIMEOUT)
             if response.status_code == 429:
+                last_error = RuntimeError("HTTP 429: BloFin public API rate limit")
                 time.sleep(1.5 * (attempt + 1))
                 continue
             response.raise_for_status()
