@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b111d">
+<meta name="description" content="BloFin LIVE — panel monitorowania bota, transakcji, RSI i zysków. Tylko odczyt.">
+<title>BloFin LIVE — Panel aktualny</title>
+<style>
+:root{color-scheme:dark;--bg:#0b111d;--panel:#131d2c;--panel2:#182438;--line:#29394e;--txt:#edf3fb;--muted:#90a0b4;--green:#36d6a2;--red:#ff7187;--blue:#62a8ff;--amber:#ffc76e}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+body:before{content:"";position:fixed;inset:0 0 auto;height:280px;background:radial-gradient(ellipse at 50% -50%,#18365b 0,transparent 70%);pointer-events:none}
+.app{position:relative;margin:auto;max-width:1120px;padding:22px 16px 58px}
+header{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:0 0 25px}.brand{display:flex;gap:10px;align-items:center}.logo{background:#152f39;border:1px solid #2a655e;color:var(--green);border-radius:13px;font-size:25px;font-weight:900;width:44px;height:44px;display:grid;place-items:center}.name{font-size:19px;font-weight:850;letter-spacing:.3px}.kicker{font-size:11px;letter-spacing:1.2px;color:var(--muted);font-weight:700}.status{padding:8px 12px;border-radius:999px;border:1px solid #3b4a58;background:#1b2633;font-size:12px;font-weight:750;white-space:nowrap}.status.good{color:var(--green);border-color:#225d4d}.status.warn{color:var(--amber);border-color:#695330}.status.bad{color:var(--red);border-color:#6b3542}
+.eyebrow{font-size:12px;font-weight:750;letter-spacing:1.6px;text-transform:uppercase;color:var(--blue)}h1{font-size:clamp(28px,5vw,40px);line-height:1.15;letter-spacing:-1.3px;margin:8px 0 7px}.intro{color:var(--muted);margin:0 0 25px;max-width:620px}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px}.stat,.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 25px #03070c19}.stat{padding:17px 16px;min-width:0}.stat .label{color:var(--muted);font-weight:650;font-size:12px;display:block;margin-bottom:7px}.stat .value{font-size:clamp(19px,2.6vw,29px);line-height:1.2;font-weight:850;letter-spacing:-.6px;overflow-wrap:anywhere}.stat .under{display:block;color:var(--muted);font-size:11px;margin-top:7px}
+.positive{color:var(--green)!important}.negative{color:var(--red)!important}.neutral{color:var(--txt)!important}
+.notice{padding:11px 15px;border:1px solid var(--line);border-radius:12px;background:#111d2b;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:12px;margin:14px 0 20px;font-size:12px}.notice strong{color:var(--txt)}button{font:inherit;color:var(--txt);cursor:pointer}.refresh{border:1px solid #365278;background:#1b3550;border-radius:9px;padding:8px 12px;font-weight:700;white-space:nowrap}.refresh:disabled{opacity:.5;cursor:default}
+.panel{padding:20px;margin-top:16px}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:15px;flex-wrap:wrap}.panel h2{font-size:17px;letter-spacing:-.2px;margin:0}.meta{font-size:12px;color:var(--muted)}
+.strategy-tabs{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 8px}.scope{font-size:12px;color:var(--muted);margin:0 0 19px}.strategy-tabs button{background:#131d2c;border:1px solid var(--line);color:var(--muted);font-size:13px;border-radius:10px;padding:10px 14px;font-weight:750}.strategy-tabs button.active{background:#1b3550;border-color:#4382af;color:#fff}.pills{display:flex;flex-wrap:wrap;gap:5px}.pill{border:1px solid transparent;background:var(--panel2);border-radius:8px;font-size:12px;font-weight:750;padding:7px 10px}.pill.active{background:#244364;color:#d3e7ff;border-color:#3c6691}
+.chart-wrap{height:250px;position:relative}.chart-wrap canvas{height:100%;width:100%;display:block}.empty{display:grid;place-items:center;min-height:100px;color:var(--muted);text-align:center}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.trade{background:#101927;border:1px solid var(--line);border-radius:13px;padding:13px 14px;min-width:0}.trade-top{display:flex;justify-content:space-between;gap:10px;align-items:start}.symbol{font-size:15px;font-weight:850}.side{color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.4px;margin-left:5px}.profit{font-size:16px;font-weight:850;white-space:nowrap}.trade-sub{color:var(--muted);font-size:12px;margin-top:3px}.trade-grid{border-top:1px solid #263344;margin-top:10px;padding-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px}.pair .key{font-size:11px;color:var(--muted)}.pair .val{font-size:13px;font-weight:750}.section-note{margin:8px 0 0;color:var(--muted);font-size:12px}.tiny{color:var(--muted);font-size:11px}
+.badge{display:inline-flex;background:#1a3450;color:#9fcaff;border:1px solid #33516d;border-radius:8px;font-size:11px;padding:3px 8px;font-weight:700}.badge.green{color:var(--green);background:#14352c;border-color:#245744}.badge.red{color:var(--red);background:#3b232c;border-color:#693442}
+.rsi-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.rsi-item{border:1px solid var(--line);background:#101927;border-radius:12px;padding:12px;display:flex;justify-content:space-between;align-items:center}.rsi-item b{font-size:15px}.rsi-item .meta{font-size:11px}.rsi-item .right{text-align:right}.rsi-item .right b{font-size:19px}
+.target-panel{margin-top:16px;background:linear-gradient(145deg,#16283d,#131d2c);border:1px solid #34516b;border-radius:18px;padding:20px}
+.target-head{display:flex;justify-content:space-between;align-items:center;gap:14px}.target-head h2{font-size:19px;margin:7px 0 5px}.target-days{color:var(--green);font-size:clamp(25px,4.5vw,39px);font-weight:900;letter-spacing:-1px;white-space:nowrap}
+.target-progress{height:7px;background:#304258;border-radius:10px;overflow:hidden;margin:18px 0 20px}.target-progress-fill{height:100%;width:0;background:var(--green);transition:width .3s}
+.target-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}.target-grid div{display:flex;flex-direction:column;gap:4px}.target-grid span{font-size:11px;color:var(--muted)}.target-grid strong{font-size:15px;overflow-wrap:anywhere}
+.target-disclaimer{color:var(--muted);font-size:11px;margin:18px 0 0}footer{margin-top:22px;color:var(--muted);font-size:11px;text-align:center;line-height:1.7}footer a{color:#a1c9ff}
+@media(max-width:720px){.app{padding:17px 12px 45px}.target-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.target-panel{padding:16px}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.panel{padding:15px}.cards,.rsi-list{grid-template-columns:1fr}.chart-wrap{height:230px}.notice{align-items:flex-start}.stat{padding:14px 12px}.stat .value{font-size:24px}}
+@media(max-width:360px){.status{font-size:10px;padding:6px 8px}.name{font-size:17px}.refresh{padding:7px}.stat .value{font-size:21px}}
+</style>
+</head>
+<body>
+<main class="app">
+<header>
+ <div class="brand"><div class="logo">B</div><div><div class="name">BloFin <span style="color:var(--green)">LIVE</span></div><div class="kicker">PANEL BOTA · AKTUALNA WERSJA · TYLKO ODCZYT</div></div></div>
+ <div id="status" class="status warn">ŁADOWANIE</div>
+</header>
+<div class="eyebrow">PHOTOFIVER / STOCK-FINDER</div>
+<h1>Twój bot. Jeden panel.</h1>
+<p class="intro">Pozycje, potwierdzone wyniki netto, RSI i historia transakcji. Dane pobierane z GitHub co 5 minut, kiedy panel jest otwarty.</p>
+<div class="strategy-tabs" role="group" aria-label="Zakres wyników"><button type="button" data-mode="reset" class="active">Obecna strategia · od resetu</button><button type="button" data-mode="rsi89">RSI 89 od początku</button><button type="button" data-mode="all">Wszystkie testy</button></div>
+<p id="scope" class="scope">Wyniki porównywalne z codziennym raportem BloFin po ostatnim resecie kapitału.</p>
+<section class="stats" aria-label="Podsumowanie">
+ <div class="stat"><span class="label" id="netLabel">Netto · od resetu</span><div class="value" id="net">—</div><span class="under" id="netUnder">USDT · wynik z BloFin</span></div>
+ <div class="stat"><span class="label" id="winLabel">Skuteczność od resetu</span><div class="value" id="winrate">—</div><span class="under" id="winUnder">Wygrane / rozliczone</span></div>
+ <div class="stat"><span class="label">Otwarte pozycje</span><div class="value" id="opened">—</div><span class="under">Monitorowane przez bota</span></div>
+ <div class="stat"><span class="label" id="totalLabel">Zamknięte od resetu</span><div class="value" id="total">—</div><span class="under" id="totalUnder">Zweryfikowane transakcje</span></div>
+</section>
+<section class="target-panel" aria-label="Cel 120000 USDT">
+ <div class="target-head"><div><div class="eyebrow">CEL · 120 000 USDT</div><h2>Dni do celu</h2></div><div class="target-days" id="daysToTarget">—</div></div>
+ <p class="meta" id="targetExplanation">Prognoza obliczana z tempa wzrostu kapitału od resetu.</p>
+ <div class="target-progress"><div class="target-progress-fill" id="targetProgress"></div></div>
+ <div class="target-grid">
+  <div><span>Kapitał operacyjny</span><strong id="operational">—</strong></div>
+  <div><span>Wynik netto od resetu</span><strong id="earned">—</strong></div>
+  <div><span>Dodatkowy przydział</span><strong id="bonus">—</strong></div>
+  <div><span>Tempo empiryczne</span><strong id="dailyRate">—</strong></div>
+  <div><span>Wynik netto 24h</span><strong id="pnl24">—</strong></div>
+  <div><span>Średnia 7 dni</span><strong id="rate7">—</strong></div>
+ </div>
+ <p class="target-disclaimer">Prognoza, nie gwarancja. Zakłada utrzymanie dotychczasowego tempa wzrostu, bez przyszłych przydziałów.</p>
+</section>
+<div class="notice"><div><strong id="updateTime">Odczytywanie danych…</strong><div id="scanInfo">Źródło: publiczny plik blofin_live_state.json</div></div><button id="refresh" class="refresh" type="button">Odśwież</button></div>
+<section class="panel">
+ <div class="panel-head"><div><h2>Krzywa zysku netto</h2><div class="meta" id="chartInfo">Potwierdzone zamknięcia · USDT</div></div><div class="pills" role="group" aria-label="Okres"><button class="pill active" data-period="24h">24 h</button><button class="pill" data-period="3d">3 dni</button><button class="pill" data-period="7d">7 dni</button><button class="pill" data-period="30d">30 dni</button><button class="pill" data-period="all">Całość</button></div></div>
+ <div class="chart-wrap"><canvas id="chart" role="img" aria-label="Wykres skumulowanego zysku netto"></canvas></div>
+</section>
+<section class="panel">
+ <div class="panel-head"><h2>Otwarte pozycje</h2><span class="meta">Bez wykonywania zleceń</span></div>
+ <div id="positions" class="cards"><div class="empty">Wczytywanie…</div></div>
+</section>
+<section class="panel">
+ <div class="panel-head"><div><h2>Historia transakcji</h2><span class="meta" id="historyCount">Zweryfikowane PnL zawiera prowizje</span></div><span class="badge">Ostatnie 60 w okresie</span></div>
+ <div id="history" class="cards"><div class="empty">Wczytywanie…</div></div>
+ <p class="section-note">RSI przy wejściu jest wyświetlane tylko, gdy zapisano je w sygnale. Brakujące wartości RSI przy wyjściu lub ekstremów nie są zgadywane.</p>
+</section>
+<section class="panel">
+ <div class="panel-head"><div><h2>Najbliżej RSI 89</h2><span class="meta">Audyt 5m · tylko wartości zapisane przez bota</span></div><span id="scanStatus" class="badge">—</span></div>
+ <div class="rsi-list" id="rsi"><div class="empty">Wczytywanie…</div></div>
+</section>
+<footer>Panel jest publiczny, ponieważ repozytorium jest publiczne. Nie zawiera kluczy API, przycisków kupna/sprzedaży ani funkcji modyfikujących bota.<div>Źródło: <a href="https://github.com/Photofiver/Stock-finder" target="_blank" rel="noopener noreferrer">GitHub · Stock-finder</a></div></footer>
+</main>
+<script>
+'use strict';
+const SOURCE='https://raw.githubusercontent.com/Photofiver/Stock-finder/main/blofin_live_state.json';
+const INTERVAL=5*60*1000;
+const UK='Europe/London';
+const $=id=>document.getElementById(id);
+const safe=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const n=x=>{if(x===null||x===undefined||x==='')return null;const v=Number(x);return Number.isFinite(v)?v:null;};
+const f=(v,d=2)=>v==null?'—':Number(v).toLocaleString('pl-PL',{minimumFractionDigits:d,maximumFractionDigits:d});
+const signed=(v,d=4)=>v==null?'—':(v>0?'+':'')+f(v,d);
+const fmtDate=ms=>{const v=n(ms);return v?new Intl.DateTimeFormat('pl-PL',{timeZone:UK,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(v)):'—';};
+const diff=v=>v==null?'neutral':v>0?'positive':v<0?'negative':'neutral';
+let view={period:'24h',mode:'reset',history:[],resetRows:null,resetCount:0,positions:[],trades:{},meta:{},audit:{},lastFetched:0};
+let busy=false;
+function compactTrade(t){
+ const snap=t.signal_snapshot||{};
+ return {currentRsi89:t.side==='SHORT' && snap.rsi89_short_entry===true,inst:String(t.inst||''),side:String(t.side||''),opened:n(t.opened_ms),closed:n(t.closed_ms),net:n(t.net_pnl_usdt),notional:n(t.notional_usdt),reason:String(t.reason||''),rsi:n(snap.rsi14??snap.rsi??t.entry_rsi14),rsiExit:n(t.exit_rsi14??t.rsi_exit),rsiMin:n(t.rsi_min??t.rsi14_min),rsiMax:n(t.rsi_max??t.rsi14_max),strategy:String(t.strategy||''),result:String(t.result||'')};
+}
+// Uses the same unique contiguous suffix calculation as blofin_daily_ntfy_report.py.
+function findResetSuffix(history,earned){
+ if(earned==null)return {rows:null,matches:0};
+ const rows=history.filter(t=>t.closed>0&&t.net!=null).slice().sort((a,b)=>a.closed-b.closed);
+ let sum=0;const matches=[];
+ for(let i=rows.length-1;i>=0;i--){sum+=rows[i].net;if(Math.abs(sum-earned)<=.002)matches.push(i);}
+ return matches.length===1?{rows:rows.slice(matches[0]),matches:1}:{rows:null,matches:matches.length};
+}
+function scopedItems(){
+ if(view.mode==='reset')return view.resetRows||[];
+ return view.mode==='rsi89'?view.history.filter(t=>t.currentRsi89):view.history;
+}
+function periodItems(){
+ const min={ '24h':86400000,'3d':3*86400000,'7d':7*86400000,'30d':30*86400000,'all':Infinity}[view.period];
+ return scopedItems().filter(t=>t.closed && (min===Infinity||t.closed>=Date.now()-min)).sort((a,b)=>a.closed-b.closed);
+}
+function display(){
+ const a=periodItems();
+ const total=a.reduce((s,t)=>s+(t.net||0),0);
+ $('chartInfo').textContent=a.length+' zamknięć '+(view.mode==='reset'?'od resetu':view.mode==='rsi89'?'RSI 89 od początku':'łącznie')+' · '+signed(total,4)+' USDT netto w okresie';
+ $('historyCount').textContent=a.length+' transakcji '+(view.mode==='reset'?'od resetu':view.mode==='rsi89'?'RSI 89 od początku':'łącznie')+' w wybranym okresie';
+ chart(a);
+ const newest=a.slice(-60).reverse();
+ $('history').innerHTML=newest.length?newest.map(t=>{
+  const pct=t.net!=null && t.notional>0?100*t.net/t.notional:null;
+  return '<article class="trade"><div class="trade-top"><div><span class="symbol">'+safe(t.inst.replace(/-USDT$/,''))+'</span><span class="side">'+safe(t.side)+'</span><div class="trade-sub">'+safe(fmtDate(t.closed))+'</div></div><div class="profit '+diff(t.net)+'">'+signed(t.net)+' USDT<div class="tiny" style="text-align:right">'+(pct==null?'—':signed(pct,2)+'%')+'</div></div></div><div class="trade-grid"><div class="pair"><div class="key">RSI wejście</div><div class="val">'+f(t.rsi,2)+'</div></div><div class="pair"><div class="key">RSI wyjście</div><div class="val">'+f(t.rsiExit,2)+'</div></div><div class="pair"><div class="key">RSI min / max</div><div class="val">'+f(t.rsiMin,2)+' / '+f(t.rsiMax,2)+'</div></div><div class="pair"><div class="key">Wielkość pozycji</div><div class="val">'+(t.notional==null?'—':f(t.notional,2)+' USDT')+'</div></div></div></article>';
+ }).join(''):'<div class="empty">Brak zapisanych zamknięć w tym okresie.</div>';
+}
+function chart(items){
+ const can=$('chart'),box=can.getBoundingClientRect(),w=Math.max(280,box.width),h=Math.max(160,box.height),dpr=Math.min(window.devicePixelRatio||1,2);
+ can.width=Math.floor(w*dpr);can.height=Math.floor(h*dpr);
+ const ctx=can.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+ const left=60,right=12,top=17,bottom=35,W=w-left-right,H=h-top-bottom;
+ if(W<=0||H<=0)return;
+ let ys=[0],sum=0;
+ for(const t of items){sum+=t.net||0;ys.push(sum);}
+ let lo=Math.min(0,...ys),hi=Math.max(0,...ys);let spread=hi-lo;if(!spread){hi+=.5;lo-=.5;spread=hi-lo;}else{const pad=Math.max(spread*.1,.01);lo-=pad;hi+=pad;spread=hi-lo;}
+ const Y=v=>top+(hi-v)/spread*H;const X=i=>left+W*i/Math.max(1,ys.length-1);
+ ctx.font='11px system-ui';ctx.textBaseline='middle';ctx.strokeStyle='#29384c';ctx.fillStyle='#94a4ba';ctx.lineWidth=1;
+ for(let i=0;i<=4;i++){const val=hi-(hi-lo)*i/4,y=Y(val);ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(w-right,y);ctx.stroke();ctx.fillText(f(val,2),3,y);}
+ const baseline=Y(0);ctx.strokeStyle='#506078';ctx.setLineDash([3,4]);ctx.beginPath();ctx.moveTo(left,baseline);ctx.lineTo(w-right,baseline);ctx.stroke();ctx.setLineDash([]);
+ if(items.length){
+   const stroke=sum>=0?'#36d6a2':'#ff7187';
+   const gradient=ctx.createLinearGradient(0,top,0,h-bottom);gradient.addColorStop(0,sum>=0?'rgba(54,214,162,.23)':'rgba(255,113,135,.23)');gradient.addColorStop(1,'rgba(10,17,29,0)');
+   ctx.beginPath();ctx.moveTo(X(0),baseline);ys.forEach((v,i)=>ctx.lineTo(X(i),Y(v)));ctx.lineTo(X(ys.length-1),baseline);ctx.closePath();ctx.fillStyle=gradient;ctx.fill();
+   ctx.beginPath();ys.forEach((v,i)=>{if(!i)ctx.moveTo(X(i),Y(v));else ctx.lineTo(X(i),Y(v));});ctx.strokeStyle=stroke;ctx.lineWidth=2.3;ctx.lineJoin='round';ctx.stroke();
+   ctx.beginPath();ctx.arc(X(ys.length-1),Y(ys[ys.length-1]),3.6,0,Math.PI*2);ctx.fillStyle=stroke;ctx.fill();
+   ctx.textBaseline='alphabetic';ctx.fillStyle='#94a4ba';ctx.font='11px system-ui';
+   ctx.fillText(new Intl.DateTimeFormat('pl-PL',{timeZone:UK,day:'2-digit',month:'2-digit'}).format(new Date(items[0].closed)),left,h-7);
+   const end=new Intl.DateTimeFormat('pl-PL',{timeZone:UK,day:'2-digit',month:'2-digit'}).format(new Date(items[items.length-1].closed));
+   const ew=ctx.measureText(end).width;ctx.fillText(end,w-right-ew,h-7);
+ } else {ctx.font='13px system-ui';ctx.fillStyle='#90a0b4';ctx.fillText('Brak transakcji w wybranym okresie',left+9,top+H/2);}
+}
+function showPositions(){
+ const a=view.positions;
+ $('opened').textContent=String(a.length);
+ $('positions').innerHTML=a.length?a.map(p=>{
+  const s=p.signal_snapshot||{},r=n(s.rsi14??s.rsi),since=p.opened_ms||0;
+  return '<article class="trade"><div class="trade-top"><div><span class="symbol">'+safe(p.inst||'—')+'</span><span class="side">'+safe(p.side||'')+'</span><div class="trade-sub">Otwarto: '+safe(fmtDate(since))+'</div></div><span class="badge '+(p.side==='LONG'?'green':'red')+'">OTWARTA</span></div><div class="trade-grid"><div class="pair"><div class="key">RSI wejście</div><div class="val">'+f(r,2)+'</div></div><div class="pair"><div class="key">Pozycja</div><div class="val">'+(n(p.notional_usdt)==null?'—':f(n(p.notional_usdt),2)+' USDT')+'</div></div><div class="pair"><div class="key">TP / SL (cena)</div><div class="val">'+safe(p.tp||'—')+' / '+safe(p.sl||'—')+'</div></div><div class="pair"><div class="key">Status zabezpieczeń</div><div class="val">'+safe(p.protection_status||'—')+'</div></div></div></article>';
+ }).join(''):'<div class="empty">Brak otwartych pozycji w zapisanym stanie.</div>';
+}
+function showAudit(){
+ const audit=view.audit||{},rows=Array.isArray(audit.nearest_approaching_from_below)?audit.nearest_approaching_from_below:[];
+ $('scanStatus').textContent=view.meta.scanStatus||'Brak skanu';
+ $('rsi').innerHTML=rows.length?rows.slice(0,8).map(t=>'<article class="rsi-item"><div><b>'+safe(t.inst||'—')+'</b><div class="meta">TOP '+safe(t.rank??'—')+' · '+safe(t.reason||'')+'</div></div><div class="right"><b>'+f(n(t.rsi14),2)+'</b><div class="meta">Do RSI 89: '+f(n(t.gap_to_89_points),2)+'</div></div></article>').join(''):'<div class="empty">Brak zapisanych kandydatów RSI 89 w ostatnim skanie.</div>';
+}
+function renderSummary(){
+ const t=view.trades,meta=view.meta,mode=view.mode,items=scopedItems();
+ const net=mode==='reset'?n(meta.earned):mode==='rsi89'?items.reduce((sum,r)=>sum+r.net,0):n(meta.net);
+ const count=mode==='all'?(n(t.total)??view.history.length):items.length;
+ const wins=mode==='all'?(n(t.wins)||0):items.filter(r=>r.net>0).length;
+ const losses=mode==='all'?(n(t.losses)||0):items.filter(r=>r.net<0).length;
+ const flat=mode==='all'?(n(t.flat)||0):items.filter(r=>r.net===0).length;
+ const first=mode!=='all'&&items.length?Math.min(...items.map(r=>r.opened||r.closed||Infinity)):null;
+ const verified=mode!=='reset'||view.resetRows!==null;
+ $('net').textContent=verified? signed(net)+' USDT':'—';$('net').className='value '+diff(verified?net:null);
+ $('winrate').textContent=verified&&wins+losses?f(wins*100/(wins+losses),2)+'%':'—';
+ $('total').textContent=verified?String(count):'—';
+ $('netLabel').textContent=mode==='reset'?'Netto · od resetu':mode==='rsi89'?'Netto · RSI 89':'Netto · cała historia';
+ $('winLabel').textContent=mode==='reset'?'Skuteczność od resetu':mode==='rsi89'?'Skuteczność RSI 89':'Skuteczność · całość';
+ $('totalLabel').textContent=mode==='reset'?'Zamknięte od resetu':mode==='rsi89'?'Zamknięte · RSI 89':'Zamknięte · całość';
+ $('netUnder').textContent=mode==='reset'?'USDT · tak samo jak raport ntfy':'USDT · potwierdzone transakcje';
+ $('winUnder').textContent=verified?wins+' wygranych / '+losses+' przegranych'+(flat?' / '+flat+' bez wyniku':''):'Brak potwierdzonej daty resetu';
+ $('totalUnder').textContent=mode==='reset'?'Od ostatniego resetu':'Zweryfikowane transakcje';
+ $('scope').textContent=mode==='reset'?(view.resetRows===null?'Nie da się jednoznacznie dopasować historii do resetu — brak wyniku zamiast zgadywania.':'SHORT · RSI > 89 · od resetu '+fmtDate(first)+' (UK), zgodnie z raportem.'):mode==='rsi89'?'RSI > 89 · SHORT · od '+fmtDate(first)+' (UK), również wcześniejsze próby.':'Pełna historia wszystkich strategii i wcześniejszych testów.';
+ const stamp=meta.lastRun||meta.lastScan||0,age=stamp?Date.now()-stamp:Infinity,stat=$('status');
+ stat.className='status '+(age<20*60000?'good':age<60*60000?'warn':'bad');
+ stat.textContent=age<20*60000?'DANE AKTUALNE':age<60*60000?'DANE OPÓŹNIONE':'BRAK ŚWIEŻYCH DANYCH';
+ $('updateTime').textContent='Ostatni zapis bota: '+fmtDate(stamp)+' (UK)';
+ $('scanInfo').textContent='Skan: '+(meta.scanStatus||'brak')+' · Odczyt panelu: '+fmtDate(view.lastFetched);
+}
+function showTarget(){
+ const meta=view.meta,start=n(meta.start),bonus=n(meta.bonus),earned=n(meta.earned);
+ const capital=start!=null&&earned!=null?start+earned:null;
+ const operational=capital!=null&&bonus!=null?capital+bonus:null;
+ $('operational').textContent=operational==null?'—':f(operational,4)+' USDT';
+ $('earned').textContent=earned==null?'—':signed(earned,4)+' USDT';
+ $('earned').className=diff(earned);
+ $('bonus').textContent=bonus==null?'—':f(bonus,4)+' USDT';
+ $('targetProgress').style.width=operational==null?'0':Math.max(0,Math.min(100,operational/120000*100))+'%';
+ const now=Date.now(),dayMs=86400000;
+ const pnl24=view.history.filter(t=>t.closed&&t.closed>=now-dayMs).reduce((sum,t)=>sum+(t.net||0),0);
+ $('pnl24').textContent=signed(pnl24,4)+' USDT';
+ const rows=view.resetRows;
+ const first=rows?.length?Number(rows[0].opened||rows[0].closed):null;
+ const sampleDays=first?(now-first)/dayMs:null;
+ const daily=start>0&&capital>0&&sampleDays>0?Math.expm1(Math.log(capital/start)/sampleDays):null;
+ $('dailyRate').textContent=daily!=null&&Number.isFinite(daily)?signed(daily*100,4)+'% / dzień':'—';
+ if(operational!=null&&operational>=120000){
+  $('daysToTarget').textContent='0 dni';
+  $('targetExplanation').textContent='Cel osiągnięty według kapitału operacyjnego.';
+ }else if(!rows||!rows.length){
+  $('daysToTarget').textContent='—';
+  $('targetExplanation').textContent='Brak wiarygodnej prognozy: niepotwierdzona historia po resecie.';
+ }else if(sampleDays<7||daily==null||!Number.isFinite(daily)||daily<=0||operational==null||operational<=0){
+  $('daysToTarget').textContent='—';
+  $('targetExplanation').textContent='Brak wiarygodnej dodatniej prognozy (minimum 7 dni obserwacji po resecie).';
+ }else{
+  const days=Math.ceil(Math.log(120000/operational)/Math.log1p(daily));
+  $('daysToTarget').textContent=Number.isFinite(days)&&days>=0?days.toLocaleString('pl-PL')+' dni':'—';
+  $('targetExplanation').textContent='Tempo empiryczne '+signed(daily*100,4)+'%/dzień · próbka '+f(sampleDays,2)+' dni';
+ }
+ if(!rows||!rows.length||!first||first>now-7*dayMs||capital<=0){
+  $('rate7').textContent='Brak pełnej próbki';
+ }else{
+  const net7=rows.filter(t=>t.closed>=now-7*dayMs).reduce((sum,t)=>sum+t.net,0);
+  const then=capital-net7;
+  const rate7=then>0?Math.expm1(Math.log(capital/then)/7):null;
+  $('rate7').textContent=rate7!=null&&Number.isFinite(rate7)?signed(rate7*100,4)+'% / dzień':'—';
+ }
+}
+async function refresh(){
+ if(busy)return;busy=true;const btn=$('refresh');btn.disabled=true;btn.textContent='Pobieranie…';
+ const ctl=new AbortController(),timeout=setTimeout(()=>ctl.abort(),60000);
+ try{
+  const response=await fetch(SOURCE+'?t='+Date.now(),{cache:'no-store',signal:ctl.signal,mode:'cors'});
+  if(!response.ok)throw new Error('HTTP '+response.status);
+  const raw=await response.json();
+  if(!raw||!Array.isArray(raw.trade_history)||!raw.trades)throw new Error('Nieprawidłowy format danych');
+  const last=raw.volume_long_last_scan||{};
+  const positions=raw.positions&&typeof raw.positions==='object'?Object.values(raw.positions):[];
+  view.history=raw.trade_history.map(compactTrade);
+  view.positions=positions.filter(p=>p&&typeof p==='object');
+  view.trades=raw.trades;
+  view.audit=last.rsi89_audit||{};
+  const realized=n(raw.realized_pnl_usdt),baseline=n(raw.bankroll_pnl_baseline_usdt);
+  const earned=realized!=null&&baseline!=null?realized-baseline:null;
+  const reset=findResetSuffix(view.history,earned);
+  view.resetRows=reset.rows;
+  view.resetCount=reset.matches;
+  view.meta={net:realized,earned,start:n(raw.bankroll_start_usdt),bonus:n(raw.bankroll_streak_bonus_usdt),lastRun:n(raw.last_run_ms),lastScan:n(raw.last_scan_close_ms),scanStatus:String(last.status||'')};
+  view.lastFetched=Date.now();
+  renderSummary();showTarget();showPositions();showAudit();display();
+ }catch(err){
+  $('status').className='status bad';$('status').textContent='BŁĄD ODCZYTU';
+  $('updateTime').textContent='Nie udało się pobrać aktualnych danych';
+  $('scanInfo').textContent=String(err&&err.message||err)+' · Dotychczasowy widok może być nieaktualny';
+ }finally{clearTimeout(timeout);btn.disabled=false;btn.textContent='Odśwież';busy=false;}
+}
+document.querySelectorAll('[data-period]').forEach(btn=>btn.addEventListener('click',()=>{view.period=btn.dataset.period;document.querySelectorAll('[data-period]').forEach(x=>x.classList.toggle('active',x===btn));display();}));
+document.querySelectorAll('[data-mode]').forEach(btn=>btn.addEventListener('click',()=>{view.mode=btn.dataset.mode;document.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('active',x===btn));renderSummary();display();}));
+$('refresh').addEventListener('click',refresh);
+let resizeTimer=0;window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>display(),160);});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-view.lastFetched>=INTERVAL)refresh();});
+setInterval(()=>{if(!document.hidden&&Date.now()-view.lastFetched>=INTERVAL)refresh();},30000);
+refresh();
+</script>
+</body>
+</html>
