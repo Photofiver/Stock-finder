@@ -43,6 +43,7 @@ jobs:
             /blofin_fast_scan_events/rsi89_nearest_5m_${{ steps.rsi_archive_dates.outputs.today }}.jsonl
             /blofin_fast_scan_events/rsi89_full_5m_${{ steps.rsi_archive_dates.outputs.tomorrow }}.jsonl.gz
             /blofin_fast_scan_events/rsi89_nearest_5m_${{ steps.rsi_archive_dates.outputs.tomorrow }}.jsonl
+            /blofin_fast_scan_events/trade_reviews/
             # Trade-close journals are small and must remain readable/writable.
             /blofin_fast_scan_events/trade_reviews/
           sparse-checkout-cone-mode: false
@@ -134,7 +135,7 @@ jobs:
             # historical analysis remain in a separate audit workflow.
             python blofin_fast_scan_events_writer.py || echo 'FAST_SCAN_LOG_WARN'
             if [ -d blofin_fast_scan_events ]; then
-              git add -- blofin_fast_scan_events/
+              git add --sparse -- blofin_fast_scan_events/
             fi
           fi
           if [ -f blofin_live_technical_events.json ]; then
