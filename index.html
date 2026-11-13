@@ -72,7 +72,7 @@ header{display:flex;justify-content:space-between;gap:12px;align-items:center;ma
  <div id="positions" class="cards"><div class="empty">Wczytywanie…</div></div>
 </section>
 <section class="panel">
- <div class="panel-head"><div><h2>Historia transakcji</h2><span class="meta" id="historyCount">Zweryfikowane PnL zawiera prowizje</span></div><span class="badge">Ostatnie 60 w okresie</span></div>
+ <div class="panel-head"><div><h2>Historia transakcji</h2><span class="meta" id="historyCount">Zweryfikowane PnL zawiera prowizje</span><div class="meta" id="rsiCoverage">RSI min/max: odczytywanie audytu…</div></div><span class="badge">Ostatnie 60 w okresie</span></div>
  <div id="history" class="cards"><div class="empty">Wczytywanie…</div></div>
  <p class="section-note">RSI min/max obejmuje wejście i w pełni zamknięte świece 5m podczas pozycji. RSI wyjścia pochodzi z ostatniej zamkniętej świecy przed zamknięciem zlecenia, nie z dokładnej sekundy wyjścia. Brakujących wartości nie zgadujemy.</p>
 </section>
@@ -123,6 +123,8 @@ function periodItems(){
 function display(){
  const a=periodItems();
  const total=a.reduce((s,t)=>s+(t.net||0),0);
+ const auditedCount=a.filter(t=>t.rsiMin!=null&&t.rsiMax!=null&&t.rsiExit!=null).length;
+ $('rsiCoverage').textContent='RSI min/max/wyjście (5m): '+auditedCount+' / '+a.length+' pozycji w okresie';
  $('chartInfo').textContent=a.length+' zamknięć '+(view.mode==='current'?'obecne RSI':view.mode==='rsi89'?'RSI 89 od początku':'łącznie')+' · '+signed(total,4)+' USDT netto w okresie';
  $('historyCount').textContent=a.length+' transakcji '+(view.mode==='current'?'obecne RSI':view.mode==='rsi89'?'RSI 89 od początku':'łącznie')+' w wybranym okresie';
  chart(a);
@@ -172,11 +174,11 @@ function showAudit(){
 }
 function renderSummary(){
  const t=view.trades,meta=view.meta,mode=view.mode,items=scopedItems();
- const net=mode==='all'?n(meta.net):items.reduce((sum,r)=>sum+r.net,0);
- const count=mode==='all'?(n(t.total)??items.length):items.length;
- const wins=mode==='all'?(n(t.wins)||0):items.filter(r=>r.net>0).length;
- const losses=mode==='all'?(n(t.losses)||0):items.filter(r=>r.net<0).length;
- const flat=mode==='all'?(n(t.flat)||0):items.filter(r=>r.net===0).length;
+ const net=items.reduce((sum,r)=>sum+r.net,0);
+ const count=items.length;
+ const wins=items.filter(r=>r.net>0).length;
+ const losses=items.filter(r=>r.net<0).length;
+ const flat=items.filter(r=>r.net===0).length;
  const first=mode!=='all'&&items.length?Math.min(...items.map(r=>r.opened||r.closed||Infinity)):null;
  const verified=true;
  $('net').textContent=verified? signed(net)+' USDT':'—';$('net').className='value '+diff(verified?net:null);
