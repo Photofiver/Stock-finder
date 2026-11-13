@@ -1,0 +1,161 @@
+name: RSI89 full 128-scan export (read only)
+on:
+  push:
+    paths:
+      - '.github/workflows/rsi89_20261113_full_export.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: rsi89-full-export-20261113
+  cancel-in-progress: false
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout full historical archive (no bot code)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: input
+          sparse-checkout: |
+            blofin_fast_scan_events/rsi89_full_5m_20261113.jsonl.gz
+          sparse-checkout-cone-mode: false
+      - name: Checkout public report destination
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: pages
+      - name: Export every TOP200 RSI observation from 128 scans
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import csv, gzip, json, pathlib
+          from collections import Counter
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          source = pathlib.Path("input/blofin_fast_scan_events/rsi89_full_5m_20261113.jsonl.gz")
+          outdir = pathlib.Path("pages/reports")
+          outdir.mkdir(parents=True, exist_ok=True)
+          csvpath = outdir / "rsi89_wszystkie_200_co_5min_2026-11-13_0500-1535.csv"
+          jsonpath = outdir / "rsi89_wszystkie_200_co_5min_2026-11-13_podsumowanie.json"
+          from_stamp = "2026-11-13T05:00:00"
+          before_stamp = "2026-11-13T15:40:00"
+          scans = []
+          with gzip.open(source, "rt", encoding="utf-8") as stream:
+              for line in stream:
+                  if not line.strip():
+                      continue
+                  event = json.loads(line)
+                  recorded = str(event.get("recorded_utc") or "")
+                  if from_stamp <= recorded < before_stamp:
+                      scans.append(event)
+          scans.sort(key=lambda s: s.get("recorded_utc", ""))
+          columns = [
+              "scan_nr", "zapis_skanu_UK", "zamkniecie_swiecy_UK", "status_skanu",
+              "sparsowanych_potwierdzonych", "liczba_dopasowan_w_skanie",
+              "ranking_TOP200", "kryptowaluta", "RSI14_5m", "poprzednie_RSI14_5m",
+              "brakujace_punkty_do_RSI89", "RSI_ponad_89", "powod_zapisu",
+              "pozycja_juz_otwarta", "kandydat_do_wejscia", "zlecenie_wyslane",
+              "powod_odrzucenia_zlecenia", "wszystkie_odrzucenia_JSON",
+              "wolumen_trend"
+          ]
+          def dtuk(iso=None, milliseconds=None):
+              if milliseconds is not None:
+                  x = datetime.fromtimestamp(float(milliseconds)/1000, ZoneInfo("Europe/London"))
+              else:
+                  x = datetime.fromisoformat(iso.replace("Z","+00:00")).astimezone(ZoneInfo("Europe/London"))
+              return x.strftime("%Y-%m-%d %H:%M:%S")
+          stats = Counter()
+          reasons = Counter()
+          unique = set()
+          rsi_over = []
+          row_count = 0
+          with csvpath.open("w", encoding="utf-8-sig", newline="") as fo:
+              writer = csv.writer(fo)
+              writer.writerow(columns)
+              for scan_i, scan in enumerate(scans, 1):
+                  audit = scan.get("audit") or {}
+                  coins = audit.get("coins") or []
+                  stats["scans"] += 1
+                  stats["expected_instrument_checks"] += len(coins)
+                  stats["scan_status_" + str(scan.get("status"))] += 1
+                  if len(coins) != 200:
+                      stats["scans_not_200"] += 1
+                  for coin in coins:
+                      if not isinstance(coin,dict):
+                          continue
+                      inst = coin.get("inst") or ""
+                      unique.add(inst)
+                      indicators = coin.get("indicators") or {}
+                      rsi = indicators.get("rsi14")
+                      previous = indicators.get("rsi14_previous")
+                      reached = "BRAK_DANYCH" if rsi is None else ("TAK" if rsi>89 else "NIE")
+                      rejected = coin.get("order_rejections") or []
+                      errors = "; ".join(str(x.get("reason") or x.get("error") or "") for x in rejected if isinstance(x, dict))
+                      reason = coin.get("reason") or ""
+                      reasons[reason] += 1
+                      if rsi is not None and rsi>89:
+                          rsi_over.append({"time":scan.get("recorded_utc"),"instrument":inst,"rsi":rsi,"reason":reason,"rejections":rejected})
+                      if rsi is None:
+                          stats["no_rsi"] += 1
+                      else:
+                          stats["with_rsi"] += 1
+                      writer.writerow([
+                          scan_i,dtuk(scan.get("recorded_utc")),
+                          dtuk(milliseconds=scan.get("signal_close_ms")),
+                          scan.get("status"), scan.get("scanned_confirmed"), scan.get("matched"),
+                          coin.get("rank"), inst, rsi, previous, coin.get("rsi89_gap_points"),
+                          reached, reason,
+                          "TAK" if coin.get("open_position") else "NIE",
+                          "TAK" if coin.get("candidate") else "NIE",
+                          "TAK" if coin.get("entry_placed") else "NIE",
+                          errors, json.dumps(rejected,ensure_ascii=False,separators=(",",":")) if rejected else "",
+                          coin.get("volume_trend") or ""
+                      ])
+                      row_count += 1
+          summary={
+              "source":"Photofiver/Stock-finder main blofin_fast_scan_events/rsi89_full_5m_20261113.jsonl.gz",
+              "time_zone":"Europe/London",
+              "from_uk":"2026-11-13 05:00",
+              "through_uk":"2026-11-13 15:35",
+              "scans":len(scans),
+              "observations":row_count,
+              "expected_128x200":25600,
+              "different_symbols":len(unique),
+              "first_scan_uk":dtuk(scans[0]["recorded_utc"]) if scans else None,
+              "last_scan_uk":dtuk(scans[-1]["recorded_utc"]) if scans else None,
+              "audit_counts":dict(stats),
+              "reason_counts":dict(reasons),
+              "rsi_above_89":rsi_over,
+              "csv_name":csvpath.name
+          }
+          jsonpath.write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+          print("EXPORT",json.dumps({k:summary[k] for k in ["scans","observations","different_symbols","first_scan_uk","last_scan_uk"]}))
+          if len(scans)!=128 or row_count!=25600:
+              raise SystemExit(f"Unexpected report scope: {len(scans)} scans, {row_count} rows; refuse to publish incomplete output")
+
+          PY
+      - name: Publish CSV and verification summary only
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add reports/rsi89_wszystkie_200_co_5min_2026-11-13_0500-1535.csv reports/rsi89_wszystkie_200_co_5min_2026-11-13_podsumowanie.json
+          if git diff --cached --quiet; then
+            echo "Report already published"
+            exit 0
+          fi
+          git commit -m "Publish full RSI89 TOP200 128-scan audit CSV [skip ci]"
+          for n in 1 2 3 4 5; do
+            git pull --rebase origin gh-pages
+            if git push origin HEAD:gh-pages; then exit 0; fi
+            sleep 2
+          done
+          echo "Could not publish report after retries" >&2
+          exit 1
