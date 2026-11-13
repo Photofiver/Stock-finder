@@ -172,6 +172,14 @@ jobs:
             -d "LIVE scanner failed. Sprawdz GitHub Actions run ${GITHUB_RUN_ID}." \
             'https://ntfy.sh/blofin-nhd0jt7wspfnhtitdlaowk1n' || true
 
+  dashboard-snapshot:
+    # Independent post-scan UI update; does not affect the LIVE trading job.
+    needs: watch
+    if: ${{ always() && needs.watch.result == 'success' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/blofin_dashboard_snapshot.yml
+
   daily-report:
     needs: watch
     if: always()
