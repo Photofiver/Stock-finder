@@ -74,7 +74,7 @@ header{display:flex;justify-content:space-between;gap:12px;align-items:center;ma
 <section class="panel">
  <div class="panel-head"><div><h2>Historia transakcji</h2><span class="meta" id="historyCount">Zweryfikowane PnL zawiera prowizje</span></div><span class="badge">Ostatnie 60 w okresie</span></div>
  <div id="history" class="cards"><div class="empty">Wczytywanie…</div></div>
- <p class="section-note">RSI przy wejściu jest wyświetlane tylko, gdy zapisano je w sygnale. Brakujące wartości RSI przy wyjściu lub ekstremów nie są zgadywane.</p>
+ <p class="section-note">RSI min/max obejmuje wejście i w pełni zamknięte świece 5m podczas pozycji. RSI wyjścia pochodzi z ostatniej zamkniętej świecy przed zamknięciem zlecenia, nie z dokładnej sekundy wyjścia. Brakujących wartości nie zgadujemy.</p>
 </section>
 <section class="panel">
  <div class="panel-head"><div><h2>Najbliżej RSI 89</h2><span class="meta">Audyt 5m · tylko wartości zapisane przez bota</span></div><span id="scanStatus" class="badge">—</span></div>
@@ -85,6 +85,7 @@ header{display:flex;justify-content:space-between;gap:12px;align-items:center;ma
 <script>
 'use strict';
 const SOURCE='https://raw.githubusercontent.com/Photofiver/Stock-finder/main/blofin_live_state.json';
+const RSI_SOURCE='https://photofiver.github.io/Stock-finder/rsi_audit.json';
 const INTERVAL=5*60*1000;
 const UK='Europe/London';
 const $=id=>document.getElementById(id);
@@ -125,7 +126,7 @@ function display(){
  const newest=a.slice(-60).reverse();
  $('history').innerHTML=newest.length?newest.map(t=>{
   const pct=t.net!=null && t.notional>0?100*t.net/t.notional:null;
-  return '<article class="trade"><div class="trade-top"><div><span class="symbol">'+safe(t.inst.replace(/-USDT$/,''))+'</span><span class="side">'+safe(t.side)+'</span><div class="trade-sub">'+safe(fmtDate(t.closed))+'</div></div><div class="profit '+diff(t.net)+'">'+signed(t.net)+' USDT<div class="tiny" style="text-align:right">'+(pct==null?'—':signed(pct,2)+'%')+'</div></div></div><div class="trade-grid"><div class="pair"><div class="key">RSI wejście</div><div class="val">'+f(t.rsi,2)+'</div></div><div class="pair"><div class="key">RSI wyjście</div><div class="val">'+f(t.rsiExit,2)+'</div></div><div class="pair"><div class="key">RSI min / max</div><div class="val">'+f(t.rsiMin,2)+' / '+f(t.rsiMax,2)+'</div></div><div class="pair"><div class="key">Wielkość pozycji</div><div class="val">'+(t.notional==null?'—':f(t.notional,2)+' USDT')+'</div></div></div></article>';
+  return '<article class="trade"><div class="trade-top"><div><span class="symbol">'+safe(t.inst.replace(/-USDT$/,''))+'</span><span class="side">'+safe(t.side)+'</span><div class="trade-sub">'+safe(fmtDate(t.closed))+'</div></div><div class="profit '+diff(t.net)+'">'+signed(t.net)+' USDT<div class="tiny" style="text-align:right">'+(pct==null?'—':signed(pct,2)+'%')+'</div></div></div><div class="trade-grid"><div class="pair"><div class="key">RSI wejście</div><div class="val">'+f(t.rsi,2)+'</div></div><div class="pair"><div class="key">RSI ostatnia świeca 5m przed wyjściem</div><div class="val">'+f(t.rsiExit,2)+'</div></div><div class="pair"><div class="key">RSI min / max · 5m</div><div class="val">'+f(t.rsiMin,2)+' / '+f(t.rsiMax,2)+'</div></div><div class="pair"><div class="key">Wielkość pozycji</div><div class="val">'+(t.notional==null?'—':f(t.notional,2)+' USDT')+'</div></div></div></article>';
  }).join(''):'<div class="empty">Brak zapisanych zamknięć w tym okresie.</div>';
 }
 function chart(items){
@@ -241,7 +242,20 @@ async function refresh(){
   if(!raw||!Array.isArray(raw.trade_history)||!raw.trades)throw new Error('Nieprawidłowy format danych');
   const last=raw.volume_long_last_scan||{};
   const positions=raw.positions&&typeof raw.positions==='object'?Object.values(raw.positions):[];
-  view.history=raw.trade_history.map(compactTrade);
+  let audited={};
+  try{
+   const auditResponse=await fetch(RSI_SOURCE+'?t='+Date.now(),{cache:'no-store',signal:ctl.signal});
+   if(auditResponse.ok){const audit=await auditResponse.json();if(audit&&audit.version===1&&audit.trades&&typeof audit.trades==='object')audited=audit.trades;}
+  }catch(_error){/* Historical audit may be pending; never block LIVE data. */}
+  view.history=raw.trade_history.map(trade=>{
+   const t=compactTrade(trade);
+   const key=t.inst+'|'+(trade.opened_ms||0)+'|'+(trade.closed_ms||0);
+   const point=audited[key];
+   if(point&&point.source==='BloFin public completed 5m candles; Wilder RSI14; signal included'){
+    t.rsiMin=n(point.rsi14_min);t.rsiMax=n(point.rsi14_max);t.rsiExit=n(point.rsi14_exit);
+   }
+   return t;
+  });
   view.positions=positions.filter(p=>p&&typeof p==='object');
   view.trades=raw.trades;
   view.audit=last.rsi89_audit||{};
