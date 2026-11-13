@@ -76,10 +76,6 @@ header{display:flex;justify-content:space-between;gap:12px;align-items:center;ma
  <div id="history" class="cards"><div class="empty">Wczytywanie…</div></div>
  <p class="section-note">RSI min/max obejmuje wejście i w pełni zamknięte świece 5m podczas pozycji. RSI wyjścia pochodzi z ostatniej zamkniętej świecy przed zamknięciem zlecenia, nie z dokładnej sekundy wyjścia. Brakujących wartości nie zgadujemy.</p>
 </section>
-<section class="panel">
- <div class="panel-head"><div><h2>Najbliżej RSI 89</h2><span class="meta">Audyt 5m · tylko wartości zapisane przez bota</span></div><span id="scanStatus" class="badge">—</span></div>
- <div class="rsi-list" id="rsi"><div class="empty">Wczytywanie…</div></div>
-</section>
 <footer>Panel jest publiczny, ponieważ repozytorium jest publiczne. Nie zawiera kluczy API, przycisków kupna/sprzedaży ani funkcji modyfikujących bota.<div>Źródło: <a href="https://github.com/Photofiver/Stock-finder" target="_blank" rel="noopener noreferrer">GitHub · Stock-finder</a></div></footer>
 </main>
 <script>
@@ -167,11 +163,6 @@ function showPositions(){
   return '<article class="trade"><div class="trade-top"><div><span class="symbol">'+safe(p.inst||'—')+'</span><span class="side">'+safe(p.side||'')+'</span><div class="trade-sub">Otwarto: '+safe(fmtDate(since))+'</div></div><span class="badge '+(p.side==='LONG'?'green':'red')+'">OTWARTA</span></div><div class="trade-grid"><div class="pair"><div class="key">RSI wejście</div><div class="val">'+f(r,2)+'</div></div><div class="pair"><div class="key">Pozycja</div><div class="val">'+(n(p.notional_usdt)==null?'—':f(n(p.notional_usdt),2)+' USDT')+'</div></div><div class="pair"><div class="key">TP / SL (cena)</div><div class="val">'+safe(p.tp||'—')+' / '+safe(p.sl||'—')+'</div></div><div class="pair"><div class="key">Status zabezpieczeń</div><div class="val">'+safe(p.protection_status||'—')+'</div></div></div></article>';
  }).join(''):'<div class="empty">Brak otwartych pozycji w zapisanym stanie.</div>';
 }
-function showAudit(){
- const audit=view.audit||{},rows=Array.isArray(audit.nearest_approaching_from_below)?audit.nearest_approaching_from_below:[];
- $('scanStatus').textContent=view.meta.scanStatus||'Brak skanu';
- $('rsi').innerHTML=rows.length?rows.slice(0,8).map(t=>'<article class="rsi-item"><div><b>'+safe(t.inst||'—')+'</b><div class="meta">TOP '+safe(t.rank??'—')+' · '+safe(t.reason||'')+'</div></div><div class="right"><b>'+f(n(t.rsi14),2)+'</b><div class="meta">Do RSI 89: '+f(n(t.gap_to_89_points),2)+'</div></div></article>').join(''):'<div class="empty">Brak zapisanych kandydatów RSI 89 w ostatnim skanie.</div>';
-}
 function renderSummary(){
  const t=view.trades,meta=view.meta,mode=view.mode,items=scopedItems();
  const net=items.reduce((sum,r)=>sum+r.net,0);
@@ -195,11 +186,11 @@ function renderSummary(){
   :mode==='rsi89'
   ?'Wszystkie transakcje RSI > 89 od '+fmtDate(first)+' (UK), także wcześniejsze próby.'
   :'Pełna historia wszystkich strategii i wcześniejszych testów.';
- const stamp=meta.lastRun||meta.lastScan||0,age=stamp?Date.now()-stamp:Infinity,stat=$('status');
- stat.className='status '+(age<20*60000?'good':age<60*60000?'warn':'bad');
- stat.textContent=age<20*60000?'DANE AKTUALNE':age<60*60000?'DANE OPÓŹNIONE':'BRAK ŚWIEŻYCH DANYCH';
+ const stamp=meta.lastRun||meta.lastScan||0,age=stamp?Date.now()-stamp:Infinity,snapshotAge=meta.snapshotAt?Date.now()-meta.snapshotAt:Infinity,stat=$('status');
+ stat.className='status '+(age<12*60000&&snapshotAge<12*60000?'good':age<30*60000&&snapshotAge<30*60000?'warn':'bad');
+ stat.textContent=age<12*60000&&snapshotAge<12*60000?'DANE AKTUALNE':age<30*60000&&snapshotAge<30*60000?'DANE OPÓŹNIONE':'BRAK ŚWIEŻYCH DANYCH';
  $('updateTime').textContent='Ostatni zapis bota: '+fmtDate(stamp)+' (UK)';
- $('scanInfo').textContent='Skan: '+(meta.scanStatus||'brak')+' · Odczyt panelu: '+fmtDate(view.lastFetched);
+ $('scanInfo').textContent='Ostatnia aktualizacja panelu: '+fmtDate(meta.snapshotAt)+' (UK) · skan: '+(meta.scanStatus||'brak');
 }
 function showTarget(){
  const meta=view.meta,start=n(meta.start),bonus=n(meta.bonus),earned=n(meta.earned);
@@ -277,10 +268,10 @@ async function refresh(){
   const reset=findResetSuffix(view.history,earned);
   view.resetRows=reset.rows;
   view.resetCount=reset.matches;
-  view.meta={net:realized,earned,start:n(raw.bankroll_start_usdt),bonus:n(raw.bankroll_streak_bonus_usdt),lastRun:n(raw.last_run_ms),lastScan:n(raw.last_scan_close_ms),scanStatus:String(last.status||'')};
+  view.meta={net:realized,earned,start:n(raw.bankroll_start_usdt),bonus:n(raw.bankroll_streak_bonus_usdt),lastRun:n(raw.last_run_ms),lastScan:n(raw.last_scan_close_ms),snapshotAt:Date.parse(raw.generated_at_utc)||0,scanStatus:String(last.status||'')};
   view.lastFetched=Date.now();
   $('historyCount').title='Odtworzone RSI min/max z potwierdzonych świec 5m: '+auditCount+' transakcji';
-  renderSummary();showTarget();showPositions();showAudit();display();
+  renderSummary();showTarget();showPositions();display();
  }catch(err){
   $('status').className='status bad';$('status').textContent='BŁĄD ODCZYTU';
   $('updateTime').textContent='Nie udało się pobrać aktualnych danych';
