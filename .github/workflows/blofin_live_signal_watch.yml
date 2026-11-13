@@ -43,6 +43,8 @@ jobs:
             /blofin_fast_scan_events/rsi89_nearest_5m_${{ steps.rsi_archive_dates.outputs.today }}.jsonl
             /blofin_fast_scan_events/rsi89_full_5m_${{ steps.rsi_archive_dates.outputs.tomorrow }}.jsonl.gz
             /blofin_fast_scan_events/rsi89_nearest_5m_${{ steps.rsi_archive_dates.outputs.tomorrow }}.jsonl
+            # Trade-close journals are small and must remain readable/writable.
+            /blofin_fast_scan_events/trade_reviews/
           sparse-checkout-cone-mode: false
 
       - name: Refresh repository state
