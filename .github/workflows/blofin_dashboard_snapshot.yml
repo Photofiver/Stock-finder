@@ -1,13 +1,7 @@
 name: BloFin dashboard snapshot (read-only)
 on:
+  workflow_call:
   workflow_dispatch:
-  # GitHub cron is best-effort and did not run after the initial snapshot.
-  # Refresh the independent dashboard whenever the LIVE 5m scanner finishes.
-  workflow_run:
-    workflows:
-      - BloFin LIVE signal watch
-    types:
-      - completed
   push:
     paths:
       - '.github/workflows/blofin_dashboard_snapshot.yml'
