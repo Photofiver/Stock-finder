@@ -39,14 +39,14 @@ header{display:flex;justify-content:space-between;gap:12px;align-items:center;ma
 </header>
 <div class="eyebrow">PHOTOFIVER / STOCK-FINDER</div>
 <h1>Twój bot. Jeden panel.</h1>
-<p class="intro">Pozycje, potwierdzone wyniki netto, RSI i historia transakcji. Dane pobierane z GitHub co 5 minut, kiedy panel jest otwarty.</p>
-<div class="strategy-tabs" role="group" aria-label="Zakres wyników"><button type="button" data-mode="reset" class="active">Obecna strategia · od resetu</button><button type="button" data-mode="rsi89">RSI 89 od początku</button><button type="button" data-mode="all">Wszystkie testy</button></div>
-<p id="scope" class="scope">Wyniki porównywalne z codziennym raportem BloFin po ostatnim resecie kapitału.</p>
+<p class="intro">Pozycje, potwierdzone wyniki netto, RSI i historia transakcji. Lekki podgląd GitHub odświeżany co 5 minut.</p>
+<div class="strategy-tabs" role="group" aria-label="Zakres wyników"><button type="button" data-mode="current" class="active">Obecna reguła RSI · od 29.10</button><button type="button" data-mode="rsi89">RSI 89 od początku</button><button type="button" data-mode="all">Wszystkie testy</button></div>
+<p id="scope" class="scope">Obecna reguła wejścia SHORT RSI powyżej 89, od 29.10.2026 (UK).</p>
 <section class="stats" aria-label="Podsumowanie">
- <div class="stat"><span class="label" id="netLabel">Netto · od resetu</span><div class="value" id="net">—</div><span class="under" id="netUnder">USDT · wynik z BloFin</span></div>
- <div class="stat"><span class="label" id="winLabel">Skuteczność od resetu</span><div class="value" id="winrate">—</div><span class="under" id="winUnder">Wygrane / rozliczone</span></div>
+ <div class="stat"><span class="label" id="netLabel">Netto · obecne RSI</span><div class="value" id="net">—</div><span class="under" id="netUnder">USDT · z potwierdzonych zamknięć</span></div>
+ <div class="stat"><span class="label" id="winLabel">Skuteczność obecnego RSI</span><div class="value" id="winrate">—</div><span class="under" id="winUnder">Wygrane / rozliczone</span></div>
  <div class="stat"><span class="label">Otwarte pozycje</span><div class="value" id="opened">—</div><span class="under">Monitorowane przez bota</span></div>
- <div class="stat"><span class="label" id="totalLabel">Zamknięte od resetu</span><div class="value" id="total">—</div><span class="under" id="totalUnder">Zweryfikowane transakcje</span></div>
+ <div class="stat"><span class="label" id="totalLabel">Zamknięte · obecne RSI</span><div class="value" id="total">—</div><span class="under" id="totalUnder">Potwierdzone transakcje RSI</span></div>
 </section>
 <section class="target-panel" aria-label="Cel 120000 USDT">
  <div class="target-head"><div><div class="eyebrow">CEL · 120 000 USDT</div><h2>Dni do celu</h2></div><div class="target-days" id="daysToTarget">—</div></div>
@@ -62,9 +62,9 @@ header{display:flex;justify-content:space-between;gap:12px;align-items:center;ma
  </div>
  <p class="target-disclaimer">Prognoza, nie gwarancja. Zakłada utrzymanie dotychczasowego tempa wzrostu, bez przyszłych przydziałów.</p>
 </section>
-<div class="notice"><div><strong id="updateTime">Odczytywanie danych…</strong><div id="scanInfo">Źródło: publiczny plik blofin_live_state.json</div></div><button id="refresh" class="refresh" type="button">Odśwież</button></div>
+<div class="notice"><div><strong id="updateTime">Odczytywanie danych…</strong><div id="scanInfo">Źródło: publiczna migawka GitHub · tylko odczyt</div></div><button id="refresh" class="refresh" type="button">Odśwież</button></div>
 <section class="panel">
- <div class="panel-head"><div><h2>Krzywa zysku netto</h2><div class="meta" id="chartInfo">Potwierdzone zamknięcia · USDT</div></div><div class="pills" role="group" aria-label="Okres"><button class="pill active" data-period="24h">24 h</button><button class="pill" data-period="3d">3 dni</button><button class="pill" data-period="7d">7 dni</button><button class="pill" data-period="30d">30 dni</button><button class="pill" data-period="all">Całość</button></div></div>
+ <div class="panel-head"><div><h2>Krzywa zysku netto</h2><div class="meta" id="chartInfo">Potwierdzone zamknięcia · USDT</div></div><div class="pills" role="group" aria-label="Okres"><button class="pill" data-period="24h">24 h</button><button class="pill" data-period="3d">3 dni</button><button class="pill" data-period="7d">7 dni</button><button class="pill" data-period="30d">30 dni</button><button class="pill active" data-period="all">Całość</button></div></div>
  <div class="chart-wrap"><canvas id="chart" role="img" aria-label="Wykres skumulowanego zysku netto"></canvas></div>
 </section>
 <section class="panel">
@@ -84,7 +84,8 @@ header{display:flex;justify-content:space-between;gap:12px;align-items:center;ma
 </main>
 <script>
 'use strict';
-const SOURCE='https://raw.githubusercontent.com/Photofiver/Stock-finder/main/blofin_live_state.json';
+const SOURCE='https://raw.githubusercontent.com/Photofiver/Stock-finder/gh-pages/live_dashboard.json';
+const CURRENT_RSI_START=Date.parse('2026-10-29T21:11:55Z');
 const RSI_SOURCE='https://photofiver.github.io/Stock-finder/rsi_audit.json';
 const INTERVAL=5*60*1000;
 const UK='Europe/London';
@@ -95,7 +96,7 @@ const f=(v,d=2)=>v==null?'—':Number(v).toLocaleString('pl-PL',{minimumFraction
 const signed=(v,d=4)=>v==null?'—':(v>0?'+':'')+f(v,d);
 const fmtDate=ms=>{const v=n(ms);return v?new Intl.DateTimeFormat('pl-PL',{timeZone:UK,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(v)):'—';};
 const diff=v=>v==null?'neutral':v>0?'positive':v<0?'negative':'neutral';
-let view={period:'24h',mode:'reset',history:[],resetRows:null,resetCount:0,positions:[],trades:{},meta:{},audit:{},lastFetched:0};
+let view={period:'all',mode:'current',history:[],resetRows:null,resetCount:0,positions:[],trades:{},meta:{},audit:{},lastFetched:0};
 let busy=false;
 function compactTrade(t){
  const snap=t.signal_snapshot||{};
@@ -110,8 +111,10 @@ function findResetSuffix(history,earned){
  return matches.length===1?{rows:rows.slice(matches[0]),matches:1}:{rows:null,matches:matches.length};
 }
 function scopedItems(){
- if(view.mode==='reset')return view.resetRows||[];
- return view.mode==='rsi89'?view.history.filter(t=>t.currentRsi89):view.history;
+ const verified=view.history.filter(t=>t.closed>0&&t.net!=null);
+ if(view.mode==='current')return verified.filter(t=>t.currentRsi89&&t.opened>=CURRENT_RSI_START);
+ if(view.mode==='rsi89')return verified.filter(t=>t.currentRsi89);
+ return verified;
 }
 function periodItems(){
  const min={ '24h':86400000,'3d':3*86400000,'7d':7*86400000,'30d':30*86400000,'all':Infinity}[view.period];
@@ -120,8 +123,8 @@ function periodItems(){
 function display(){
  const a=periodItems();
  const total=a.reduce((s,t)=>s+(t.net||0),0);
- $('chartInfo').textContent=a.length+' zamknięć '+(view.mode==='reset'?'od resetu':view.mode==='rsi89'?'RSI 89 od początku':'łącznie')+' · '+signed(total,4)+' USDT netto w okresie';
- $('historyCount').textContent=a.length+' transakcji '+(view.mode==='reset'?'od resetu':view.mode==='rsi89'?'RSI 89 od początku':'łącznie')+' w wybranym okresie';
+ $('chartInfo').textContent=a.length+' zamknięć '+(view.mode==='current'?'obecne RSI':view.mode==='rsi89'?'RSI 89 od początku':'łącznie')+' · '+signed(total,4)+' USDT netto w okresie';
+ $('historyCount').textContent=a.length+' transakcji '+(view.mode==='current'?'obecne RSI':view.mode==='rsi89'?'RSI 89 od początku':'łącznie')+' w wybranym okresie';
  chart(a);
  const newest=a.slice(-60).reverse();
  $('history').innerHTML=newest.length?newest.map(t=>{
@@ -169,23 +172,27 @@ function showAudit(){
 }
 function renderSummary(){
  const t=view.trades,meta=view.meta,mode=view.mode,items=scopedItems();
- const net=mode==='reset'?n(meta.earned):mode==='rsi89'?items.reduce((sum,r)=>sum+r.net,0):n(meta.net);
- const count=mode==='all'?(n(t.total)??view.history.length):items.length;
+ const net=mode==='all'?n(meta.net):items.reduce((sum,r)=>sum+r.net,0);
+ const count=mode==='all'?(n(t.total)??items.length):items.length;
  const wins=mode==='all'?(n(t.wins)||0):items.filter(r=>r.net>0).length;
  const losses=mode==='all'?(n(t.losses)||0):items.filter(r=>r.net<0).length;
  const flat=mode==='all'?(n(t.flat)||0):items.filter(r=>r.net===0).length;
  const first=mode!=='all'&&items.length?Math.min(...items.map(r=>r.opened||r.closed||Infinity)):null;
- const verified=mode!=='reset'||view.resetRows!==null;
+ const verified=true;
  $('net').textContent=verified? signed(net)+' USDT':'—';$('net').className='value '+diff(verified?net:null);
  $('winrate').textContent=verified&&wins+losses?f(wins*100/(wins+losses),2)+'%':'—';
  $('total').textContent=verified?String(count):'—';
- $('netLabel').textContent=mode==='reset'?'Netto · od resetu':mode==='rsi89'?'Netto · RSI 89':'Netto · cała historia';
- $('winLabel').textContent=mode==='reset'?'Skuteczność od resetu':mode==='rsi89'?'Skuteczność RSI 89':'Skuteczność · całość';
- $('totalLabel').textContent=mode==='reset'?'Zamknięte od resetu':mode==='rsi89'?'Zamknięte · RSI 89':'Zamknięte · całość';
- $('netUnder').textContent=mode==='reset'?'USDT · tak samo jak raport ntfy':'USDT · potwierdzone transakcje';
+ $('netLabel').textContent=mode==='current'?'Netto · obecna reguła RSI':mode==='rsi89'?'Netto · RSI 89 całość':'Netto · cała historia';
+ $('winLabel').textContent=mode==='current'?'Skuteczność obecnego RSI':mode==='rsi89'?'Skuteczność RSI 89 całość':'Skuteczność · całość';
+ $('totalLabel').textContent=mode==='current'?'Zamknięte · obecne RSI':mode==='rsi89'?'Zamknięte · RSI 89 całość':'Zamknięte · całość';
+ $('netUnder').textContent=mode==='current'?'USDT · tylko bieżąca reguła wejścia':'USDT · potwierdzone transakcje';
  $('winUnder').textContent=verified?wins+' wygranych / '+losses+' przegranych'+(flat?' / '+flat+' bez wyniku':''):'Brak potwierdzonej daty resetu';
- $('totalUnder').textContent=mode==='reset'?'Od ostatniego resetu':'Zweryfikowane transakcje';
- $('scope').textContent=mode==='reset'?(view.resetRows===null?'Nie da się jednoznacznie dopasować historii do resetu — brak wyniku zamiast zgadywania.':'SHORT · RSI > 89 · od resetu '+fmtDate(first)+' (UK), zgodnie z raportem.'):mode==='rsi89'?'RSI > 89 · SHORT · od '+fmtDate(first)+' (UK), również wcześniejsze próby.':'Pełna historia wszystkich strategii i wcześniejszych testów.';
+ $('totalUnder').textContent=mode==='current'?'Od zmiany warunku wejścia 29.10':'Zweryfikowane transakcje';
+ $('scope').textContent=mode==='current'
+  ?'SHORT · potwierdzone RSI > 89, od zmiany reguły 29.10.2026, 21:11 UTC. Wcześniejsze próby są wykluczone.'
+  :mode==='rsi89'
+  ?'Wszystkie transakcje RSI > 89 od '+fmtDate(first)+' (UK), także wcześniejsze próby.'
+  :'Pełna historia wszystkich strategii i wcześniejszych testów.';
  const stamp=meta.lastRun||meta.lastScan||0,age=stamp?Date.now()-stamp:Infinity,stat=$('status');
  stat.className='status '+(age<20*60000?'good':age<60*60000?'warn':'bad');
  stat.textContent=age<20*60000?'DANE AKTUALNE':age<60*60000?'DANE OPÓŹNIONE':'BRAK ŚWIEŻYCH DANYCH';
@@ -239,13 +246,13 @@ async function refresh(){
   const response=await fetch(SOURCE+'?t='+Date.now(),{cache:'no-store',signal:ctl.signal,mode:'cors'});
   if(!response.ok)throw new Error('HTTP '+response.status);
   const raw=await response.json();
-  if(!raw||!Array.isArray(raw.trade_history)||!raw.trades)throw new Error('Nieprawidłowy format danych');
+  if(!raw||raw.snapshot_version!==1||!Array.isArray(raw.trade_history)||!raw.trades)throw new Error('Nieprawidłowy format migawki');
   const last=raw.volume_long_last_scan||{};
   const positions=raw.positions&&typeof raw.positions==='object'?Object.values(raw.positions):[];
-  let audited={};
+  let audited={};let auditCount=0;
   try{
    const auditResponse=await fetch(RSI_SOURCE+'?t='+Date.now(),{cache:'no-store',signal:ctl.signal});
-   if(auditResponse.ok){const audit=await auditResponse.json();if(audit&&audit.version===1&&audit.trades&&typeof audit.trades==='object')audited=audit.trades;}
+   if(auditResponse.ok){const audit=await auditResponse.json();if(audit&&audit.version===1&&audit.trades&&typeof audit.trades==='object')audited=audit.trades;auditCount=Object.keys(audited).length;}
   }catch(_error){/* Historical audit may be pending; never block LIVE data. */}
   view.history=raw.trade_history.map(trade=>{
    const t=compactTrade(trade);
@@ -266,6 +273,7 @@ async function refresh(){
   view.resetCount=reset.matches;
   view.meta={net:realized,earned,start:n(raw.bankroll_start_usdt),bonus:n(raw.bankroll_streak_bonus_usdt),lastRun:n(raw.last_run_ms),lastScan:n(raw.last_scan_close_ms),scanStatus:String(last.status||'')};
   view.lastFetched=Date.now();
+  $('historyCount').title='Odtworzone RSI min/max z potwierdzonych świec 5m: '+auditCount+' transakcji';
   renderSummary();showTarget();showPositions();showAudit();display();
  }catch(err){
   $('status').className='status bad';$('status').textContent='BŁĄD ODCZYTU';
