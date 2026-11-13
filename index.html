@@ -18,7 +18,7 @@ header{display:flex;justify-content:space-between;gap:12px;align-items:center;ma
 .notice{padding:11px 15px;border:1px solid var(--line);border-radius:12px;background:#111d2b;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:12px;margin:14px 0 20px;font-size:12px}.notice strong{color:var(--txt)}button{font:inherit;color:var(--txt);cursor:pointer}.refresh{border:1px solid #365278;background:#1b3550;border-radius:9px;padding:8px 12px;font-weight:700;white-space:nowrap}.refresh:disabled{opacity:.5;cursor:default}
 .panel{padding:20px;margin-top:16px}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:15px;flex-wrap:wrap}.panel h2{font-size:17px;letter-spacing:-.2px;margin:0}.meta{font-size:12px;color:var(--muted)}
 .strategy-tabs{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 8px}.scope{font-size:12px;color:var(--muted);margin:0 0 19px}.strategy-tabs button{background:#131d2c;border:1px solid var(--line);color:var(--muted);font-size:13px;border-radius:10px;padding:10px 14px;font-weight:750}.strategy-tabs button.active{background:#1b3550;border-color:#4382af;color:#fff}.pills{display:flex;flex-wrap:wrap;gap:5px}.pill{border:1px solid transparent;background:var(--panel2);border-radius:8px;font-size:12px;font-weight:750;padding:7px 10px}.pill.active{background:#244364;color:#d3e7ff;border-color:#3c6691}
-.chart-wrap{height:250px;position:relative}.chart-wrap canvas{height:100%;width:100%;display:block}
+.chart-wrap{height:270px;position:relative;min-width:0}.chart-wrap #chart{height:100%;width:100%;display:block;min-width:0}.chart-wrap #chart svg{height:100%;width:100%;display:block}
 .daily-legend{display:flex;flex-wrap:wrap;gap:7px 13px;font-size:11px;color:var(--muted);margin:-2px 0 10px}.daily-legend span{display:inline-flex;align-items:center;gap:5px}.daily-key{display:inline-block;width:11px;height:7px;border-radius:2px;background:#36d6a2}.daily-amber{background:#f4bb5a}.daily-red{background:#ff7187}.daily-blue{background:#6aa7ed}
 .daily-list-title{font-weight:750;font-size:14px;margin:8px 0 8px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px}.daily-rows{display:grid;gap:5px;max-height:370px;overflow-y:auto;overscroll-behavior:contain}.daily-row{display:grid;grid-template-columns:minmax(0,1fr) 79px minmax(0,1.1fr);align-items:center;gap:8px;border:1px solid #26384d;background:#111d2b;border-radius:9px;padding:9px 10px;font-size:12px}.daily-row strong{text-align:right;white-space:nowrap;font-size:14px}.daily-row .daily-status{text-align:right;color:var(--muted);font-size:11px}.daily-row .daily-status.ok{color:var(--green)}.daily-row .daily-status.partial{color:#9fcaff}.daily-row .daily-status.miss{color:#edb85a}.daily-date{font-weight:650;white-space:nowrap}.empty{display:grid;place-items:center;min-height:100px;color:var(--muted);text-align:center}
 .cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.trade{background:#101927;border:1px solid var(--line);border-radius:13px;padding:13px 14px;min-width:0}.trade-top{display:flex;justify-content:space-between;gap:10px;align-items:start}.symbol{font-size:15px;font-weight:850}.side{color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.4px;margin-left:5px}.profit{font-size:16px;font-weight:850;white-space:nowrap}.trade-sub{color:var(--muted);font-size:12px;margin-top:3px}.trade-grid{border-top:1px solid #263344;margin-top:10px;padding-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px}.pair .key{font-size:11px;color:var(--muted)}.pair .val{font-size:13px;font-weight:750}.section-note{margin:8px 0 0;color:var(--muted);font-size:12px}.tiny{color:var(--muted);font-size:11px}
@@ -68,7 +68,7 @@ header{display:flex;justify-content:space-between;gap:12px;align-items:center;ma
 <section class="panel">
  <div class="panel-head"><div><h2>Dzienny postęp do 120 000 USDT</h2><div class="meta" id="chartInfo">Dzienny zysk netto · % kapitału · od resetu</div></div><div class="pills" role="group" aria-label="Okres"><button class="pill" data-period="24h">24 h</button><button class="pill" data-period="3d">3 dni</button><button class="pill" data-period="7d">7 dni</button><button class="pill" data-period="30d">30 dni</button><button class="pill active" data-period="all">Całość</button></div></div>
  <div class="daily-legend"><span><i class="daily-key daily-green"></i> Cel osiągnięty</span><span><i class="daily-key daily-amber"></i> Poniżej celu</span><span><i class="daily-key daily-red"></i> Strata</span><span><i class="daily-key daily-blue"></i> Próg +1,157%</span></div>
- <div class="chart-wrap"><canvas id="chart" role="img" aria-label="Wykres dziennych wyników netto w procentach, porównanych z wymaganym zyskiem 1,157 procent dziennie"></canvas></div>
+ <div class="chart-wrap"><div id="chart" role="img" aria-label="Wykres słupkowy dziennych wyników netto w procentach z linią wymaganego zysku 1,157 procent dziennie"><div class="empty">Ładowanie wykresu…</div></div></div>
  <div class="daily-list-title">Wyniki każdego dnia <span class="meta">Czas UK · po prowizjach</span></div>
  <div id="dailyRows" class="daily-rows"><div class="empty">Wczytywanie dni…</div></div>
  <p class="section-note">Dzienny wynik liczony z zamkniętych transakcji od resetu kapitału; niezależny od zakładek RSI. Procent zakłada obecny dodatkowy przydział 10 USDT przez cały okres. Pierwszy dzień i dzisiejszy są niepełne; próg +1,157% jest benchmarkiem planu 710 dni, nie gwarancją.</p>
@@ -174,37 +174,40 @@ function filteredDaily(days){
  return count===Infinity?days:days.slice(-count);
 }
 function chart(days){
- const can=$('chart'),box=can.getBoundingClientRect(),w=Math.max(280,box.width),h=Math.max(160,box.height),dpr=Math.min(window.devicePixelRatio||1,2);
- can.width=Math.floor(w*dpr);can.height=Math.floor(h*dpr);
- const ctx=can.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
- const left=55,right=10,top=19,bottom=35,W=w-left-right,H=h-top-bottom;
+ const target=$('chart'),box=target.getBoundingClientRect();
+ const w=Math.max(280,Math.round(box.width)||280),h=Math.max(230,Math.round(box.height)||270);
+ const L=55,R=13,T=15,B=34,W=w-L-R,H=h-T-B;
  if(W<=0||H<=0)return;
- if(!days.length){ctx.font='13px system-ui';ctx.fillStyle='#90a0b4';ctx.fillText('Brak danych po resecie',left+7,top+H/2);return;}
- const values=days.map(d=>d.rate);
- let lo=Math.min(0,...values),hi=Math.max(TARGET_DAILY_PCT,...values),padding=Math.max(.18,(hi-lo)*.1);
- lo-=padding;hi+=padding;
- const Y=v=>top+(hi-v)/(hi-lo)*H,zero=Y(0);
- ctx.font='11px system-ui';ctx.textBaseline='middle';ctx.lineWidth=1;
- for(let i=0;i<=4;i++){
-  const v=hi-(hi-lo)*i/4,y=Y(v);
-  ctx.strokeStyle='#29384c';ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(w-right,y);ctx.stroke();
-  ctx.fillStyle='#94a4ba';ctx.fillText(f(v,1)+'%',2,y);
+ if(!days.length){
+  target.innerHTML='<div class="empty">Brak danych po resecie</div>';
+  return;
  }
- ctx.strokeStyle='#506078';ctx.setLineDash([3,4]);ctx.beginPath();ctx.moveTo(left,zero);ctx.lineTo(w-right,zero);ctx.stroke();
- const targetY=Y(TARGET_DAILY_PCT);ctx.strokeStyle='#6aa7ed';ctx.setLineDash([6,4]);ctx.lineWidth=1.7;ctx.beginPath();ctx.moveTo(left,targetY);ctx.lineTo(w-right,targetY);ctx.stroke();ctx.setLineDash([]);
- const gap=W/days.length,bar=Math.min(23,Math.max(3,gap*.65));
+ const vals=days.map(d=>d.rate);
+ const pad=Math.max(.17,(Math.max(TARGET_DAILY_PCT,...vals)-Math.min(0,...vals))*.1);
+ const lo=Math.min(0,...vals)-pad,hi=Math.max(TARGET_DAILY_PCT,...vals)+pad;
+ const Y=v=>T+(hi-v)/(hi-lo)*H;
+ const round=v=>Math.round(v*10)/10;
+ const out=[];
+ out.push('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" preserveAspectRatio="none" aria-hidden="true">');
+ for(let i=0;i<=4;i++){
+  const value=hi-(hi-lo)*i/4,y=round(Y(value));
+  out.push('<line x1="'+L+'" y1="'+y+'" x2="'+(w-R)+'" y2="'+y+'" stroke="#29384c" stroke-width="1"/>');
+  out.push('<text x="2" y="'+(y+4)+'" fill="#94a4ba" font-size="11" font-family="system-ui">'+f(value,1)+'%</text>');
+ }
+ const zero=Y(0),goal=Y(TARGET_DAILY_PCT);
+ out.push('<line x1="'+L+'" y1="'+round(zero)+'" x2="'+(w-R)+'" y2="'+round(zero)+'" stroke="#6c7b92" stroke-dasharray="3 4"/>');
+ out.push('<line x1="'+L+'" y1="'+round(goal)+'" x2="'+(w-R)+'" y2="'+round(goal)+'" stroke="#6aa7ed" stroke-width="2" stroke-dasharray="6 4"/>');
+ const gap=W/days.length,bar=Math.min(24,Math.max(3,gap*.65));
  days.forEach((d,i)=>{
-  const x=left+gap*(i+.5),py=Y(d.rate);
-  ctx.globalAlpha=d.partial?.72:1;
-  ctx.fillStyle=d.rate<0?'#ff7187':d.rate>=TARGET_DAILY_PCT?'#36d6a2':'#f4bb5a';
-  ctx.fillRect(x-bar/2,Math.min(zero,py),bar,Math.max(2,Math.abs(zero-py)));
-  ctx.globalAlpha=1;
+  const x=L+gap*(i+.5),py=Y(d.rate),y=Math.min(zero,py),height=Math.max(2,Math.abs(zero-py));
+  const color=d.rate<0?'#ff7187':d.rate>=TARGET_DAILY_PCT?'#36d6a2':'#f4bb5a';
+  out.push('<rect x="'+round(x-bar/2)+'" y="'+round(y)+'" width="'+round(bar)+'" height="'+round(height)+'" rx="2" fill="'+color+'" opacity="'+(d.partial?'0.7':'1')+'"/>');
  });
- ctx.font='11px system-ui';ctx.textBaseline='alphabetic';ctx.fillStyle='#94a4ba';
  const label=d=>d.day.slice(8)+'.'+d.day.slice(5,7);
- const firstLabel=label(days[0]),lastLabel=label(days[days.length-1]);
- ctx.fillText(firstLabel,left,h-7);
- const endWidth=ctx.measureText(lastLabel).width;ctx.fillText(lastLabel,w-right-endWidth,h-7);
+ out.push('<text x="'+L+'" y="'+(h-8)+'" fill="#94a4ba" font-size="12" font-family="system-ui">'+label(days[0])+'</text>');
+ out.push('<text x="'+(w-R)+'" y="'+(h-8)+'" text-anchor="end" fill="#94a4ba" font-size="12" font-family="system-ui">'+label(days[days.length-1])+'</text>');
+ out.push('</svg>');
+ target.innerHTML=out.join('');
 }
 
 function showPositions(){
