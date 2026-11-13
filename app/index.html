@@ -18,7 +18,9 @@ header{display:flex;justify-content:space-between;gap:12px;align-items:center;ma
 .notice{padding:11px 15px;border:1px solid var(--line);border-radius:12px;background:#111d2b;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:12px;margin:14px 0 20px;font-size:12px}.notice strong{color:var(--txt)}button{font:inherit;color:var(--txt);cursor:pointer}.refresh{border:1px solid #365278;background:#1b3550;border-radius:9px;padding:8px 12px;font-weight:700;white-space:nowrap}.refresh:disabled{opacity:.5;cursor:default}
 .panel{padding:20px;margin-top:16px}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:15px;flex-wrap:wrap}.panel h2{font-size:17px;letter-spacing:-.2px;margin:0}.meta{font-size:12px;color:var(--muted)}
 .strategy-tabs{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 8px}.scope{font-size:12px;color:var(--muted);margin:0 0 19px}.strategy-tabs button{background:#131d2c;border:1px solid var(--line);color:var(--muted);font-size:13px;border-radius:10px;padding:10px 14px;font-weight:750}.strategy-tabs button.active{background:#1b3550;border-color:#4382af;color:#fff}.pills{display:flex;flex-wrap:wrap;gap:5px}.pill{border:1px solid transparent;background:var(--panel2);border-radius:8px;font-size:12px;font-weight:750;padding:7px 10px}.pill.active{background:#244364;color:#d3e7ff;border-color:#3c6691}
-.chart-wrap{height:250px;position:relative}.chart-wrap canvas{height:100%;width:100%;display:block}.empty{display:grid;place-items:center;min-height:100px;color:var(--muted);text-align:center}
+.chart-wrap{height:250px;position:relative}.chart-wrap canvas{height:100%;width:100%;display:block}
+.daily-legend{display:flex;flex-wrap:wrap;gap:7px 13px;font-size:11px;color:var(--muted);margin:-2px 0 10px}.daily-legend span{display:inline-flex;align-items:center;gap:5px}.daily-key{display:inline-block;width:11px;height:7px;border-radius:2px;background:#36d6a2}.daily-amber{background:#f4bb5a}.daily-red{background:#ff7187}.daily-blue{background:#6aa7ed}
+.daily-list-title{font-weight:750;font-size:14px;margin:8px 0 8px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px}.daily-rows{display:grid;gap:5px;max-height:370px;overflow-y:auto;overscroll-behavior:contain}.daily-row{display:grid;grid-template-columns:minmax(0,1fr) 79px minmax(0,1.1fr);align-items:center;gap:8px;border:1px solid #26384d;background:#111d2b;border-radius:9px;padding:9px 10px;font-size:12px}.daily-row strong{text-align:right;white-space:nowrap;font-size:14px}.daily-row .daily-status{text-align:right;color:var(--muted);font-size:11px}.daily-row .daily-status.ok{color:var(--green)}.daily-row .daily-status.partial{color:#9fcaff}.daily-row .daily-status.miss{color:#edb85a}.daily-date{font-weight:650;white-space:nowrap}.empty{display:grid;place-items:center;min-height:100px;color:var(--muted);text-align:center}
 .cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.trade{background:#101927;border:1px solid var(--line);border-radius:13px;padding:13px 14px;min-width:0}.trade-top{display:flex;justify-content:space-between;gap:10px;align-items:start}.symbol{font-size:15px;font-weight:850}.side{color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.4px;margin-left:5px}.profit{font-size:16px;font-weight:850;white-space:nowrap}.trade-sub{color:var(--muted);font-size:12px;margin-top:3px}.trade-grid{border-top:1px solid #263344;margin-top:10px;padding-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px}.pair .key{font-size:11px;color:var(--muted)}.pair .val{font-size:13px;font-weight:750}.section-note{margin:8px 0 0;color:var(--muted);font-size:12px}.tiny{color:var(--muted);font-size:11px}
 .badge{display:inline-flex;background:#1a3450;color:#9fcaff;border:1px solid #33516d;border-radius:8px;font-size:11px;padding:3px 8px;font-weight:700}.badge.green{color:var(--green);background:#14352c;border-color:#245744}.badge.red{color:var(--red);background:#3b232c;border-color:#693442}
 .rsi-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.rsi-item{border:1px solid var(--line);background:#101927;border-radius:12px;padding:12px;display:flex;justify-content:space-between;align-items:center}.rsi-item b{font-size:15px}.rsi-item .meta{font-size:11px}.rsi-item .right{text-align:right}.rsi-item .right b{font-size:19px}
@@ -64,8 +66,12 @@ header{display:flex;justify-content:space-between;gap:12px;align-items:center;ma
 </section>
 <div class="notice"><div><strong id="updateTime">Odczytywanie danych…</strong><div id="scanInfo">Źródło: publiczna migawka GitHub · tylko odczyt</div></div><button id="refresh" class="refresh" type="button">Odśwież</button></div>
 <section class="panel">
- <div class="panel-head"><div><h2>Krzywa zysku netto</h2><div class="meta" id="chartInfo">Potwierdzone zamknięcia · USDT</div></div><div class="pills" role="group" aria-label="Okres"><button class="pill" data-period="24h">24 h</button><button class="pill" data-period="3d">3 dni</button><button class="pill" data-period="7d">7 dni</button><button class="pill" data-period="30d">30 dni</button><button class="pill active" data-period="all">Całość</button></div></div>
- <div class="chart-wrap"><canvas id="chart" role="img" aria-label="Wykres skumulowanego zysku netto"></canvas></div>
+ <div class="panel-head"><div><h2>Dzienny postęp do 120 000 USDT</h2><div class="meta" id="chartInfo">Dzienny zysk netto · % kapitału · od resetu</div></div><div class="pills" role="group" aria-label="Okres"><button class="pill" data-period="24h">24 h</button><button class="pill" data-period="3d">3 dni</button><button class="pill" data-period="7d">7 dni</button><button class="pill" data-period="30d">30 dni</button><button class="pill active" data-period="all">Całość</button></div></div>
+ <div class="daily-legend"><span><i class="daily-key daily-green"></i> Cel osiągnięty</span><span><i class="daily-key daily-amber"></i> Poniżej celu</span><span><i class="daily-key daily-red"></i> Strata</span><span><i class="daily-key daily-blue"></i> Próg +1,157%</span></div>
+ <div class="chart-wrap"><canvas id="chart" role="img" aria-label="Wykres dziennych wyników netto w procentach, porównanych z wymaganym zyskiem 1,157 procent dziennie"></canvas></div>
+ <div class="daily-list-title">Wyniki każdego dnia <span class="meta">Czas UK · po prowizjach</span></div>
+ <div id="dailyRows" class="daily-rows"><div class="empty">Wczytywanie dni…</div></div>
+ <p class="section-note">Dzienny wynik liczony z zamkniętych transakcji od resetu kapitału; niezależny od zakładek RSI. Procent zakłada obecny dodatkowy przydział 10 USDT przez cały okres. Pierwszy dzień i dzisiejszy są niepełne; próg +1,157% jest benchmarkiem planu 710 dni, nie gwarancją.</p>
 </section>
 <section class="panel">
  <div class="panel-head"><h2>Otwarte pozycje</h2><span class="meta">Bez wykonywania zleceń</span></div>
@@ -121,40 +127,86 @@ function display(){
  const total=a.reduce((s,t)=>s+(t.net||0),0);
  const auditedCount=a.filter(t=>t.rsiMin!=null&&t.rsiMax!=null&&t.rsiExit!=null).length;
  $('rsiCoverage').textContent='RSI min/max/wyjście (5m): '+auditedCount+' / '+a.length+' pozycji w okresie';
- $('chartInfo').textContent=a.length+' zamknięć '+(view.mode==='current'?'obecne RSI':view.mode==='rsi89'?'RSI 89 od początku':'łącznie')+' · '+signed(total,4)+' USDT netto w okresie';
+ const dailyAll=dailyProgress(),dailyFiltered=filteredDaily(dailyAll);
+ const completed=dailyFiltered.filter(d=>!d.partial),met=completed.filter(d=>d.rate>=TARGET_DAILY_PCT).length;
+ $('chartInfo').textContent=completed.length?met+' / '+completed.length+' pełnych dni osiągnęło +1,157% · kapitał operacyjny':'Dzienny zysk netto · próg +1,157%';
+ $('dailyRows').innerHTML=dailyFiltered.length?dailyFiltered.slice().reverse().map(d=>{
+   const pass=d.rate>=TARGET_DAILY_PCT;
+   const cls=d.partial?'partial':pass?'ok':'miss';
+   const status=d.today?'Dziś · w toku':d.first?'Dzień startowy':pass?'Cel osiągnięty':'Brakuje '+f(TARGET_DAILY_PCT-d.rate,2)+' p.p.';
+   const tone=d.rate<0?'negative':pass?'positive':'';
+   return '<div class="daily-row"><span class="daily-date">'+safe(d.day.slice(8)+'.'+d.day.slice(5,7)+'.'+d.day.slice(0,4))+'</span><strong class="'+tone+'">'+signed(d.rate,2)+'%</strong><span class="daily-status '+cls+'">'+status+'</span></div>';
+ }).join(''):'<div class="empty">Brak potwierdzonej historii kapitału po resecie.</div>';
  $('historyCount').textContent=a.length+' transakcji '+(view.mode==='current'?'obecne RSI':view.mode==='rsi89'?'RSI 89 od początku':'łącznie')+' w wybranym okresie';
- chart(a);
+ chart(dailyFiltered);
  const newest=a.slice(-60).reverse();
  $('history').innerHTML=newest.length?newest.map(t=>{
   const pct=t.net!=null && t.notional>0?100*t.net/t.notional:null;
   return '<article class="trade"><div class="trade-top"><div><span class="symbol">'+safe(t.inst.replace(/-USDT$/,''))+'</span><span class="side">'+safe(t.side)+'</span><div class="trade-sub">'+safe(fmtDate(t.closed))+'</div></div><div class="profit '+diff(t.net)+'">'+signed(t.net)+' USDT<div class="tiny" style="text-align:right">'+(pct==null?'—':signed(pct,2)+'%')+'</div></div></div><div class="trade-grid"><div class="pair"><div class="key">RSI wejście</div><div class="val">'+f(t.rsi,2)+'</div></div><div class="pair"><div class="key">RSI ostatnia świeca 5m przed wyjściem</div><div class="val">'+f(t.rsiExit,2)+'</div></div><div class="pair"><div class="key">RSI min / max · 5m</div><div class="val">'+f(t.rsiMin,2)+' / '+f(t.rsiMax,2)+'</div></div><div class="pair"><div class="key">Wielkość pozycji</div><div class="val">'+(t.notional==null?'—':f(t.notional,2)+' USDT')+'</div></div></div></article>';
  }).join(''):'<div class="empty">Brak zapisanych zamknięć w tym okresie.</div>';
 }
-function chart(items){
+const TARGET_DAILY_PCT=1.1569549910037311;
+const ukDay=ms=>new Intl.DateTimeFormat('sv-SE',{timeZone:UK,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ms));
+function dailyProgress(){
+ const rows=view.resetRows,meta=view.meta;
+ const base=n(meta.start)!=null&&n(meta.bonus)!=null?n(meta.start)+n(meta.bonus):null;
+ if(!rows||!rows.length||base==null||base<=0)return [];
+ const started=Math.min(...rows.map(t=>t.opened||t.closed).filter(Boolean)),today=ukDay(Date.now()),first=ukDay(started);
+ const pnlByDay=new Map();
+ for(const trade of rows){
+  if(!trade.closed||trade.net==null)continue;
+  const day=ukDay(trade.closed);
+  pnlByDay.set(day,(pnlByDay.get(day)||0)+trade.net);
+ }
+ const list=[];let capital=base,day=new Date(first+'T12:00:00Z');
+ for(let i=0;i<3660;i++){
+  const key=day.toISOString().slice(0,10);if(key>today)break;
+  const pnl=pnlByDay.get(key)||0;
+  const rate=capital>0?pnl/capital*100:0;
+  list.push({day:key,pnl,rate,capital,first:key===first,today:key===today,partial:key===first||key===today});
+  capital+=pnl;
+  day.setUTCDate(day.getUTCDate()+1);
+ }
+ return list;
+}
+function filteredDaily(days){
+ const count={'24h':2,'3d':3,'7d':7,'30d':30,'all':Infinity}[view.period]||Infinity;
+ return count===Infinity?days:days.slice(-count);
+}
+function chart(days){
  const can=$('chart'),box=can.getBoundingClientRect(),w=Math.max(280,box.width),h=Math.max(160,box.height),dpr=Math.min(window.devicePixelRatio||1,2);
  can.width=Math.floor(w*dpr);can.height=Math.floor(h*dpr);
  const ctx=can.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
- const left=60,right=12,top=17,bottom=35,W=w-left-right,H=h-top-bottom;
+ const left=55,right=10,top=19,bottom=35,W=w-left-right,H=h-top-bottom;
  if(W<=0||H<=0)return;
- let ys=[0],sum=0;
- for(const t of items){sum+=t.net||0;ys.push(sum);}
- let lo=Math.min(0,...ys),hi=Math.max(0,...ys);let spread=hi-lo;if(!spread){hi+=.5;lo-=.5;spread=hi-lo;}else{const pad=Math.max(spread*.1,.01);lo-=pad;hi+=pad;spread=hi-lo;}
- const Y=v=>top+(hi-v)/spread*H;const X=i=>left+W*i/Math.max(1,ys.length-1);
- ctx.font='11px system-ui';ctx.textBaseline='middle';ctx.strokeStyle='#29384c';ctx.fillStyle='#94a4ba';ctx.lineWidth=1;
- for(let i=0;i<=4;i++){const val=hi-(hi-lo)*i/4,y=Y(val);ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(w-right,y);ctx.stroke();ctx.fillText(f(val,2),3,y);}
- const baseline=Y(0);ctx.strokeStyle='#506078';ctx.setLineDash([3,4]);ctx.beginPath();ctx.moveTo(left,baseline);ctx.lineTo(w-right,baseline);ctx.stroke();ctx.setLineDash([]);
- if(items.length){
-   const stroke=sum>=0?'#36d6a2':'#ff7187';
-   const gradient=ctx.createLinearGradient(0,top,0,h-bottom);gradient.addColorStop(0,sum>=0?'rgba(54,214,162,.23)':'rgba(255,113,135,.23)');gradient.addColorStop(1,'rgba(10,17,29,0)');
-   ctx.beginPath();ctx.moveTo(X(0),baseline);ys.forEach((v,i)=>ctx.lineTo(X(i),Y(v)));ctx.lineTo(X(ys.length-1),baseline);ctx.closePath();ctx.fillStyle=gradient;ctx.fill();
-   ctx.beginPath();ys.forEach((v,i)=>{if(!i)ctx.moveTo(X(i),Y(v));else ctx.lineTo(X(i),Y(v));});ctx.strokeStyle=stroke;ctx.lineWidth=2.3;ctx.lineJoin='round';ctx.stroke();
-   ctx.beginPath();ctx.arc(X(ys.length-1),Y(ys[ys.length-1]),3.6,0,Math.PI*2);ctx.fillStyle=stroke;ctx.fill();
-   ctx.textBaseline='alphabetic';ctx.fillStyle='#94a4ba';ctx.font='11px system-ui';
-   ctx.fillText(new Intl.DateTimeFormat('pl-PL',{timeZone:UK,day:'2-digit',month:'2-digit'}).format(new Date(items[0].closed)),left,h-7);
-   const end=new Intl.DateTimeFormat('pl-PL',{timeZone:UK,day:'2-digit',month:'2-digit'}).format(new Date(items[items.length-1].closed));
-   const ew=ctx.measureText(end).width;ctx.fillText(end,w-right-ew,h-7);
- } else {ctx.font='13px system-ui';ctx.fillStyle='#90a0b4';ctx.fillText('Brak transakcji w wybranym okresie',left+9,top+H/2);}
+ if(!days.length){ctx.font='13px system-ui';ctx.fillStyle='#90a0b4';ctx.fillText('Brak danych po resecie',left+7,top+H/2);return;}
+ const values=days.map(d=>d.rate);
+ let lo=Math.min(0,...values),hi=Math.max(TARGET_DAILY_PCT,...values),padding=Math.max(.18,(hi-lo)*.1);
+ lo-=padding;hi+=padding;
+ const Y=v=>top+(hi-v)/(hi-lo)*H,zero=Y(0);
+ ctx.font='11px system-ui';ctx.textBaseline='middle';ctx.lineWidth=1;
+ for(let i=0;i<=4;i++){
+  const v=hi-(hi-lo)*i/4,y=Y(v);
+  ctx.strokeStyle='#29384c';ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(w-right,y);ctx.stroke();
+  ctx.fillStyle='#94a4ba';ctx.fillText(f(v,1)+'%',2,y);
+ }
+ ctx.strokeStyle='#506078';ctx.setLineDash([3,4]);ctx.beginPath();ctx.moveTo(left,zero);ctx.lineTo(w-right,zero);ctx.stroke();
+ const targetY=Y(TARGET_DAILY_PCT);ctx.strokeStyle='#6aa7ed';ctx.setLineDash([6,4]);ctx.lineWidth=1.7;ctx.beginPath();ctx.moveTo(left,targetY);ctx.lineTo(w-right,targetY);ctx.stroke();ctx.setLineDash([]);
+ const gap=W/days.length,bar=Math.min(23,Math.max(3,gap*.65));
+ days.forEach((d,i)=>{
+  const x=left+gap*(i+.5),py=Y(d.rate);
+  ctx.globalAlpha=d.partial?.72:1;
+  ctx.fillStyle=d.rate<0?'#ff7187':d.rate>=TARGET_DAILY_PCT?'#36d6a2':'#f4bb5a';
+  ctx.fillRect(x-bar/2,Math.min(zero,py),bar,Math.max(2,Math.abs(zero-py)));
+  ctx.globalAlpha=1;
+ });
+ ctx.font='11px system-ui';ctx.textBaseline='alphabetic';ctx.fillStyle='#94a4ba';
+ const label=d=>d.day.slice(8)+'.'+d.day.slice(5,7);
+ const firstLabel=label(days[0]),lastLabel=label(days[days.length-1]);
+ ctx.fillText(firstLabel,left,h-7);
+ const endWidth=ctx.measureText(lastLabel).width;ctx.fillText(lastLabel,w-right-endWidth,h-7);
 }
+
 function showPositions(){
  const a=view.positions;
  $('opened').textContent=String(a.length);
