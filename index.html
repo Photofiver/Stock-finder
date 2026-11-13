@@ -17,7 +17,7 @@ header{display:flex;justify-content:space-between;gap:12px;align-items:center;ma
 .positive{color:var(--green)!important}.negative{color:var(--red)!important}.neutral{color:var(--txt)!important}
 .notice{padding:11px 15px;border:1px solid var(--line);border-radius:12px;background:#111d2b;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:12px;margin:14px 0 20px;font-size:12px}.notice strong{color:var(--txt)}button{font:inherit;color:var(--txt);cursor:pointer}.refresh{border:1px solid #365278;background:#1b3550;border-radius:9px;padding:8px 12px;font-weight:700;white-space:nowrap}.refresh:disabled{opacity:.5;cursor:default}
 .panel{padding:20px;margin-top:16px}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:15px;flex-wrap:wrap}.panel h2{font-size:17px;letter-spacing:-.2px;margin:0}.meta{font-size:12px;color:var(--muted)}
-.pills{display:flex;flex-wrap:wrap;gap:5px}.pill{border:1px solid transparent;background:var(--panel2);border-radius:8px;font-size:12px;font-weight:750;padding:7px 10px}.pill.active{background:#244364;color:#d3e7ff;border-color:#3c6691}
+.strategy-tabs{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 8px}.scope{font-size:12px;color:var(--muted);margin:0 0 19px}.strategy-tabs button{background:#131d2c;border:1px solid var(--line);color:var(--muted);font-size:13px;border-radius:10px;padding:10px 14px;font-weight:750}.strategy-tabs button.active{background:#1b3550;border-color:#4382af;color:#fff}.pills{display:flex;flex-wrap:wrap;gap:5px}.pill{border:1px solid transparent;background:var(--panel2);border-radius:8px;font-size:12px;font-weight:750;padding:7px 10px}.pill.active{background:#244364;color:#d3e7ff;border-color:#3c6691}
 .chart-wrap{height:250px;position:relative}.chart-wrap canvas{height:100%;width:100%;display:block}.empty{display:grid;place-items:center;min-height:100px;color:var(--muted);text-align:center}
 .cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.trade{background:#101927;border:1px solid var(--line);border-radius:13px;padding:13px 14px;min-width:0}.trade-top{display:flex;justify-content:space-between;gap:10px;align-items:start}.symbol{font-size:15px;font-weight:850}.side{color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.4px;margin-left:5px}.profit{font-size:16px;font-weight:850;white-space:nowrap}.trade-sub{color:var(--muted);font-size:12px;margin-top:3px}.trade-grid{border-top:1px solid #263344;margin-top:10px;padding-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px}.pair .key{font-size:11px;color:var(--muted)}.pair .val{font-size:13px;font-weight:750}.section-note{margin:8px 0 0;color:var(--muted);font-size:12px}.tiny{color:var(--muted);font-size:11px}
 .badge{display:inline-flex;background:#1a3450;color:#9fcaff;border:1px solid #33516d;border-radius:8px;font-size:11px;padding:3px 8px;font-weight:700}.badge.green{color:var(--green);background:#14352c;border-color:#245744}.badge.red{color:var(--red);background:#3b232c;border-color:#693442}
@@ -36,11 +36,13 @@ footer{margin-top:22px;color:var(--muted);font-size:11px;text-align:center;line-
 <div class="eyebrow">PHOTOFIVER / STOCK-FINDER</div>
 <h1>Twój bot. Jeden panel.</h1>
 <p class="intro">Pozycje, potwierdzone wyniki netto, RSI i historia transakcji. Dane pobierane z GitHub co 5 minut, kiedy panel jest otwarty.</p>
+<div class="strategy-tabs" role="group" aria-label="Zakres wyników"><button type="button" data-mode="rsi89" class="active">Obecna strategia · RSI 89 SHORT</button><button type="button" data-mode="all">Wszystkie wcześniejsze testy</button></div>
+<p id="scope" class="scope">Wyniki tylko potwierdzonych wejść SHORT po przekroczeniu RSI 89.</p>
 <section class="stats" aria-label="Podsumowanie">
- <div class="stat"><span class="label">Netto od początku</span><div class="value" id="net">—</div><span class="under">USDT · wynik z BloFin</span></div>
- <div class="stat"><span class="label">Skuteczność</span><div class="value" id="winrate">—</div><span class="under">Wygrane / rozliczone</span></div>
+ <div class="stat"><span class="label" id="netLabel">Netto · obecne RSI</span><div class="value" id="net">—</div><span class="under" id="netUnder">USDT · wynik z BloFin</span></div>
+ <div class="stat"><span class="label" id="winLabel">Skuteczność RSI 89</span><div class="value" id="winrate">—</div><span class="under" id="winUnder">Wygrane / rozliczone</span></div>
  <div class="stat"><span class="label">Otwarte pozycje</span><div class="value" id="opened">—</div><span class="under">Monitorowane przez bota</span></div>
- <div class="stat"><span class="label">Zamknięte</span><div class="value" id="total">—</div><span class="under">Zweryfikowane transakcje</span></div>
+ <div class="stat"><span class="label" id="totalLabel">Zamknięte · RSI 89</span><div class="value" id="total">—</div><span class="under" id="totalUnder">Zweryfikowane transakcje</span></div>
 </section>
 <div class="notice"><div><strong id="updateTime">Odczytywanie danych…</strong><div id="scanInfo">Źródło: publiczny plik blofin_live_state.json</div></div><button id="refresh" class="refresh" type="button">Odśwież</button></div>
 <section class="panel">
@@ -74,21 +76,22 @@ const f=(v,d=2)=>v==null?'—':Number(v).toLocaleString('pl-PL',{minimumFraction
 const signed=(v,d=4)=>v==null?'—':(v>0?'+':'')+f(v,d);
 const fmtDate=ms=>{const v=n(ms);return v?new Intl.DateTimeFormat('pl-PL',{timeZone:UK,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(v)):'—';};
 const diff=v=>v==null?'neutral':v>0?'positive':v<0?'negative':'neutral';
-let view={period:'24h',history:[],positions:[],trades:{},meta:{},audit:{},lastFetched:0};
+let view={period:'24h',mode:'rsi89',history:[],positions:[],trades:{},meta:{},audit:{},lastFetched:0};
 let busy=false;
 function compactTrade(t){
  const snap=t.signal_snapshot||{};
- return {inst:String(t.inst||''),side:String(t.side||''),opened:n(t.opened_ms),closed:n(t.closed_ms),net:n(t.net_pnl_usdt),notional:n(t.notional_usdt),reason:String(t.reason||''),rsi:n(snap.rsi14??snap.rsi??t.entry_rsi14),rsiExit:n(t.exit_rsi14??t.rsi_exit),rsiMin:n(t.rsi_min??t.rsi14_min),rsiMax:n(t.rsi_max??t.rsi14_max),strategy:String(t.strategy||''),result:String(t.result||'')};
+ return {currentRsi89:t.side==='SHORT' && snap.rsi89_short_entry===true,inst:String(t.inst||''),side:String(t.side||''),opened:n(t.opened_ms),closed:n(t.closed_ms),net:n(t.net_pnl_usdt),notional:n(t.notional_usdt),reason:String(t.reason||''),rsi:n(snap.rsi14??snap.rsi??t.entry_rsi14),rsiExit:n(t.exit_rsi14??t.rsi_exit),rsiMin:n(t.rsi_min??t.rsi14_min),rsiMax:n(t.rsi_max??t.rsi14_max),strategy:String(t.strategy||''),result:String(t.result||'')};
 }
+function scopedItems(){return view.mode==='rsi89'?view.history.filter(t=>t.currentRsi89):view.history;}
 function periodItems(){
  const min={ '24h':86400000,'3d':3*86400000,'7d':7*86400000,'30d':30*86400000,'all':Infinity}[view.period];
- return view.history.filter(t=>t.closed && (min===Infinity||t.closed>=Date.now()-min)).sort((a,b)=>a.closed-b.closed);
+ return scopedItems().filter(t=>t.closed && (min===Infinity||t.closed>=Date.now()-min)).sort((a,b)=>a.closed-b.closed);
 }
 function display(){
  const a=periodItems();
  const total=a.reduce((s,t)=>s+(t.net||0),0);
- $('chartInfo').textContent=a.length+' zamknięć · '+signed(total,4)+' USDT netto w okresie';
- $('historyCount').textContent=a.length+' transakcji w wybranym okresie';
+ $('chartInfo').textContent=a.length+' zamknięć '+(view.mode==='rsi89'?'RSI 89':'łącznie')+' · '+signed(total,4)+' USDT netto w okresie';
+ $('historyCount').textContent=a.length+' transakcji '+(view.mode==='rsi89'?'RSI 89 SHORT':'łącznie')+' w wybranym okresie';
  chart(a);
  const newest=a.slice(-60).reverse();
  $('history').innerHTML=newest.length?newest.map(t=>{
@@ -135,10 +138,23 @@ function showAudit(){
  $('rsi').innerHTML=rows.length?rows.slice(0,8).map(t=>'<article class="rsi-item"><div><b>'+safe(t.inst||'—')+'</b><div class="meta">TOP '+safe(t.rank??'—')+' · '+safe(t.reason||'')+'</div></div><div class="right"><b>'+f(n(t.rsi14),2)+'</b><div class="meta">Do RSI 89: '+f(n(t.gap_to_89_points),2)+'</div></div></article>').join(''):'<div class="empty">Brak zapisanych kandydatów RSI 89 w ostatnim skanie.</div>';
 }
 function renderSummary(){
- const t=view.trades,meta=view.meta,net=n(meta.net),count=n(t.total)??view.history.length,wins=n(t.wins)||0,losses=n(t.losses)||0;
- $('net').textContent=signed(net)+' USDT';$('net').className='value '+diff(net);
+ const t=view.trades,meta=view.meta,current=view.mode==='rsi89',all=scopedItems();
+ const net=current?all.reduce((sum,row)=>sum+(row.net||0),0):n(meta.net);
+ const count=current?all.length:(n(t.total)??view.history.length);
+ const wins=current?all.filter(row=>row.net!=null&&row.net>0).length:(n(t.wins)||0);
+ const losses=current?all.filter(row=>row.net!=null&&row.net<0).length:(n(t.losses)||0);
+ const flats=current?all.filter(row=>row.net===0).length:(n(t.flat)||0);
+ const first=current&&all.length?Math.min(...all.map(row=>row.opened||row.closed||Infinity)):null;
+ $('net').textContent=(current&&!all.length?'—':signed(net)+' USDT');$('net').className='value '+diff(current&&!all.length?null:net);
  $('winrate').textContent=wins+losses?f(wins*100/(wins+losses),1)+'%':'—';
  $('total').textContent=String(count);
+ $('netLabel').textContent=current?'Netto · RSI 89':'Netto od początku';
+ $('winLabel').textContent=current?'Skuteczność RSI 89':'Skuteczność · całość';
+ $('totalLabel').textContent=current?'Zamknięte · RSI 89':'Zamknięte · całość';
+ $('netUnder').textContent=current?'USDT · suma potwierdzonych pozycji RSI':'USDT · wynik z BloFin';
+ $('winUnder').textContent=wins+' wygranych / '+losses+' przegranych'+(flats?' / '+flats+' bez wyniku':'');
+ $('totalUnder').textContent=current?'Transakcje oznaczone RSI89_SHORT':'Zweryfikowane transakcje';
+ $('scope').textContent=current?(all.length?'RSI > 89 · SHORT · od '+fmtDate(first)+' (UK). Wcześniejsze próby nie są liczone.':'Nie znaleziono zweryfikowanych transakcji obecnej strategii RSI 89 SHORT.'):'Pełna historia wszystkich strategii i wcześniejszych testów.';
  const stamp=meta.lastRun||meta.lastScan||0,age=stamp?Date.now()-stamp:Infinity,stat=$('status');
  stat.className='status '+(age<20*60000?'good':age<60*60000?'warn':'bad');
  stat.textContent=age<20*60000?'DANE AKTUALNE':age<60*60000?'DANE OPÓŹNIONE':'BRAK ŚWIEŻYCH DANYCH';
@@ -169,6 +185,7 @@ async function refresh(){
  }finally{clearTimeout(timeout);btn.disabled=false;btn.textContent='Odśwież';busy=false;}
 }
 document.querySelectorAll('[data-period]').forEach(btn=>btn.addEventListener('click',()=>{view.period=btn.dataset.period;document.querySelectorAll('[data-period]').forEach(x=>x.classList.toggle('active',x===btn));display();}));
+document.querySelectorAll('[data-mode]').forEach(btn=>btn.addEventListener('click',()=>{view.mode=btn.dataset.mode;document.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('active',x===btn));renderSummary();display();}));
 $('refresh').addEventListener('click',refresh);
 let resizeTimer=0;window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>display(),160);});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-view.lastFetched>=INTERVAL)refresh();});
