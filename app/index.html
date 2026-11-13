@@ -57,7 +57,7 @@ header{display:flex;justify-content:space-between;gap:12px;align-items:center;ma
   <div><span>Wynik netto od resetu</span><strong id="earned">—</strong></div>
   <div><span>Dodatkowy przydział</span><strong id="bonus">—</strong></div>
   <div><span>Tempo empiryczne</span><strong id="dailyRate">—</strong></div>
-  <div><span>Wynik netto 24h</span><strong id="pnl24">—</strong></div>
+  <div><span>Wynik netto 24h</span><strong id="pnl24">—</strong><div class="meta" id="pnl24Pct" title="Szacunek na podstawie obecnego kapitału operacyjnego pomniejszonego o wynik netto 24h; nie obejmuje zmian dodatkowych przydziałów w tym okresie.">—</div></div>
   <div><span>Średnia 7 dni</span><strong id="rate7">—</strong></div>
  </div>
  <p class="target-disclaimer">Prognoza, nie gwarancja. Zakłada utrzymanie dotychczasowego tempa wzrostu, bez przyszłych przydziałów.</p>
@@ -213,6 +213,10 @@ function showTarget(){
  const now=Date.now(),dayMs=86400000;
  const pnl24=view.history.filter(t=>t.closed&&t.closed>=now-dayMs).reduce((sum,t)=>sum+(t.net||0),0);
  $('pnl24').textContent=signed(pnl24,4)+' USDT';
+ const capital24Start=operational!=null?operational-pnl24:null;
+ const pnl24Rate=capital24Start!=null&&capital24Start>0?pnl24/capital24Start*100:null;
+ $('pnl24Pct').textContent=pnl24Rate!=null&&Number.isFinite(pnl24Rate)?'≈ '+signed(pnl24Rate,2)+'% w ostatnich 24h':'Procent 24h: brak danych';
+ $('pnl24Pct').className='meta '+diff(pnl24Rate);
  const rows=view.resetRows;
  const first=rows?.length?Number(rows[0].opened||rows[0].closed):null;
  const sampleDays=first?(now-first)/dayMs:null;
