@@ -1308,8 +1308,11 @@ def get_universe():
         if last <= 0 or open_24h <= 0:
             continue
         change = (last / open_24h - Decimal("1")) * Decimal("100")
-        ranked.append((change, inst))
         tickers[inst] = {"last": last, "change": change}
+        # Keep metadata and quotes for managing existing positions, including
+        # reduce-only instruments. Rank new entries only where API opens are allowed.
+        if instruments[inst].get("apiPermission") == "full":
+            ranked.append((change, inst))
     ranked.sort(reverse=True)
     top10 = [inst for _, inst in ranked[:TOP_N]]
     return top10, tickers, instruments
