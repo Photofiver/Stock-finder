@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b111d">
+<meta name="description" content="TikTok AI LIVE – prawdziwe statystyki @photofiver.photof, filmy, cele wzrostu i monetyzacji. Odczyt.">
+<title>TikTok AI LIVE — Panel celów</title>
+<style>
+:root{color-scheme:dark;--bg:#0b111d;--panel:#141d2b;--panel2:#192537;--line:#2a3a50;--txt:#edf4fc;--muted:#91a2b9;--mint:#39d7b5;--pink:#ff5c92;--blue:#6babff;--amber:#ffcc79;--soft:#adbbcc}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-width:320px;background:var(--bg);color:var(--txt);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+body:before{content:"";position:fixed;inset:0 0 auto;height:370px;background:radial-gradient(ellipse at 50% 0%,#172e4e 0%,transparent 75%);pointer-events:none;z-index:-1}
+a{color:#87bdff;text-decoration:none}a:hover{text-decoration:underline}button{font:inherit}
+.container{width:min(100%,1050px);margin:auto;padding:24px 22px 90px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 50px}
+.brand{display:flex;align-items:center;gap:15px;min-width:0}
+.mark{height:70px;width:70px;flex-shrink:0;display:grid;place-items:center;border:1px solid #307d88;border-radius:20px;background:#16313d;color:var(--mint);font-weight:900;font-size:39px;text-shadow:3px 2px 0 #fc477f}
+.brand b{display:block;font-size:28px;font-weight:800;line-height:1.05;letter-spacing:-.6px;white-space:nowrap}
+.brand small{display:block;margin-top:8px;color:var(--muted);font-size:13px;letter-spacing:1.7px;font-weight:750}
+.status{border:1px solid #23685c;color:var(--mint);padding:10px 13px;border-radius:28px;background:#122c30;font-size:12px;font-weight:850;white-space:nowrap}
+.status.stale{color:var(--amber);border-color:#75603d;background:#29271f}
+.eyebrow{letter-spacing:2.4px;color:#72b2ff;font-weight:800;font-size:16px;margin:0 0 14px}
+h1{font-size:clamp(37px,6vw,63px);letter-spacing:-1.8px;line-height:1.05;margin:0 0 16px;font-weight:850}
+.lead{font-size:17px;color:var(--muted);max-width:680px;line-height:1.75;margin:0 0 30px}
+.switches{display:flex;gap:12px;flex-wrap:wrap;margin:32px 0 14px}
+.tab{display:inline-block;border-radius:15px;padding:14px 18px;border:1px solid #324357;background:#182131;color:#9eacc0;font-weight:800;font-size:15px}
+.tab.active{border-color:#3a7eb2;background:#203953;color:#eaf5ff}
+.context{color:var(--muted);font-size:14px;margin:0 0 36px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:17px;margin-top:12px}
+.card,.panel{background:linear-gradient(140deg,#161f2e,#111a28);border:1px solid var(--line);border-radius:30px;padding:25px;min-width:0}
+.card .k{color:#9daec1;font-size:16px;font-weight:800;line-height:1.4}
+.card .v{display:block;margin:21px 0 13px;font-size:clamp(27px,5vw,45px);font-weight:850;letter-spacing:-1.3px;line-height:1.09;font-variant-numeric:tabular-nums}
+.card .v.mint{color:var(--mint)}
+.card .v.pink{color:#ff85a8}
+.card .sub{color:var(--muted);font-size:14px}
+section{margin-top:37px}
+.hrow{display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+h2{font-size:24px;margin:0;letter-spacing:-.4px}
+.small{color:var(--muted);font-size:13px}
+.panel{padding:23px;border-radius:26px}
+.goal{margin:0 0 24px}.goal:last-child{margin-bottom:0}
+.goalheader{display:flex;justify-content:space-between;gap:15px;align-items:baseline}
+.goalheader b{font-size:16px}.goalheader span{font-size:14px;font-weight:750;color:#bed2e6;font-variant-numeric:tabular-nums}
+.goaldesc{font-size:13px;color:var(--muted);margin:3px 0 10px}
+.track{height:10px;border-radius:15px;background:#26354a;overflow:hidden}
+.track span{height:100%;display:block;min-width:0;border-radius:15px;background:linear-gradient(90deg,#38d7b3,#68b4fb);transition:width .6s}
+.pinkbar .track span{background:linear-gradient(90deg,#ff5f91,#ffc478)}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:15px 0}
+.mini{padding:16px;border:1px solid #27384d;background:#151f2e;border-radius:18px}
+.mini b{font-size:23px;display:block;color:#dfeefa;margin-bottom:6px;font-variant-numeric:tabular-nums}
+.mini span{color:var(--muted);font-size:12px}
+svg{display:block;width:100%;height:auto}
+.chart{width:100%;min-height:130px;margin:16px 0 5px}
+.chart small{color:var(--muted)}
+.videos{display:grid;gap:12px}
+.video{border:1px solid #2a3950;border-radius:18px;padding:15px 17px;background:#152030;display:flex;gap:16px;justify-content:space-between;align-items:center}
+.video b{font-size:14px;display:block}.video small{display:block;margin-top:4px;color:var(--muted)}
+.video a{white-space:nowrap;font-size:13px}
+.actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:24px 0 0}
+.btn{background:#203b52;color:#e7f5ff;border:1px solid #3a7299;border-radius:14px;padding:12px 18px;cursor:pointer;font-weight:750}
+.btn:active{transform:scale(.99)}
+.note{color:#8e9eaf;font-size:12px;line-height:1.7}
+footer{margin:36px 0 5px;border-top:1px solid #263547;padding-top:22px;color:#8e9eaf;font-size:12px}
+@media(max-width:600px){.container{padding:20px 17px 80px}.top{margin-bottom:50px}.brand{gap:12px}.mark{height:55px;width:55px;font-size:28px;border-radius:16px}.brand b{font-size:22px}.brand small{font-size:10px;letter-spacing:1px}.status{font-size:10px;padding:8px 9px}.card{padding:22px;border-radius:28px}.card .k{font-size:15px}.card .sub{font-size:12px}.grid{gap:13px}h1{font-size:39px}.eyebrow{font-size:14px} .tab{padding:12px 14px}}
+@media(max-width:365px){.brand b{font-size:18px}.card .v{font-size:27px}.card{padding:16px}.status{font-size:9px}.container{padding-left:13px;padding-right:13px}}
+</style>
+</head>
+<body>
+<main class="container">
+  <header class="top">
+    <div class="brand"><div class="mark">T</div><div><b>TikTok AI LIVE</b><small>PANEL CELÓW · TYLKO ODCZYT</small></div></div>
+    <div class="status stale" id="status">ŁADOWANIE</div>
+  </header>
+  <p class="eyebrow">PHOTOFIVER / TIKTOK AI</p>
+  <h1>Twój TikTok.<br>Jeden panel.</h1>
+  <p class="lead">Obserwujący, potwierdzone publikacje, postępy do celów i plan rozwoju. Automatyczny odczyt z GitHub co 5 minut, bez wpisywania statystyk ręcznie.</p>
+  <div class="switches">
+    <span class="tab active">Obecny cel · 100</span>
+    <span class="tab">TikTok Shop · 500</span>
+    <span class="tab">Creator Rewards · 10 000</span>
+  </div>
+  <p class="context">Obserwujący profilu <a href="https://www.tiktok.com/@photofiver.photof" target="_blank" rel="noopener noreferrer">@photofiver.photof</a>. Próg TikTok Shop i innych programów zależy również od warunków konta i regionu.</p>
+
+  <div class="grid" aria-label="Bieżące statystyki">
+    <article class="card"><div class="k">Obserwujący</div><strong class="v mint" id="followers">—</strong><div class="sub" id="followerTime">Odczyt profilu TikTok</div></article>
+    <article class="card"><div class="k">Przyrost · 24 godziny</div><strong class="v" id="growth24">—</strong><div class="sub" id="growthNote">Wymaga dwóch odczytów</div></article>
+    <article class="card"><div class="k">Filmy opublikowane</div><strong class="v" id="posted">—</strong><div class="sub"><span id="posted24">—</span> w ostatnich 24 h</div></article>
+    <article class="card"><div class="k">Kolejna próba publikacji</div><strong class="v" id="nextslot">—</strong><div class="sub">Plan: do 15 prób/dobę, co 96 min (UTC)</div></article>
+  </div>
+
+  <section>
+    <div class="hrow"><h2>Droga do pierwszych zarobków</h2><span class="small">Cel → postęp</span></div>
+    <div class="panel">
+      <div class="goal"><div class="goalheader"><b>Pierwsze 100 obserwujących</b><span id="g100">— / 100</span></div><p class="goaldesc">Cel rozwoju konta na pierwszy miesiąc; nie gwarantuje wypłat.</p><div class="track"><span id="b100"></span></div></div>
+      <div class="goal"><div class="goalheader"><b>TikTok Shop Affiliate</b><span id="g500">— / 500</span></div><p class="goaldesc">Orientacyjny próg obserwujących w UK. Dostęp i prowizje zależą od zatwierdzenia oraz zakupów.</p><div class="track"><span id="b500"></span></div></div>
+      <div class="goal"><div class="goalheader"><b>1 000 obserwujących</b><span id="g1000">— / 1 000</span></div><p class="goaldesc">Kolejny etap rozwoju, przydatny przy dodatkowych funkcjach konta.</p><div class="track"><span id="b1000"></span></div></div>
+      <div class="goal pinkbar"><div class="goalheader"><b>Creator Rewards</b><span id="g10000">— / 10 000</span></div><p class="goaldesc">Dodatkowe wymogi: 100 000 wyświetleń w ostatnich 30 dniach i oryginalne filmy min. 60 sekund. Obecne krótkie filmy nie spełniają warunku długości.</p><div class="track"><span id="b10000"></span></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="hrow"><h2>Tempo wzrostu</h2><span class="small" id="historySize">Historia obserwujących</span></div>
+    <div class="panel">
+      <div class="stats">
+        <div class="mini"><b id="growth7">—</b><span>Przyrost w 7 dni</span></div>
+        <div class="mini"><b id="days500">—</b><span>Szacunkowo dni do 500 · tylko przy wystarczających danych</span></div>
+      </div>
+      <div class="chart" id="chart" role="img" aria-label="Wykres potwierdzonych obserwujących">Wczytywanie danych…</div>
+      <p class="note">Prognoza pojawi się dopiero po zebraniu co najmniej 7 dni wiarygodnych pomiarów i dodatnim tempie wzrostu. Nie obiecuje zarobków.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="hrow"><h2>Automat publikacji</h2><span class="small">Dane z Buffer</span></div>
+    <div class="panel">
+      <div class="stats">
+        <div class="mini"><b id="pending">—</b><span>Wysyłane / niepotwierdzone</span></div>
+        <div class="mini"><b id="failed">—</b><span>Nieudane publikacje</span></div>
+      </div>
+      <p class="note">15 to liczba zaplanowanych prób, a nie gwarancja 15 opublikowanych filmów. Publikacje są liczone dopiero po potwierdzeniu statusu „sent” przez Buffer.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="hrow"><h2>Ostatnie filmy</h2><span class="small">Potwierdzone linki TikTok</span></div>
+    <div class="videos" id="videos"><div class="video">Wczytywanie…</div></div>
+  </section>
+
+  <section>
+    <div class="hrow"><h2>Monetyzacja</h2></div>
+    <div class="panel">
+      <div class="stats"><div class="mini"><b>Jeszcze nieaktywna</b><span>TikTok Shop Affiliate</span></div><div class="mini"><b>Brak danych</b><span>Rzeczywiste przychody (£)</span></div></div>
+      <p class="note">Prowizje pojawią się dopiero po zatwierdzeniu do programu i kwalifikujących się sprzedażach. Panel nie zgaduje przychodów ani liczby wyświetleń.</p>
+    </div>
+  </section>
+
+  <div class="actions">
+    <button type="button" class="btn" id="refresh">Odśwież teraz</button>
+    <span class="small" id="lastUpdate">Odczyt co 5 minut</span>
+  </div>
+  <footer>Źródło: <a href="https://github.com/Photofiver/gumtree-console-crawler/blob/main/tiktok_dashboard/metrics.json" target="_blank" rel="noopener noreferrer">publiczny raport GitHub</a> · <a href="https://github.com/Photofiver/gumtree-console-crawler/actions/workflows/refresh-tiktok-dashboard.yml" target="_blank" rel="noopener noreferrer">automatyczne odświeżanie</a>. Dane aktualizowane przez GitHub Actions zwykle co 15 minut; opóźnienia są możliwe. Konto i bot BloFin pozostają bez zmian.</footer>
+</main>
+<script>
+(function(){
+"use strict";
+var SOURCE="https://raw.githubusercontent.com/Photofiver/gumtree-console-crawler/main/tiktok_dashboard/metrics.json";
+var last=null;
+var nf=new Intl.NumberFormat("pl-PL");
+function id(s){return document.getElementById(s)}
+function num(n){return Number.isFinite(n)?nf.format(n):"—"}
+function time(s){if(!s)return "—";var d=new Date(s);return isNaN(d.valueOf())?"—":d.toLocaleString("pl-PL",{timeZone:"Europe/London",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}
+function daysSince(s){var t=Date.parse(s||"");return Number.isFinite(t)?(Date.now()-t)/86400000:Infinity}
+function percent(n,total){return Math.min(100,Math.max(0,100*n/total))}
+function set(idName,value){id(idName).textContent=value}
+function nextSlot(){
+  var now=new Date(),start=new Date(now),n=now.getUTCHours()*60+now.getUTCMinutes();
+  var i=Math.floor(n/96)+1;
+  if(i>=15){start.setUTCDate(start.getUTCDate()+1);i=0}
+  start.setUTCHours(Math.floor(i*96/60),i*96%60,0,0);
+  return start;
+}
+function tick(){var next=nextSlot();set("nextslot",next.toLocaleTimeString("en-GB",{timeZone:"Europe/London",hour:"2-digit",minute:"2-digit"}))}
+function labelGrowth(samples,days){
+  var valid=samples.filter(function(p){return typeof p.followers==="number"&&Date.parse(p.utc)});
+  if(valid.length<2)return null;
+  var latest=valid[valid.length-1],cut=Date.parse(latest.utc)-days*86400000;
+  var baseline=valid.filter(function(p){return Date.parse(p.utc)<=cut}).pop();
+  if(!baseline)return null;
+  return {growth:latest.followers-baseline.followers,
+          sampleDays:(Date.parse(latest.utc)-Date.parse(baseline.utc))/86400000};
+}
+function chart(samples){
+  var x=id("chart");x.textContent="";
+  var good=(samples||[]).filter(function(p){return typeof p.followers==="number"&&Date.parse(p.utc)});
+  if(good.length<2){var note=document.createElement("small");note.textContent="Wykres pojawi się po zebraniu następnych pomiarów.";x.appendChild(note);return}
+  var width=720,height=150,padX=27,padY=21,min=Infinity,max=-Infinity;
+  good.forEach(function(p){min=Math.min(min,p.followers);max=Math.max(max,p.followers)});
+  if(min===max){min=Math.max(0,min-1);max=max+1}
+  var start=Date.parse(good[0].utc),end=Date.parse(good[good.length-1].utc);
+  var points=good.map(function(p){
+    var px=padX+(Date.parse(p.utc)-start)/Math.max(1,end-start)*(width-2*padX);
+    var py=height-padY-(p.followers-min)/(max-min)*(height-2*padY);
+    return [px,py]
+  });
+  var ns="http://www.w3.org/2000/svg";
+  var svg=document.createElementNS(ns,"svg");svg.setAttribute("viewBox","0 0 "+width+" "+height);
+  function append(name,attrs){var el=document.createElementNS(ns,name);Object.keys(attrs).forEach(function(k){el.setAttribute(k,attrs[k])});svg.appendChild(el);return el}
+  [0,.5,1].forEach(function(f){var y=padY+(height-2*padY)*f;append("line",{x1:padX,y1:y,x2:width-padX,y2:y,stroke:"#273c54","stroke-width":"1"})});
+  var path=points.map(function(p,i){return (i?"L":"M")+p[0].toFixed(2)+" "+p[1].toFixed(2)}).join(" ");
+  append("path",{d:path,fill:"none",stroke:"#38d7b3","stroke-width":"3","stroke-linecap":"round","stroke-linejoin":"round"});
+  var p=points[points.length-1];append("circle",{cx:p[0],cy:p[1],r:4,fill:"#6bb5ff",stroke:"#c6f5ea","stroke-width":"1.5"});
+  x.appendChild(svg);
+  var note=document.createElement("small");note.textContent="Od "+time(good[0].utc)+" do "+time(good[good.length-1].utc)+". Zakres: "+num(min)+"–"+num(max)+" obserwujących.";x.appendChild(note)
+}
+function recentVideos(videos){
+  var holder=id("videos");holder.textContent="";
+  var confirmed=(videos||[]).filter(function(v){return v.status==="sent"&&typeof v.url==="string"&&/^https:\/\/(www\.)?tiktok\.com\//.test(v.url)}).slice(0,6);
+  if(!confirmed.length){var e=document.createElement("div");e.className="video";e.textContent="Brak potwierdzonych publikacji.";holder.appendChild(e);return}
+  confirmed.forEach(function(v){
+    var box=document.createElement("div");box.className="video";
+    var text=document.createElement("div"),name=document.createElement("b"),small=document.createElement("small");
+    var label=(v.concept||"Nowy film AI").replace(/^new /,"").replace(/ ai cat /," · ");
+    name.textContent=label.charAt(0).toUpperCase()+label.slice(1);
+    small.textContent="Opublikowano "+time(v.sent_at_utc);
+    text.appendChild(name);text.appendChild(small);
+    var link=document.createElement("a");link.href=v.url;link.target="_blank";link.rel="noopener noreferrer";link.textContent="Otwórz film";
+    box.appendChild(text);box.appendChild(link);holder.appendChild(box);
+  });
+}
+function render(d){
+  last=d;
+  var followers=typeof d.followers==="number"?d.followers:null;
+  set("followers",num(followers));
+  set("followerTime","Ostatni potwierdzony odczyt: "+time(d.followers_checked_at_utc));
+  set("posted",num(d.posted_confirmed));
+  set("posted24",num(d.posted_24h));
+  set("pending",num(d.pending));
+  set("failed",num(d.failed));
+  var samples=Array.isArray(d.follower_history)?d.follower_history:[];
+  var one=labelGrowth(samples,1),seven=labelGrowth(samples,7);
+  set("growth24",one?(one.growth>0?"+":"")+num(one.growth):"—");
+  set("growthNote",one?"Z potwierdzonych odczytów":"Za mało pomiarów z 24 h");
+  set("growth7",seven?(seven.growth>0?"+":"")+num(seven.growth):"—");
+  var days=seven&&seven.growth>0&&followers!==null
+      ?Math.ceil(Math.max(0,500-followers)/(seven.growth/seven.sampleDays)):null;
+  set("days500",days===null?"—":days===0?"Cel osiągnięty":num(days));
+  set("historySize",samples.length+" zapisanych pomiarów");
+  [100,500,1000,10000].forEach(function(goal){
+     set("g"+goal,(followers===null?"—":num(followers))+" / "+num(goal));
+     id("b"+goal).style.width=(followers===null?0:percent(followers,goal))+"%";
+  });
+  var snapshotOld=daysSince(d.generated_at_utc)>1/24;
+  var followerOld=daysSince(d.followers_checked_at_utc)>1/24;
+  var badge=id("status");
+  badge.textContent=snapshotOld||followerOld?"DANE NIEAKTUALNE":"DANE AKTUALNE";
+  badge.classList.toggle("stale",snapshotOld||followerOld);
+  var freshness="Raport: "+time(d.generated_at_utc);
+  if(followerOld)freshness+=" · ostatni odczyt obserwujących jest starszy";
+  set("lastUpdate",freshness);
+  chart(samples);recentVideos(d.videos);tick();
+}
+async function load(){
+ var button=id("refresh");button.disabled=true;button.textContent="Odświeżanie…";
+ try{
+  var response=await fetch(SOURCE+"?v="+Date.now(),{cache:"no-store"});
+  if(!response.ok)throw new Error("HTTP "+response.status);
+  var payload=await response.json();
+  if(!payload||payload.portfolio!=="@photofiver.photof"||!Array.isArray(payload.videos))throw new Error("Nieprawidłowe dane");
+  render(payload);
+ }catch(e){
+  if(!last){set("status","BRAK DANYCH");id("status").classList.add("stale");
+   set("lastUpdate","Nie udało się pobrać raportu z GitHub. Spróbuj odświeżyć.");
+   id("videos").textContent="Nie można pobrać danych publikacji.";}
+  else{set("lastUpdate","Nie udało się pobrać nowszych danych. Poprzedni raport: "+time(last.generated_at_utc));}
+ }finally{button.disabled=false;button.textContent="Odśwież teraz"}
+}
+id("refresh").addEventListener("click",load);
+tick();setInterval(tick,60000);
+load();setInterval(load,300000);
+})();
+</script>
+</body>
+</html>
