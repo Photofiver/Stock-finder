@@ -2,6 +2,9 @@ name: Watchdog timing test
 
 on:
   workflow_dispatch:
+  # Independent hourly recovery if the watchdog self-dispatch stalls.
+  schedule:
+    - cron: '17 * * * *'
   push:
     branches:
       - main
