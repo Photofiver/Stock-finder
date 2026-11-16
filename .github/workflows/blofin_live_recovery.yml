@@ -1,0 +1,39 @@
+name: BloFin LIVE self-recovery (read-only health check)
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Separate from the 5m scanner and watchdog; offset from high-load minute 0.
+    - cron: '7,17,27,37,47,57 * * * *'
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: blofin-live-recovery-healthcheck
+  cancel-in-progress: false
+
+jobs:
+  restore-stale-watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify LIVE scan output and restart watchdog only when stale
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          LAST_ISO="$(gh api "repos/${GITHUB_REPOSITORY}/commits?path=blofin_live_state.json&per_page=1" --jq '.[0].commit.committer.date' || true)"
+          LAST_SEC="$(date -u -d "${LAST_ISO}" +%s 2>/dev/null || echo 0)"
+          NOW_SEC="$(date -u +%s)"
+          AGE_SEC="$((NOW_SEC - LAST_SEC))"
+          echo "Last LIVE state commit: ${LAST_ISO:-unknown}; age: ${AGE_SEC}s"
+          # A healthy scanner commits state every 5m. Allow 13m for delayed runs.
+          if [ "${LAST_SEC}" -gt 0 ] && [ "${AGE_SEC}" -ge 0 ] && [ "${AGE_SEC}" -le 780 ]; then
+            echo "LIVE state is fresh; watchdog is left unchanged."
+            exit 0
+          fi
+          echo "::warning::BloFin LIVE scan is stale. Re-dispatching watchdog; no trading logic changed."
+          gh workflow run workflow-dispatch-test.yml --ref main
