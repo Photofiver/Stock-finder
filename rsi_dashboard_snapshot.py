@@ -15,7 +15,7 @@ POSITION_FIELDS = ("inst", "side", "opened_ms", "notional_usdt", "tp", "sl", "pr
 SIGNAL_FIELDS = ("rsi14", "rsi", "rsi89_short_entry")
 ROOT_FIELDS = (
     "realized_pnl_usdt", "bankroll_pnl_baseline_usdt", "bankroll_start_usdt",
-    "bankroll_streak_bonus_usdt", "last_run_ms", "last_scan_close_ms",
+    "bankroll_streak_bonus_usdt", "bankroll_streak_last_award_ms", "last_run_ms", "last_scan_close_ms",
 )
 
 
