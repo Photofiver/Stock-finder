@@ -112,6 +112,21 @@ function findResetSuffix(history,earned){
  for(let i=rows.length-1;i>=0;i--){sum+=rows[i].net;if(Math.abs(sum-earned)<=.002)matches.push(i);}
  return matches.length===1?{rows:rows.slice(matches[0]),matches:1}:{rows:null,matches:matches.length};
 }
+// Cash-flow-adjusted realized growth: a +10 USDT allocation is not trading profit.
+function timeWeightedFactor(rows,start,bonus,awardAt,fromMs=0){
+ if(!rows||!rows.length||start==null||start<=0||bonus==null||bonus<0)return null;
+ if(bonus>0&&(!awardAt||awardAt<=0))return null;
+ let capital=start,added=bonus===0,growth=1;
+ for(const t of rows.slice().sort((a,b)=>a.closed-b.closed)){
+  if(!t.closed||t.net==null)continue;
+  if(!added&&t.closed>=awardAt){capital+=bonus;added=true;}
+  const next=capital+t.net;
+  if(capital<=0||next<=0)return null;
+  if(t.closed>=fromMs)growth*=next/capital;
+  capital=next;
+ }
+ return Number.isFinite(growth)&&growth>0?growth:null;
+}
 function scopedItems(){
  const verified=view.history.filter(t=>t.closed>0&&t.net!=null);
  if(view.mode==='current')return verified.filter(t=>t.currentRsi89&&t.opened>=CURRENT_RSI_START);
@@ -248,7 +263,7 @@ function renderSummary(){
  $('scanInfo').textContent='Ostatnia aktualizacja panelu: '+fmtDate(meta.snapshotAt)+' (UK) · skan: '+(meta.scanStatus||'brak');
 }
 function showTarget(){
- const meta=view.meta,start=n(meta.start),bonus=n(meta.bonus),earned=n(meta.earned);
+ const meta=view.meta,start=n(meta.start),bonus=n(meta.bonus),earned=n(meta.earned),awardAt=n(meta.awardAt);
  const capital=start!=null&&earned!=null?start+earned:null;
  const operational=capital!=null&&bonus!=null?capital+bonus:null;
  $('operational').textContent=operational==null?'—':f(operational,4)+' USDT';
@@ -266,7 +281,8 @@ function showTarget(){
  const rows=view.resetRows;
  const first=rows?.length?Number(rows[0].opened||rows[0].closed):null;
  const sampleDays=first?(now-first)/dayMs:null;
- const daily=start>0&&capital>0&&sampleDays>0?Math.expm1(Math.log(capital/start)/sampleDays):null;
+ const growth=timeWeightedFactor(rows,start,bonus,awardAt);
+ const daily=growth!=null&&sampleDays>0?Math.expm1(Math.log(growth)/sampleDays):null;
  $('dailyRate').textContent=daily!=null&&Number.isFinite(daily)?signed(daily*100,4)+'% / dzień':'—';
  if(operational!=null&&operational>=120000){
   $('daysToTarget').textContent='0 dni';
@@ -276,18 +292,17 @@ function showTarget(){
   $('targetExplanation').textContent='Brak wiarygodnej prognozy: niepotwierdzona historia po resecie.';
  }else if(sampleDays<7||daily==null||!Number.isFinite(daily)||daily<=0||operational==null||operational<=0){
   $('daysToTarget').textContent='—';
-  $('targetExplanation').textContent='Brak wiarygodnej dodatniej prognozy (minimum 7 dni obserwacji po resecie).';
+  $('targetExplanation').textContent='Brak wiarygodnej dodatniej prognozy (minimum 7 dni obserwacji oraz potwierdzona data przydziału kapitału).';
  }else{
   const days=Math.ceil(Math.log(120000/operational)/Math.log1p(daily));
   $('daysToTarget').textContent=Number.isFinite(days)&&days>=0?days.toLocaleString('pl-PL')+' dni':'—';
-  $('targetExplanation').textContent='Tempo empiryczne '+signed(daily*100,4)+'%/dzień · próbka '+f(sampleDays,2)+' dni';
+  $('targetExplanation').textContent='Tempo netto po korekcie przydziału +'+f(bonus,0)+' USDT z '+(awardAt?fmtDate(awardAt):'nieznaną datą')+': '+signed(daily*100,4)+'%/dzień · próbka '+f(sampleDays,2)+' dni · bez niezrealizowanego PnL';
  }
  if(!rows||!rows.length||!first||first>now-7*dayMs||capital<=0){
   $('rate7').textContent='Brak pełnej próbki';
  }else{
-  const net7=rows.filter(t=>t.closed>=now-7*dayMs).reduce((sum,t)=>sum+t.net,0);
-  const then=capital-net7;
-  const rate7=then>0?Math.expm1(Math.log(capital/then)/7):null;
+  const growth7=timeWeightedFactor(rows,start,bonus,awardAt,now-7*dayMs);
+  const rate7=growth7!=null?Math.expm1(Math.log(growth7)/7):null;
   $('rate7').textContent=rate7!=null&&Number.isFinite(rate7)?signed(rate7*100,4)+'% / dzień':'—';
  }
 }
@@ -323,7 +338,7 @@ async function refresh(){
   const reset=findResetSuffix(view.history,earned);
   view.resetRows=reset.rows;
   view.resetCount=reset.matches;
-  view.meta={net:realized,earned,start:n(raw.bankroll_start_usdt),bonus:n(raw.bankroll_streak_bonus_usdt),lastRun:n(raw.last_run_ms),lastScan:n(raw.last_scan_close_ms),snapshotAt:Date.parse(raw.generated_at_utc)||0,scanStatus:String(last.status||'')};
+  view.meta={net:realized,earned,start:n(raw.bankroll_start_usdt),bonus:n(raw.bankroll_streak_bonus_usdt),awardAt:n(raw.bankroll_streak_last_award_ms),lastRun:n(raw.last_run_ms),lastScan:n(raw.last_scan_close_ms),snapshotAt:Date.parse(raw.generated_at_utc)||0,scanStatus:String(last.status||'')};
   view.lastFetched=Date.now();
   $('historyCount').title='Odtworzone RSI min/max z potwierdzonych świec 5m: '+auditCount+' transakcji';
   renderSummary();showTarget();showPositions();display();
