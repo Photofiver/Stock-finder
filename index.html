@@ -71,7 +71,7 @@ header{display:flex;justify-content:space-between;gap:12px;align-items:center;ma
  <div class="chart-wrap"><div id="chart" role="img" aria-label="Narastający kapitał operacyjny po zamkniętych transakcjach w USDT oraz planowany wzrost kapitału"><div class="empty">Ładowanie wykresu…</div></div></div>
  <div class="daily-list-title">Wyniki każdego dnia <span class="meta">Czas UK · po prowizjach</span></div>
  <div id="dailyRows" class="daily-rows"><div class="empty">Wczytywanie dni…</div></div>
- <p class="section-note">Linia zielona pokazuje kapitał narastająco po zamkniętych transakcjach i prowizjach: w dniu bez transakcji pozostaje płaska, a nie spada do zera. Nie uwzględnia niezrealizowanych zysków i strat otwartych pozycji. Tabela niżej pokazuje osobno dzienny wynik procentowy. Wykres zakłada dodatkowe 10 USDT dostępne od początku pokazanego okresu; nie oznacza to historycznej wpłaty. Linia niebieska to orientacyjny plan +1,157% na pełny dzień, a nie gwarancja.</p>
+ <p class="section-note">Linia zielona pokazuje kapitał narastająco po zamkniętych transakcjach i prowizjach: w dniu bez transakcji pozostaje płaska, a nie spada do zera. Nie uwzględnia niezrealizowanych zysków i strat otwartych pozycji. Tabela niżej pokazuje osobno dzienny wynik procentowy. Wykres uwzględnia dodatkowy przydział 10 USDT od rzeczywistej daty jego dodania, a nie jako zysk. Linia niebieska to orientacyjny plan +1,157% na pełny dzień, a nie gwarancja.</p>
 </section>
 <section class="panel">
  <div class="panel-head"><h2>Otwarte pozycje</h2><span class="meta">Bez wykonywania zleceń</span></div>
@@ -164,21 +164,24 @@ const TARGET_DAILY_PCT=1.1569549910037311;
 const ukDay=ms=>new Intl.DateTimeFormat('sv-SE',{timeZone:UK,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ms));
 function dailyProgress(){
  const rows=view.resetRows,meta=view.meta;
- const base=n(meta.start)!=null&&n(meta.bonus)!=null?n(meta.start)+n(meta.bonus):null;
- if(!rows||!rows.length||base==null||base<=0)return [];
+ const base=n(meta.start),bonus=n(meta.bonus),awardAt=n(meta.awardAt);
+ if(!rows||!rows.length||base==null||base<=0||bonus==null||bonus<0||(bonus>0&&!awardAt))return [];
  const started=Math.min(...rows.map(t=>t.opened||t.closed).filter(Boolean)),today=ukDay(Date.now()),first=ukDay(started);
  const pnlByDay=new Map();
- for(const trade of rows){
-  if(!trade.closed||trade.net==null)continue;
-  const day=ukDay(trade.closed);
-  pnlByDay.set(day,(pnlByDay.get(day)||0)+trade.net);
+ for(const t of rows){
+  if(!t.closed||t.net==null)continue;
+  const day=ukDay(t.closed);
+  pnlByDay.set(day,(pnlByDay.get(day)||0)+t.net);
  }
- const list=[];let capital=base,day=new Date(first+'T12:00:00Z');
+ const list=[];let capital=base,plannedCapital=base,day=new Date(first+'T12:00:00Z');
+ const bonusDay=bonus>0?ukDay(awardAt):null;
  for(let i=0;i<3660;i++){
   const key=day.toISOString().slice(0,10);if(key>today)break;
+  if(key===bonusDay){capital+=bonus;plannedCapital+=bonus;}
   const pnl=pnlByDay.get(key)||0;
   const rate=capital>0?pnl/capital*100:0;
-  list.push({day:key,pnl,rate,capital,capitalAfter:capital+pnl,plannedCapital:base*Math.pow(1+TARGET_DAILY_PCT/100,i+1),first:key===first,today:key===today,partial:key===first||key===today});
+  plannedCapital*=1+TARGET_DAILY_PCT/100;
+  list.push({day:key,pnl,rate,capital,capitalAfter:capital+pnl,plannedCapital,first:key===first,today:key===today,partial:key===first||key===today});
   capital+=pnl;
   day.setUTCDate(day.getUTCDate()+1);
  }
