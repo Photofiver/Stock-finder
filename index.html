@@ -66,12 +66,12 @@ header{display:flex;justify-content:space-between;gap:12px;align-items:center;ma
 </section>
 <div class="notice"><div><strong id="updateTime">Odczytywanie danych…</strong><div id="scanInfo">Źródło: publiczna migawka GitHub · tylko odczyt</div></div><button id="refresh" class="refresh" type="button">Odśwież</button></div>
 <section class="panel">
- <div class="panel-head"><div><h2>Dzienny postęp do 120 000 USDT</h2><div class="meta" id="chartInfo">Dzienny zysk netto · % kapitału · od resetu</div></div><div class="pills" role="group" aria-label="Okres"><button class="pill" data-period="24h">24 h</button><button class="pill" data-period="3d">3 dni</button><button class="pill" data-period="7d">7 dni</button><button class="pill" data-period="30d">30 dni</button><button class="pill active" data-period="all">Całość</button></div></div>
- <div class="daily-legend"><span><i class="daily-key daily-green"></i> Rzeczywisty wynik dzienny</span><span><i class="daily-key daily-blue"></i> Wymagane +1,157%</span></div>
- <div class="chart-wrap"><div id="chart" role="img" aria-label="Wykres liniowy dziennego wyniku netto oraz wymaganych 1,157 procent dziennie"><div class="empty">Ładowanie wykresu…</div></div></div>
+ <div class="panel-head"><div><h2>Postęp kapitału do 120 000 USDT</h2><div class="meta" id="chartInfo">Narastający kapitał w USDT po zamkniętych transakcjach · od resetu</div></div><div class="pills" role="group" aria-label="Okres"><button class="pill" data-period="24h">24 h</button><button class="pill" data-period="3d">3 dni</button><button class="pill" data-period="7d">7 dni</button><button class="pill" data-period="30d">30 dni</button><button class="pill active" data-period="all">Całość</button></div></div>
+ <div class="daily-legend"><span><i class="daily-key daily-green"></i> Rzeczywisty kapitał (USDT)</span><span><i class="daily-key daily-blue"></i> Plan +1,157% dziennie</span></div>
+ <div class="chart-wrap"><div id="chart" role="img" aria-label="Narastający kapitał operacyjny po zamkniętych transakcjach w USDT oraz planowany wzrost kapitału"><div class="empty">Ładowanie wykresu…</div></div></div>
  <div class="daily-list-title">Wyniki każdego dnia <span class="meta">Czas UK · po prowizjach</span></div>
  <div id="dailyRows" class="daily-rows"><div class="empty">Wczytywanie dni…</div></div>
- <p class="section-note">Dzienny wynik liczony z zamkniętych transakcji od resetu kapitału; niezależny od zakładek RSI. Procent zakłada obecny dodatkowy przydział 10 USDT przez cały okres. Pierwszy dzień i dzisiejszy są niepełne; próg +1,157% jest benchmarkiem planu 710 dni, nie gwarancją.</p>
+ <p class="section-note">Linia zielona pokazuje kapitał narastająco po zamkniętych transakcjach i prowizjach: w dniu bez transakcji pozostaje płaska, a nie spada do zera. Nie uwzględnia niezrealizowanych zysków i strat otwartych pozycji. Tabela niżej pokazuje osobno dzienny wynik procentowy. Wykres zakłada dodatkowe 10 USDT dostępne od początku pokazanego okresu; nie oznacza to historycznej wpłaty. Linia niebieska to orientacyjny plan +1,157% na pełny dzień, a nie gwarancja.</p>
 </section>
 <section class="panel">
  <div class="panel-head"><h2>Otwarte pozycje</h2><span class="meta">Bez wykonywania zleceń</span></div>
@@ -129,7 +129,7 @@ function display(){
  $('rsiCoverage').textContent='RSI min/max/wyjście (5m): '+auditedCount+' / '+a.length+' pozycji w okresie';
  const dailyAll=dailyProgress(),dailyFiltered=filteredDaily(dailyAll);
  const completed=dailyFiltered.filter(d=>!d.partial),met=completed.filter(d=>d.rate>=TARGET_DAILY_PCT).length;
- $('chartInfo').textContent=completed.length?met+' / '+completed.length+' pełnych dni osiągnęło +1,157% · kapitał operacyjny':'Dzienny zysk netto · próg +1,157%';
+ $('chartInfo').textContent='Kapitał narastająco · '+met+' / '+completed.length+' pełnych dni osiągnęło +1,157% dziennie';
  $('dailyRows').innerHTML=dailyFiltered.length?dailyFiltered.slice().reverse().map(d=>{
    const pass=d.rate>=TARGET_DAILY_PCT;
    const cls=d.partial?'partial':pass?'ok':'miss';
@@ -163,7 +163,7 @@ function dailyProgress(){
   const key=day.toISOString().slice(0,10);if(key>today)break;
   const pnl=pnlByDay.get(key)||0;
   const rate=capital>0?pnl/capital*100:0;
-  list.push({day:key,pnl,rate,capital,first:key===first,today:key===today,partial:key===first||key===today});
+  list.push({day:key,pnl,rate,capital,capitalAfter:capital+pnl,plannedCapital:base*Math.pow(1+TARGET_DAILY_PCT/100,i+1),first:key===first,today:key===today,partial:key===first||key===today});
   capital+=pnl;
   day.setUTCDate(day.getUTCDate()+1);
  }
@@ -174,39 +174,40 @@ function filteredDaily(days){
  return count===Infinity?days:days.slice(-count);
 }
 function chart(days){
- const target=$('chart'),box=target.getBoundingClientRect();
- const w=Math.max(280,Math.round(box.width)||280),h=Math.max(230,Math.round(box.height)||270);
- const L=55,R=13,T=17,B=35,W=w-L-R,H=h-T-B;
- if(W<=0||H<=0)return;
- if(!days.length){target.innerHTML='<div class="empty">Brak danych po resecie</div>';return;}
- const values=days.map(d=>d.rate),lo0=Math.min(0,...values),hi0=Math.max(TARGET_DAILY_PCT,...values);
- const pad=Math.max(.2,(hi0-lo0)*.12),lo=lo0-pad,hi=hi0+pad;
- const Y=v=>T+(hi-v)/(hi-lo)*H,X=i=>L+(days.length===1?W/2:W*i/(days.length-1));
- const rnd=v=>Math.round(v*10)/10;
- const out=['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" role="img" aria-label="Rzeczywisty procentowy wynik netto każdego dnia jako zielona linia i wymagane 1,157 procent dziennie jako niebieska linia">'];
- for(let i=0;i<=4;i++){
-  const val=hi-(hi-lo)*i/4,y=rnd(Y(val));
-  out.push('<line x1="'+L+'" y1="'+y+'" x2="'+(w-R)+'" y2="'+y+'" stroke="#29384c" stroke-width="1"/>');
-  out.push('<text x="2" y="'+(y+4)+'" fill="#94a4ba" font-size="11" font-family="system-ui">'+f(val,1)+'%</text>');
- }
- const zero=rnd(Y(0)),goal=rnd(Y(TARGET_DAILY_PCT));
- out.push('<line x1="'+L+'" y1="'+zero+'" x2="'+(w-R)+'" y2="'+zero+'" stroke="#6c7b92" stroke-dasharray="3 4"/>');
- out.push('<line x1="'+L+'" y1="'+goal+'" x2="'+(w-R)+'" y2="'+goal+'" stroke="#6aa7ed" stroke-width="2" stroke-dasharray="6 4"/>');
- const points=days.map((d,i)=>rnd(X(i))+','+rnd(Y(d.rate)));
- const linePoints=points.join(' ');
- const bottom=Y(lo),area=L+','+rnd(bottom)+' '+linePoints+' '+rnd(X(days.length-1))+','+rnd(bottom);
- out.push('<defs><linearGradient id="dailyArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#36d6a2" stop-opacity=".22"/><stop offset="100%" stop-color="#36d6a2" stop-opacity="0"/></linearGradient></defs>');
- out.push('<polygon points="'+area+'" fill="url(#dailyArea)"/>');
- out.push('<polyline points="'+linePoints+'" fill="none" stroke="#36d6a2" stroke-width="2.7" stroke-linejoin="round" stroke-linecap="round"/>');
- days.forEach((d,i)=>{
-  const x=rnd(X(i)),y=rnd(Y(d.rate)),color=d.rate<0?'#ff7187':d.rate>=TARGET_DAILY_PCT?'#36d6a2':'#eab65a';
-  out.push('<circle cx="'+x+'" cy="'+y+'" r="'+(i===days.length-1?4.2:2.8)+'" fill="'+color+'" stroke="#111d2b" stroke-width="1.2" opacity="'+(d.partial?'.75':'1')+'"><title>'+d.day+' · '+signed(d.rate,2)+'% netto'+(d.partial?' (niepełny dzień)':'')+'</title></circle>');
- });
- const label=d=>d.day.slice(8)+'.'+d.day.slice(5,7);
- out.push('<text x="'+L+'" y="'+(h-8)+'" fill="#94a4ba" font-size="12" font-family="system-ui">'+label(days[0])+'</text>');
- out.push('<text x="'+(w-R)+'" y="'+(h-8)+'" text-anchor="end" fill="#94a4ba" font-size="12" font-family="system-ui">'+label(days[days.length-1])+'</text>');
- out.push('</svg>');
- target.innerHTML=out.join('');
+  const target=$('chart'),box=target.getBoundingClientRect();
+  const w=Math.max(280,Math.round(box.width)||280),h=Math.max(230,Math.round(box.height)||270);
+  const L=65,R=13,T=17,B=35,W=w-L-R,H=h-T-B;
+  if(W<=0||H<=0)return;
+  if(!days.length){target.innerHTML='<div class="empty">Brak danych po resecie</div>';return;}
+  // Plot equity AFTER each day's closed trades, never the daily percentage as the level.
+  // On a day without closed trades, capitalAfter stays unchanged and the green line is flat.
+  const vals=days.flatMap(d=>[d.capitalAfter,d.plannedCapital]);
+  const min0=Math.min(...vals),max0=Math.max(...vals),pad=Math.max(.1,(max0-min0)*.12);
+  const lo=min0-pad,hi=max0+pad;
+  const Y=v=>T+(hi-v)/(hi-lo)*H,X=i=>L+(days.length===1?W/2:W*i/(days.length-1));
+  const rnd=v=>Math.round(v*10)/10;
+  const points=days.map((d,i)=>rnd(X(i))+','+rnd(Y(d.capitalAfter))).join(' ');
+  const planned=days.map((d,i)=>rnd(X(i))+','+rnd(Y(d.plannedCapital))).join(' ');
+  const out=['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" role="img" aria-label="Narastający kapitał w USDT, zielony, oraz docelowy plan kapitału, niebieski">'];
+  for(let i=0;i<=4;i++){
+    const val=hi-(hi-lo)*i/4,y=rnd(Y(val));
+    out.push('<line x1="'+L+'" y1="'+y+'" x2="'+(w-R)+'" y2="'+y+'" stroke="#29384c" stroke-width="1"/>');
+    out.push('<text x="2" y="'+(y+4)+'" fill="#94a4ba" font-size="11" font-family="system-ui">'+f(val,1)+'</text>');
+  }
+  const bottom=rnd(Y(lo)),area=L+','+bottom+' '+points+' '+rnd(X(days.length-1))+','+bottom;
+  out.push('<defs><linearGradient id="dailyArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#36d6a2" stop-opacity=".22"/><stop offset="100%" stop-color="#36d6a2" stop-opacity="0"/></linearGradient></defs>');
+  out.push('<polygon points="'+area+'" fill="url(#dailyArea)"/>');
+  out.push('<polyline points="'+planned+'" fill="none" stroke="#6aa7ed" stroke-width="2" stroke-dasharray="6 4" stroke-linejoin="round"/>');
+  out.push('<polyline points="'+points+'" fill="none" stroke="#36d6a2" stroke-width="2.7" stroke-linejoin="round" stroke-linecap="round"/>');
+  days.forEach((d,i)=>{
+    const x=rnd(X(i)),y=rnd(Y(d.capitalAfter)),color=d.pnl<0?'#ff7187':'#36d6a2';
+    out.push('<circle cx="'+x+'" cy="'+y+'" r="'+(i===days.length-1?4.2:2.8)+'" fill="'+color+'" stroke="#111d2b" stroke-width="1.2"><title>'+d.day+' · '+f(d.capitalAfter,4)+' USDT · wynik dnia '+signed(d.pnl,4)+' USDT'+(d.partial?' (niepełny dzień)':'')+'</title></circle>');
+  });
+  const label=d=>d.day.slice(8)+'.'+d.day.slice(5,7);
+  out.push('<text x="'+L+'" y="'+(h-8)+'" fill="#94a4ba" font-size="12" font-family="system-ui">'+label(days[0])+'</text>');
+  out.push('<text x="'+(w-R)+'" y="'+(h-8)+'" text-anchor="end" fill="#94a4ba" font-size="12" font-family="system-ui">'+label(days[days.length-1])+'</text>');
+  out.push('</svg>');
+  target.innerHTML=out.join('');
 }
 
 function showPositions(){
