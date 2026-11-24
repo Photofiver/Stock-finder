@@ -14,8 +14,8 @@ OUT.mkdir(exist_ok=True)
 FF=imageio_ffmpeg.get_ffmpeg_exe()
 UK=ZoneInfo("Europe/London")
 START=datetime(2026,10,28,tzinfo=UK)
-def words(n):
-    return num2words(n,lang="en_GB")
+def words(n, **kwargs):
+    return num2words(n,lang="en_GB",**kwargs)
 def money(n):
     n=Decimal(str(n))
     if not n.is_finite(): raise ValueError("Invalid amount")
