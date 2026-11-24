@@ -1,0 +1,63 @@
+name: Conversational spoken numbers
+on:
+  push:
+    branches: [voice-render-20261124]
+    paths: ['.github/workflows/spoken-numbers.yml']
+permissions: {}
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Generate natural number narration
+        run: |
+          python3 -m venv /tmp/edgevoice
+          /tmp/edgevoice/bin/pip install edge-tts imageio-ffmpeg
+          cat > /tmp/render.py <<'PY'
+          import asyncio, json, subprocess, wave
+          from pathlib import Path
+          from array import array
+          import edge_tts, imageio_ffmpeg
+          lines=json.loads("[[0,\"Welcome to the daily crypto trading bot report for November the twenty fourth, twenty twenty six.\"],[7.25,\"Today we are reviewing the latest twenty four hours of recorded live trading activity.\"],[13,\"This is a transparent trading journal.\"],[15.75,\"We will look at the realized result, the Dogecoin trade, the open positions, and the performance of the current strategy.\"],[24.25,\"No future returns are promised.\"],[26.5,\"The bot recorded one completed trade in the reporting window, and that trade was profitable.\"],[33,\"Gross profit was just under twenty one cents in Tether.\"],[38.5,\"After fees of just under one cent, the net profit was almost twenty cents.\"],[49.5,\"The daily win rate was one hundred percent, but that represents just one closed trade.\"],[55.75,\"The winning trade was a short position in Dogecoin, against Tether.\"],[60,\"The position opened at one minute past two yesterday afternoon, London time, and closed at seven thirty seven that evening. It lasted five hours and thirty six minutes.\"],[70.75,\"The entry price was about five point eight cents. The exit price was about five point six five cents.\"],[79.75,\"Because this was a short trade, the lower exit price generated a profit.\"],[84.75,\"The chart shows the recorded five minute candles during the position.\"],[89.5,\"Notice that price initially moved against the short.\"],[93,\"It rose by about three point seven percent above the entry price before reversing.\"],[98.75,\"The trade closed about two and a half percent below entry, earning just under two and a half percent after fees.\"],[110,\"This illustrates why a winning trade can still involve substantial risk while it is open.\"],[115.75,\"At the latest recorded scan, the bot still held two short positions, in Metal and Tron.\"],[122.5,\"Their entry values were eight dollars and thirty cents, and six dollars and sixteen cents, respectively, in Tether.\"],[130.75,\"Neither was closed in this reporting window.\"],[133.75,\"Their unrealized results are not included in today's realized profit, and the journal does not establish a final outcome for either position.\"],[142.75,\"Looking beyond today's single trade, the recorded R S I short entries since October the twenty eighth show one hundred and thirty two completed trades.\"],[153.75,\"One hundred and four were profitable, and twenty eight lost money.\"],[158.5,\"That is a win rate of seventy eight point eight percent, with a total net profit of four dollars and fifty one cents in Tether during this strategy period.\"],[169.75,\"The older full bot history remains negative, with a loss of about twenty one dollars and seventy three cents in Tether.\"],[176.5,\"These are different reporting scopes.\"],[179,\"A high win rate does not guarantee positive returns.\"],[182.75,\"The size of losing trades, trading costs, and the risk of open positions all matter.\"],[189,\"One profitable close is not evidence that the strategy will make money every day.\"],[194.5,\"These results are historical records, not a prediction.\"],[198.25,\"The current approach uses an R S I threshold above eighty nine on closed five minute candles, but future market conditions can be different.\"],[207.75,\"That concludes today's live bot report.\"],[211,\"The recorded daily result is positive, with one winning trade and two positions remaining open.\"],[217.5,\"The next update will focus on new completed trades and their actual realized results.\"],[223.75,\"Thanks for watching.\"],[225.5,\"Follow the journal to see how the strategy performs over time, including both winning and losing days.\"],[232.75,\"This is for informational purposes only, and is not financial advice.\"]]")
+          ffmpeg=imageio_ffmpeg.get_ffmpeg_exe()
+          sr=24000
+          sem=asyncio.Semaphore(4)
+          async def segment(i,t,s):
+              async with sem:
+                  path=f"part-{i}.mp3"
+                  for attempt in range(3):
+                      try:
+                          await edge_tts.Communicate(s,"en-GB-RyanNeural").save(path)
+                          break
+                      except Exception:
+                          if attempt==2: raise
+                          await asyncio.sleep(1)
+                  raw=subprocess.check_output([ffmpeg,"-v","error","-i",path,"-ar",str(sr),"-ac","1","-f","s16le","-"])
+                  dur=len(raw)/2/sr
+                  end=lines[i+1][0] if i+1<len(lines) else 237.815
+                  maxdur=end-t-.16
+                  tempo=max(1,dur/maxdur)
+                  if tempo>1:
+                      raw=subprocess.check_output([ffmpeg,"-v","error","-i",path,"-af",f"atempo={tempo}","-ar",str(sr),"-ac","1","-f","s16le","-"])
+                  a=array('h');a.frombytes(raw);a=a[:int(maxdur*sr)]
+                  return i,t,a
+          async def main():
+              parts=await asyncio.gather(*(segment(i,t,s) for i,(t,s) in enumerate(lines)))
+              out=array('h',[0])*round(237.815*sr)
+              timings=[]
+              for i,t,a in parts:
+                  start=round(t*sr);out[start:start+len(a)]=a
+                  timings.append([t,len(a)/sr])
+              with wave.open("voice.wav","wb") as w:
+                  w.setnchannels(1);w.setsampwidth(2);w.setframerate(sr);w.writeframes(out.tobytes())
+              subprocess.run([ffmpeg,"-y","-v","error","-i","voice.wav","-c:a","libmp3lame","-b:a","128k","spoken-voice.mp3"],check=True)
+              Path("timings.json").write_text(json.dumps(timings))
+          asyncio.run(main())
+          PY
+          /tmp/edgevoice/bin/python /tmp/render.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spoken-number-voice
+          path: |
+            spoken-voice.mp3
+            timings.json
