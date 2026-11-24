@@ -5,7 +5,8 @@ on:
     paths: ['.github/workflows/youtube_daily_report.yml', 'youtube_daily_render.py', 'youtube_daily_upload.py']
   workflow_dispatch:
   schedule:
-    - cron: '0 7 * * *'
+    - cron: '25 5 * * *'
+      timezone: 'Europe/London'
 permissions:
   contents: read
 concurrency:
