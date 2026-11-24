@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   report:
-    if: vars.YOUTUBE_ENABLED == 'true' && vars.YOUTUBE_CHANNEL_ID != ''
+    if: vars.YOUTUBE_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -48,7 +48,7 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name != 'push' && vars.YOUTUBE_ENABLED == 'true'
         env:
           YOUTUBE_ENABLED: ${{ vars.YOUTUBE_ENABLED }}
-          YOUTUBE_CHANNEL_ID: ${{ vars.YOUTUBE_CHANNEL_ID }}
+          YOUTUBE_CHANNEL_ID: UCzcQGgJtUl7LWv0ktffMnFg
           YOUTUBE_PRIVACY: ${{ vars.YOUTUBE_PRIVACY || 'public' }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
