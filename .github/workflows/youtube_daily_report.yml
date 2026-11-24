@@ -32,16 +32,19 @@ jobs:
           if ! test -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf; then
             sudo apt-get update && sudo apt-get install -y fonts-dejavu-core
           fi
-          python3 -m venv /tmp/youtube-video
-          /tmp/youtube-video/bin/pip install pillow num2words edge-tts imageio-ffmpeg google-api-python-client google-auth
+          python3 -m venv /tmp/bootstrap
+          /tmp/bootstrap/bin/pip install uv
+          /tmp/bootstrap/bin/uv venv --python 3.12 /tmp/youtube-video
+          /tmp/bootstrap/bin/uv pip install --python /tmp/youtube-video/bin/python pillow num2words kokoro-onnx soundfile imageio-ffmpeg google-api-python-client google-auth
+          curl -fL --retry 2 -o kokoro-v1.0.onnx https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.onnx
+          curl -fL --retry 2 -o voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin
           /tmp/youtube-video/bin/python youtube_daily_render.py
-      - uses: actions/upload-artifact@v4
-        with:
-          name: blofin-youtube-report
-          path: |
-            youtube_output/report.mp4
-            youtube_output/metadata.json
-          if-no-files-found: error
+      - name: Verify rendered file without storing artifacts
+        run: |
+          test -s youtube_output/report.mp4
+          FF=$(/tmp/youtube-video/bin/python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')
+          "$FF" -v error -i youtube_output/report.mp4 -f null -
+          echo 'MP4 decoding passed'
       - name: Upload to authorized YouTube channel
         if: github.ref == 'refs/heads/main' && github.event_name != 'push' && vars.YOUTUBE_ENABLED == 'true'
         env:
