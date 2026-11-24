@@ -1,0 +1,53 @@
+name: BloFin daily YouTube report
+on:
+  push:
+    branches: [youtube-daily-report]
+    paths: ['.github/workflows/youtube_daily_report.yml']
+  workflow_dispatch:
+  schedule:
+    - cron: '0 7 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: blofin-youtube-daily
+  cancel-in-progress: false
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Read source and current state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          for file in youtube_daily_render.py youtube_daily_upload.py; do
+            gh api -H 'Accept: application/vnd.github.raw+json' "repos/$GITHUB_REPOSITORY/contents/$file?ref=$GITHUB_SHA" > "$file"
+          done
+          gh api -H 'Accept: application/vnd.github.raw+json' "repos/$GITHUB_REPOSITORY/contents/blofin_live_state.json?ref=main" > blofin_live_state.json
+          python3 -m py_compile youtube_daily_render.py youtube_daily_upload.py
+      - name: Render MP4 without publishing
+        run: |
+          set -eu
+          if ! test -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf; then
+            sudo apt-get update && sudo apt-get install -y fonts-dejavu-core
+          fi
+          python3 -m venv /tmp/youtube-video
+          /tmp/youtube-video/bin/pip install pillow num2words edge-tts imageio-ffmpeg google-api-python-client google-auth
+          /tmp/youtube-video/bin/python youtube_daily_render.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blofin-youtube-report
+          path: |
+            youtube_output/report.mp4
+            youtube_output/metadata.json
+          if-no-files-found: error
+      - name: Upload to authorized YouTube channel
+        if: github.ref == 'refs/heads/main' && github.event_name != 'push' && vars.YOUTUBE_ENABLED == 'true'
+        env:
+          YOUTUBE_ENABLED: ${{ vars.YOUTUBE_ENABLED }}
+          YOUTUBE_PRIVACY: ${{ vars.YOUTUBE_PRIVACY || 'private' }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: /tmp/youtube-video/bin/python youtube_daily_upload.py
