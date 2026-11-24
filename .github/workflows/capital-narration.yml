@@ -1,0 +1,19 @@
+name: Report capital narration
+on:
+  push:
+    branches: [voice-render-20261124]
+    paths: ['.github/workflows/capital-narration.yml']
+permissions: {}
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: |
+          python3 -m venv /tmp/voice
+          /tmp/voice/bin/pip install edge-tts
+          /tmp/voice/bin/edge-tts --voice en-GB-RyanNeural --text "I currently trade with thirty U S D T. After every streak of ten consecutive winning trades, I add another ten U S D T to my trading capital." --write-media capital.mp3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: capital-ryan-voice
+          path: capital.mp3
