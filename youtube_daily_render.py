@@ -6,7 +6,8 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 from PIL import Image, ImageDraw, ImageFont
 from num2words import num2words
-import edge_tts, imageio_ffmpeg
+import imageio_ffmpeg, soundfile
+from kokoro_onnx import Kokoro
 
 OUT=Path("youtube_output")
 OUT.mkdir(exist_ok=True)
@@ -72,7 +73,7 @@ async def render():
         if hid: ids.add(hid)
         rows.append((t,p,row))
     rows.sort(key=lambda x:x[0])
-    sample=[x for x in rows if x[0]>=START.timestamp()*1000 and x[2].get("strategy","").upper()=="RSI89_SHORT"]
+    sample=[x for x in rows if x[0]>=START.timestamp()*1000 and (x[2].get("signal_snapshot") or {}).get("rsi89_short_entry") is True and str(x[2].get("side","")).upper()=="SHORT"]
     if not sample: raise RuntimeError("No verified RSI89_SHORT sample; refusing to invent statistics")
     daily=[x for x in sample if x[0]>=(now-timedelta(hours=24)).timestamp()*1000]
     start=Decimal(str(data["bankroll_start_usdt"]))
@@ -103,17 +104,20 @@ async def render():
         running+=p; chart.append(float(running))
     sections.append(("RSI short strategy record",["Since the twenty eighth of October, twenty twenty six",pnl_text(ptotal)+" | "+ratewords+" wins",words(wins)+" wins; "+words(losses)+" losses; "+words(neutral)+" flat"],"Since the twenty eighth of October, the recorded R S I short sample contains "+words(len(sample))+" closed trades. "+words(wins)+" were profitable, "+words(losses)+" lost money, and "+words(neutral)+" broke even. The win rate is "+ratewords+". "+pnl_text(ptotal)+". The chart shows the cumulative recorded net result for this sample. Earlier strategies are not included.",chart))
     sections.append(("Risk and next update",["A high win rate does not guarantee profits.","Results can vary. Capital is at risk."],"A high win rate does not guarantee profits. Losing trades and trading fees matter. This journal reports historical results for the specified strategy, not a recommendation to trade. Thank you for watching.",None))
+    kokoro=Kokoro("kokoro-v1.0.onnx","voices-v1.0.bin")
     segments=[]
     for i,(title,body,narration,chart) in enumerate(sections):
         image=slide(title,body,i,chart)
-        voice=OUT/f"voice-{i}.mp3"
-        await edge_tts.Communicate(narration,"en-GB-RyanNeural").save(str(voice))
+        voice=OUT/f"voice-{i}.wav"
+        samples, sr=kokoro.create(narration,voice="bm_george",speed=1.0,lang="en-gb")
+        soundfile.write(str(voice),samples,sr)
         segment=OUT/f"seg-{i}.mp4"
         # Audio starts without an artificial intro delay. Use the same settings throughout.
         subprocess.run([FF,"-y","-v","error","-loop","1","-framerate","24","-i",str(image),"-i",str(voice),"-c:v","libx264","-preset","veryfast","-tune","stillimage","-pix_fmt","yuv420p","-c:a","aac","-ar","48000","-ac","2","-shortest",str(segment)],check=True)
         segments.append(segment)
     (OUT/"concat.txt").write_text("".join("file '"+s.name+"'\n" for s in segments))
     subprocess.run([FF,"-y","-v","error","-f","concat","-safe","0","-i",str(OUT/"concat.txt"),"-c","copy","-movflags","+faststart",str(OUT/"report.mp4")],check=True)
+    print("Rendered verified trades:",len(sample),"report bytes:",(OUT/"report.mp4").stat().st_size)
     (OUT/"metadata.json").write_text(json.dumps({"title":"BloFin RSI Short Bot | Daily Trading Report | "+date,"description":"Historical results for RSI89_SHORT since 28 October 2026 only; excludes earlier strategies. Last 24-hour results are realized net of recorded fees. Not financial or any other advice. Capital is at risk.\nSource: https://github.com/Photofiver/Stock-finder","tags":["BloFin","RSI","trading bot","crypto trading","trading journal"]},indent=2))
 if __name__=="__main__":
     asyncio.run(render())
