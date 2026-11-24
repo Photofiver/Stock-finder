@@ -1,0 +1,49 @@
+name: Alternative English neural voice
+on:
+  push:
+    branches: [voice-render-20261124]
+    paths: ['.github/workflows/edge-voice-render.yml']
+permissions: {}
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Generate timed British English narration
+        run: |
+          python3 -m venv /tmp/edgevoice
+          /tmp/edgevoice/bin/pip install edge-tts
+          cat > /tmp/render.py <<'PY'
+          import asyncio,json,subprocess,wave,urllib.request
+          import edge_tts
+          from array import array
+          url="https://raw.githubusercontent.com/Photofiver/Stock-finder/voice-render-20261124/voice_render_lines.json"
+          lines=json.load(urllib.request.urlopen(url,timeout=25))
+          sr=24000
+          out=array('h',[0])*round(237.815*sr)
+          async def render():
+              for i,(t,s) in enumerate(lines):
+                  for attempt in range(3):
+                      try:
+                          await edge_tts.Communicate(s,"en-GB-RyanNeural").save("segment.mp3")
+                          break
+                      except Exception:
+                          if attempt==2: raise
+                          await asyncio.sleep(2)
+                  dur=float(subprocess.check_output(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0","segment.mp3"]))
+                  end=lines[i+1][0] if i+1<len(lines) else 237.815
+                  maxdur=end-t-.12
+                  tempo=max(1,dur/maxdur)
+                  data=subprocess.check_output(["ffmpeg","-v","error","-i","segment.mp3","-af",f"atempo={tempo}","-ar",str(sr),"-ac","1","-f","s16le","-"])
+                  a=array('h');a.frombytes(data);a=a[:int(maxdur*sr)]
+                  start=round(t*sr);out[start:start+len(a)]=a
+              with wave.open("voice.wav","wb") as w:
+                  w.setnchannels(1);w.setsampwidth(2);w.setframerate(sr);w.writeframes(out.tobytes())
+              subprocess.run(["ffmpeg","-y","-v","error","-i","voice.wav","-c:a","libmp3lame","-b:a","128k","edge-voice.mp3"],check=True)
+          asyncio.run(render())
+          PY
+          /tmp/edgevoice/bin/python /tmp/render.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edge-neural-report-voice
+          path: edge-voice.mp3
