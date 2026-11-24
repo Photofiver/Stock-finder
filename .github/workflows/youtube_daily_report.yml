@@ -2,7 +2,7 @@ name: BloFin daily YouTube report
 on:
   push:
     branches: [youtube-daily-report]
-    paths: ['.github/workflows/youtube_daily_report.yml']
+    paths: ['.github/workflows/youtube_daily_report.yml', 'youtube_daily_render.py', 'youtube_daily_upload.py']
   workflow_dispatch:
   schedule:
     - cron: '0 7 * * *'
