@@ -1,0 +1,24 @@
+name: Neural report voice
+on:
+  push:
+    branches: [voice-render-20261124]
+    paths: ['.github/workflows/voice-render.yml']
+permissions:
+  contents: read
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          pip install piper-tts numpy
+          python -m piper.download_voices en_US-lessac-medium
+          python voice_render.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: neural-report-voice
+          path: voice.mp3
