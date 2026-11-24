@@ -1,0 +1,56 @@
+name: BloFin daily YouTube report
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '25 5 * * *'
+      timezone: 'Europe/London'
+permissions:
+  contents: read
+concurrency:
+  group: blofin-youtube-daily
+  cancel-in-progress: false
+jobs:
+  report:
+    if: vars.YOUTUBE_ENABLED == 'true' && vars.YOUTUBE_CHANNEL_ID != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Read source and current state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          for file in youtube_daily_render.py youtube_daily_upload.py; do
+            gh api -H 'Accept: application/vnd.github.raw+json' "repos/$GITHUB_REPOSITORY/contents/$file?ref=$GITHUB_SHA" > "$file"
+          done
+          gh api -H 'Accept: application/vnd.github.raw+json' "repos/$GITHUB_REPOSITORY/contents/blofin_live_state.json?ref=main" > blofin_live_state.json
+          python3 -m py_compile youtube_daily_render.py youtube_daily_upload.py
+      - name: Render MP4 without publishing
+        run: |
+          set -eu
+          if ! test -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf; then
+            sudo apt-get update && sudo apt-get install -y fonts-dejavu-core
+          fi
+          python3 -m venv /tmp/bootstrap
+          /tmp/bootstrap/bin/pip install uv
+          /tmp/bootstrap/bin/uv venv --python 3.12 /tmp/youtube-video
+          /tmp/bootstrap/bin/uv pip install --python /tmp/youtube-video/bin/python pillow num2words kokoro-onnx soundfile imageio-ffmpeg google-api-python-client google-auth
+          curl -fL --retry 2 -o kokoro-v1.0.onnx https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.onnx
+          curl -fL --retry 2 -o voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin
+          /tmp/youtube-video/bin/python youtube_daily_render.py
+      - name: Verify rendered file without storing artifacts
+        run: |
+          test -s youtube_output/report.mp4
+          FF=$(/tmp/youtube-video/bin/python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')
+          "$FF" -v error -i youtube_output/report.mp4 -f null -
+          echo 'MP4 decoding passed'
+      - name: Upload to authorized YouTube channel
+        if: github.ref == 'refs/heads/main' && github.event_name != 'push' && vars.YOUTUBE_ENABLED == 'true'
+        env:
+          YOUTUBE_ENABLED: ${{ vars.YOUTUBE_ENABLED }}
+          YOUTUBE_CHANNEL_ID: ${{ vars.YOUTUBE_CHANNEL_ID }}
+          YOUTUBE_PRIVACY: ${{ vars.YOUTUBE_PRIVACY || 'public' }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: /tmp/youtube-video/bin/python youtube_daily_upload.py
