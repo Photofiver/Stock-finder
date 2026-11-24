@@ -12,10 +12,11 @@ jobs:
       - name: Generate timed British English narration
         run: |
           python3 -m venv /tmp/edgevoice
-          /tmp/edgevoice/bin/pip install edge-tts
+          /tmp/edgevoice/bin/pip install edge-tts imageio-ffmpeg
           cat > /tmp/render.py <<'PY'
           import asyncio,json,subprocess,wave,urllib.request
-          import edge_tts
+          import edge_tts, imageio_ffmpeg
+          ffmpeg=imageio_ffmpeg.get_ffmpeg_exe()
           from array import array
           url="https://raw.githubusercontent.com/Photofiver/Stock-finder/voice-render-20261124/voice_render_lines.json"
           lines=json.load(urllib.request.urlopen(url,timeout=25))
@@ -30,16 +31,17 @@ jobs:
                       except Exception:
                           if attempt==2: raise
                           await asyncio.sleep(2)
-                  dur=float(subprocess.check_output(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0","segment.mp3"]))
+                  raw=subprocess.check_output([ffmpeg,"-v","error","-i","segment.mp3","-ar",str(sr),"-ac","1","-f","s16le","-"])
+                  dur=len(raw)/2/sr
                   end=lines[i+1][0] if i+1<len(lines) else 237.815
                   maxdur=end-t-.12
                   tempo=max(1,dur/maxdur)
-                  data=subprocess.check_output(["ffmpeg","-v","error","-i","segment.mp3","-af",f"atempo={tempo}","-ar",str(sr),"-ac","1","-f","s16le","-"])
+                  data=subprocess.check_output([ffmpeg,"-v","error","-i","segment.mp3","-af",f"atempo={tempo}","-ar",str(sr),"-ac","1","-f","s16le","-"])
                   a=array('h');a.frombytes(data);a=a[:int(maxdur*sr)]
                   start=round(t*sr);out[start:start+len(a)]=a
               with wave.open("voice.wav","wb") as w:
                   w.setnchannels(1);w.setsampwidth(2);w.setframerate(sr);w.writeframes(out.tobytes())
-              subprocess.run(["ffmpeg","-y","-v","error","-i","voice.wav","-c:a","libmp3lame","-b:a","128k","edge-voice.mp3"],check=True)
+              subprocess.run([ffmpeg,"-y","-v","error","-i","voice.wav","-c:a","libmp3lame","-b:a","128k","edge-voice.mp3"],check=True)
           asyncio.run(render())
           PY
           /tmp/edgevoice/bin/python /tmp/render.py
