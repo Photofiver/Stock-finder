@@ -42,13 +42,17 @@ def slide(title,body,idx,chart=None):
     d.text((52,30),"LIVE BOT JOURNAL  /  BLOFIN",font=font(24,True),fill="#37D4B0")
     d.text((52,97),title,font=font(49,True),fill="#F0F5FA")
     d.line((52,172,1228,172),fill="#405368",width=2)
+    profile = isinstance(chart, dict)
     y=210
     for line in body:
-        for text in textwrap.wrap(line,width=62):
-            d.text((58,y),text,font=font(30),fill="#E8EEF5")
-            y+=44
+        for text in textwrap.wrap(line,width=39 if profile else 62):
+            d.text((58,y),text,font=font(24 if profile else 30),fill="#E8EEF5")
+            y+=33 if profile else 44
         y+=18
-    if chart and len(chart)>1:
+    if profile:
+        if chart['prices']:
+            draw_market_chart(d, chart['prices'], font)
+    elif chart and len(chart)>1:
         l,t,r,b=65,445,1215,600
         low=min(chart+[0]); high=max(chart+[0])
         if high==low: high=low+1
@@ -56,10 +60,56 @@ def slide(title,body,idx,chart=None):
         d.line((l,yy(0),r,yy(0)),fill="#596B80",width=2)
         pts=[(l+(r-l)*i/(len(chart)-1),yy(v)) for i,v in enumerate(chart)]
         d.line(pts,fill="#37D4B0",width=4)
-        d.text((65,612),"Cumulative net P&L since the start of this sample",font=font(20),fill="#A7B6C6")
+        d.text((65,612),"Cumulative net P&L (USDT) after each closed trade",font=font(20),fill="#A7B6C6")
     d.text((52,674),"Historical records only  /  Not a forecast",font=font(20),fill="#A7B6C6")
     path=OUT/f"slide-{idx:02}.png"; im.save(path)
     return path
+def market_closes(symbol):
+    period = 300_000
+    end = int(datetime.now(timezone.utc).timestamp() * 1000) // period * period
+    url = ("https://openapi.blofin.com/api/v1/market/candles"
+           f"?instId={quote(symbol)}-USDT&bar=5m&limit=290")
+    try:
+        with urlopen(Request(url, headers={"User-Agent": "BloFin-Daily-Report/1.0"}), timeout=8) as response:
+            result = json.load(response)
+        if str(result.get("code")) != "0":
+            return []
+        closes = {}
+        for row in result.get("data") or []:
+            if len(row) < 9 or str(row[8]) != "1":
+                continue
+            ts, close = int(row[0]) + period, float(row[4])
+            if end - 86_400_000 < ts <= end and math.isfinite(close) and close > 0:
+                closes[ts] = close
+        return sorted(closes.items()) if len(closes) >= 2 else []
+    except (OSError, ValueError, TypeError, IndexError) as error:
+        print("BloFin candles unavailable:", symbol, error)
+        return []
+
+
+def draw_market_chart(d, prices, font):
+    left, right, top, bottom = 642, 1200, 285, 550
+    first, last = prices[0][0], prices[-1][0]
+    low, high = min(p for _, p in prices), max(p for _, p in prices)
+    d.text((left, 210), "BloFin futures  |  5-minute closes", font=font(26, True), fill="#F0F5FA")
+    for y, value in [(top, high), (bottom, low)]:
+        d.line((left, y, right, y), fill="#405368")
+        d.text((left, y-26), f"{value:.7g} USDT", font=font(19), fill="#A7B6C6")
+    previous = None
+    for timestamp, price in prices:
+        x = left + (timestamp-first)/(last-first)*(right-left)
+        y = bottom - (price-low)/(high-low)*(bottom-top) if high > low else (top+bottom)/2
+        if previous and timestamp - previous[0] == 300_000:
+            d.line((previous[1], previous[2], x, y), fill="#37D4B0", width=3)
+        else:
+            d.ellipse((x-2, y-2, x+2, y+2), fill="#37D4B0")
+        previous = timestamp, x, y
+    for x, stamp, anchor in [(left, first, "la"), (right, last, "ra")]:
+        label = datetime.fromtimestamp(stamp/1000, timezone.utc).strftime("%d %b %H:%M")
+        d.text((x, bottom+12), label, anchor=anchor, font=font(19), fill="#A7B6C6")
+    d.text((left, bottom+49), "Time in UTC", font=font(19), fill="#A7B6C6")
+
+
 def coin_data(path):
     req = Request("https://api.coingecko.com/api/v3/" + path,
                   headers={"User-Agent": "BloFin-Daily-Report/1.0", "Accept": "application/json"})
@@ -85,42 +135,49 @@ def project_sections(instruments):
         except (OSError, ValueError, KeyError) as error:
             print("CoinGecko asset list unavailable:", error)
     for symbol in sorted(symbols):
-        ids = [known[symbol]] if symbol in known else candidates.get(symbol, [])
-        if len(ids) != 1:
-            print("No unique project match:", symbol)
-            continue
-        try:
-            coin = coin_data("coins/" + quote(ids[0], safe="") +
-                            "?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false")
-            if coin["id"] != ids[0] or coin["symbol"].upper() != symbol:
+        body, speech = project_profile(symbol, known, candidates) or ([], symbol + " futures on BloFin.")
+        prices = market_closes(symbol)
+        if not prices:
+            body.append("5-minute price history unavailable")
+        yield (symbol + " | Project profile", body, speech, {"prices": prices})
+
+
+def project_profile(symbol, known, candidates):
+    ids = [known[symbol]] if symbol in known else candidates.get(symbol, [])
+    if len(ids) != 1:
+        print("No unique project match:", symbol)
+        return
+    try:
+        coin = coin_data("coins/" + quote(ids[0], safe="") +
+                        "?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false")
+        if coin["id"] != ids[0] or coin["symbol"].upper() != symbol:
+            return
+        name = coin["name"]
+        raw = (coin.get("description") or {}).get("en") or ""
+        plain = " ".join(unescape(re.sub(r"<[^>]*>", " ", raw)).split())
+        summary = next((s for s in re.split(r"(?<=[.!?])\s+", plain)
+                        if 20 <= len(s) <= 200 and "http" not in s), "")
+        if symbol == "DOGE":
+            summary = "Dogecoin is a peer-to-peer digital currency used for payments and online tipping."
+        body = [summary] if summary else []
+        speech = [name + ".", summary] if summary else [name + "."]
+        market = coin.get("market_data") or {}
+        for field, label in (("ath", "All-time high"), ("atl", "All-time low")):
+            price = (market.get(field) or {}).get("usd")
+            date = (market.get(field + "_date") or {}).get("usd")
+            if price is None or not date:
                 continue
-            name = coin["name"]
-            raw = (coin.get("description") or {}).get("en") or ""
-            plain = " ".join(unescape(re.sub(r"<[^>]*>", " ", raw)).split())
-            summary = next((s for s in re.split(r"(?<=[.!?])\s+", plain)
-                            if 20 <= len(s) <= 200 and "http" not in s), "")
-            if symbol == "DOGE":
-                summary = "Dogecoin is a peer-to-peer digital currency used for payments and online tipping."
-            body = [summary] if summary else []
-            speech = [name + ".", summary] if summary else [name + "."]
-            market = coin.get("market_data") or {}
-            for field, label in (("ath", "All-time high"), ("atl", "All-time low")):
-                price = (market.get(field) or {}).get("usd")
-                date = (market.get(field + "_date") or {}).get("usd")
-                if price is None or not date:
-                    continue
-                value = Decimal(str(price))
-                if not value.is_finite() or value <= 0:
-                    continue
-                amount = format(value.normalize(), "f")
-                when = datetime.fromisoformat(date.replace("Z", "+00:00")).strftime("%d %b %Y")
-                body.append(f"{label}: USD {amount} ({when})")
-                speech.append(f"Its recorded {label.lower()} was {amount} US dollars on {when}.")
-            if body:
-                yield (symbol + " | Project profile", body + ["Source: CoinGecko"],
-                       " ".join(speech), None)
-        except (OSError, ValueError, KeyError, ArithmeticError) as error:
-            print("CoinGecko project unavailable:", symbol, error)
+            value = Decimal(str(price))
+            if not value.is_finite() or value <= 0:
+                continue
+            amount = format(value.normalize(), "f")
+            when = datetime.fromisoformat(date.replace("Z", "+00:00")).strftime("%d %b %Y")
+            body.append(f"{label}: USD {amount} ({when})")
+            speech.append(f"Its recorded {label.lower()} was {amount} US dollars on {when}.")
+        if body:
+            return body + ["Source: CoinGecko"], " ".join(speech)
+    except (OSError, ValueError, KeyError, ArithmeticError) as error:
+        print("CoinGecko project unavailable:", symbol, error)
 
 
 async def render():
@@ -171,7 +228,7 @@ async def render():
     chart=[0.0]; running=Decimal(0)
     for _,p,_ in sample:
         running+=p; chart.append(float(running))
-    sections.append(("RSI short strategy record",[f"Since {START:%d/%m/%Y}",f"Net P&L: {ptotal:+.4f} USDT | Win rate: {rate:.1f}%",f"{wins} wins, {losses} losses, {neutral} flat"],"Since the twenty eighth of October, the recorded R S I short sample contains "+words(len(sample))+" closed trades. "+words(wins)+" were profitable, "+words(losses)+" lost money, and "+words(neutral)+" broke even. The win rate is "+ratewords+". "+pnl_text(ptotal)+". The chart shows the cumulative recorded net result for this sample. Earlier strategies are not included.",chart))
+    sections.append(("Bot performance after fees",[f"Since {START:%d/%m/%Y}",f"Net P&L: {ptotal:+.4f} USDT | Win rate: {rate:.1f}%",f"{wins} wins, {losses} losses, {neutral} flat"],"Since the twenty eighth of October, the recorded R S I short sample contains "+words(len(sample))+" closed trades. "+words(wins)+" were profitable, "+words(losses)+" lost money, and "+words(neutral)+" broke even. The win rate is "+ratewords+". "+pnl_text(ptotal)+". The chart shows the cumulative recorded net result for this sample. Earlier strategies are not included.",chart))
     sections.append(("Risk and next update",["A high win rate does not guarantee profits.","Results can vary. Capital is at risk."],"A high win rate does not guarantee profits. Losing trades and trading fees matter. This journal reports historical results for the specified strategy, not a recommendation to trade. Thank you for watching.",None))
     kokoro=Kokoro("kokoro-v1.0.onnx","voices-v1.0.bin")
     segments = []
