@@ -1,5 +1,8 @@
 """Read-only daily video. No exchange API credentials or trading calls."""
 import asyncio, json, math, os, re, subprocess, textwrap
+from html import unescape
+from urllib.request import Request, urlopen
+from urllib.parse import quote
 import numpy as np
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
@@ -57,6 +60,69 @@ def slide(title,body,idx,chart=None):
     d.text((52,674),"Historical records only  /  Not a forecast",font=font(20),fill="#A7B6C6")
     path=OUT/f"slide-{idx:02}.png"; im.save(path)
     return path
+def coin_data(path):
+    req = Request("https://api.coingecko.com/api/v3/" + path,
+                  headers={"User-Agent": "BloFin-Daily-Report/1.0", "Accept": "application/json"})
+    with urlopen(req, timeout=5) as response:
+        return json.load(response, parse_float=Decimal)
+
+
+def project_sections(instruments):
+    symbols = set()
+    for instrument in instruments:
+        match = re.fullmatch(r"([A-Z0-9]+?)(?:[-_/]?USDT)(?:-SWAP)?", str(instrument).upper())
+        if match:
+            symbols.add(match[1])
+    if not symbols:
+        return
+    known = {"DOGE": "dogecoin", "BTC": "bitcoin", "ETH": "ethereum",
+             "SOL": "solana", "MERL": "merlin-chain"}
+    candidates = {}
+    if symbols - known.keys():
+        try:
+            for coin in coin_data("coins/list"):
+                candidates.setdefault(coin["symbol"].upper(), []).append(coin["id"])
+        except (OSError, ValueError, KeyError) as error:
+            print("CoinGecko asset list unavailable:", error)
+    for symbol in sorted(symbols):
+        ids = [known[symbol]] if symbol in known else candidates.get(symbol, [])
+        if len(ids) != 1:
+            print("No unique project match:", symbol)
+            continue
+        try:
+            coin = coin_data("coins/" + quote(ids[0], safe="") +
+                            "?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false")
+            if coin["id"] != ids[0] or coin["symbol"].upper() != symbol:
+                continue
+            name = coin["name"]
+            raw = (coin.get("description") or {}).get("en") or ""
+            plain = " ".join(unescape(re.sub(r"<[^>]*>", " ", raw)).split())
+            summary = next((s for s in re.split(r"(?<=[.!?])\s+", plain)
+                            if 20 <= len(s) <= 200 and "http" not in s), "")
+            if symbol == "DOGE":
+                summary = "Dogecoin is a peer-to-peer digital currency used for payments and online tipping."
+            body = [summary] if summary else []
+            speech = [name + ".", summary] if summary else [name + "."]
+            market = coin.get("market_data") or {}
+            for field, label in (("ath", "All-time high"), ("atl", "All-time low")):
+                price = (market.get(field) or {}).get("usd")
+                date = (market.get(field + "_date") or {}).get("usd")
+                if price is None or not date:
+                    continue
+                value = Decimal(str(price))
+                if not value.is_finite() or value <= 0:
+                    continue
+                amount = format(value.normalize(), "f")
+                when = datetime.fromisoformat(date.replace("Z", "+00:00")).strftime("%d %b %Y")
+                body.append(f"{label}: USD {amount} ({when})")
+                speech.append(f"Its recorded {label.lower()} was {amount} US dollars on {when}.")
+            if body:
+                yield (symbol + " | Project profile", body + ["Source: CoinGecko"],
+                       " ".join(speech), None)
+        except (OSError, ValueError, KeyError, ArithmeticError) as error:
+            print("CoinGecko project unavailable:", symbol, error)
+
+
 async def render():
     data=json.loads(Path(os.environ.get("STATE_PATH","blofin_live_state.json")).read_text())
     now=datetime.now(timezone.utc)
@@ -100,6 +166,8 @@ async def render():
       ("Last 24 hours",[f"Net P&L: {p24:+.4f} USDT",f"{len(daily)} closed trades",f"{sum(x[1]>0 for x in daily)} wins, {sum(x[1]<0 for x in daily)} losses"],"The current strategy recorded "+words(len(daily))+" closed trades in the last twenty four hours. "+pnl_text(p24)+". These results include the recorded trading fees.",None),
       ("Open positions",[f"{len(opened)} open positions","; ".join(opened) if opened else "No open positions","Unrealized results are excluded from realized profit."],"There are currently "+words(len(opened))+" open positions across the bot. Unrealized results are not included in the realized profit. Their outcomes are not yet known.",None),
     ]
+    traded = [row.get("inst") or row.get("instId") or row.get("symbol") for _, _, row in daily]
+    sections.extend(project_sections(traded + opened))
     chart=[0.0]; running=Decimal(0)
     for _,p,_ in sample:
         running+=p; chart.append(float(running))
