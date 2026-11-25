@@ -122,7 +122,7 @@ async def render():
     def measure(source):
         result = subprocess.run(source + ["-vn", "-af", target + ":print_format=json", "-f", "null", "-"],
                                 check=True, capture_output=True, text=True)
-        return json.loads(result.stderr[result.stderr.rindex("{"):])
+        return json.loads(result.stderr[result.stderr.rindex("{"):result.stderr.rindex("}")+1])
 
     before = measure(inputs)
     stats = ":".join(f"measured_{key}={before['input_' + key]}" for key in ("i", "lra", "tp", "thresh"))
