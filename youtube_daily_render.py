@@ -116,7 +116,25 @@ async def render():
         subprocess.run([FF,"-y","-v","error","-loop","1","-framerate","24","-i",str(image),"-i",str(voice),"-c:v","libx264","-preset","veryfast","-tune","stillimage","-pix_fmt","yuv420p","-c:a","aac","-ar","48000","-ac","2","-shortest",str(segment)],check=True)
         segments.append(segment)
     (OUT/"concat.txt").write_text("".join("file '"+s.name+"'\n" for s in segments))
-    subprocess.run([FF,"-y","-v","error","-f","concat","-safe","0","-i",str(OUT/"concat.txt"),"-c","copy","-movflags","+faststart",str(OUT/"report.mp4")],check=True)
+    inputs = [FF, "-hide_banner", "-nostats", "-f", "concat", "-safe", "0", "-i", str(OUT/"concat.txt")]
+    target = "loudnorm=I=-13:LRA=7:TP=-1.5"
+
+    def measure(source):
+        result = subprocess.run(source + ["-vn", "-af", target + ":print_format=json", "-f", "null", "-"],
+                                check=True, capture_output=True, text=True)
+        return json.loads(result.stderr[result.stderr.rindex("{"):])
+
+    before = measure(inputs)
+    stats = ":".join(f"measured_{key}={before['input_' + key]}" for key in ("i", "lra", "tp", "thresh"))
+    audio_filter = f"{target}:{stats}:offset={before['target_offset']}:linear=true"
+    report_path = OUT/"report.mp4"
+    subprocess.run(inputs + ["-y", "-v", "error", "-map", "0:v:0", "-map", "0:a:0",
+                             "-c:v", "copy", "-af", audio_filter, "-c:a", "aac", "-b:a", "192k",
+                             "-ar", "48000", "-movflags", "+faststart", str(report_path)], check=True)
+    after = measure([FF, "-hide_banner", "-nostats", "-i", str(report_path)])
+    print(f"Loudness before {before['input_i']} LUFS, final {after['input_i']} LUFS, peak {after['input_tp']} dBTP")
+    if not -14.5 <= float(after["input_i"]) <= -11.5 or not float(after["input_tp"]) < 0:
+        raise RuntimeError("Final narration loudness or peak outside target")
     print("Rendered verified trades:",len(sample),"report bytes:",(OUT/"report.mp4").stat().st_size)
     (OUT/"metadata.json").write_text(json.dumps({"title":"BloFin RSI Short Bot | Daily Trading Report | "+date,"description":"Historical results for RSI89_SHORT since 28 October 2026 only; excludes earlier strategies. Last 24-hour results are realized net of recorded fees. Not financial or any other advice. Capital is at risk.\nSource: https://github.com/Photofiver/Stock-finder","tags":["BloFin","RSI","trading bot","crypto trading","trading journal"]},indent=2))
 if __name__=="__main__":
