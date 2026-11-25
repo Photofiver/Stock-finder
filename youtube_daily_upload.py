@@ -19,7 +19,7 @@ def main():
     privacy=os.environ.get("YOUTUBE_PRIVACY","private")
     if privacy not in ("private","unlisted","public"): raise ValueError("Invalid privacy")
     status={"privacyStatus":privacy,"selfDeclaredMadeForKids":False}
-    if privacy=="public":
+    if privacy=="public" and os.environ.get("GITHUB_EVENT_NAME") == "schedule":
         now=datetime.now(ZoneInfo("Europe/London"))
         target=now.replace(hour=6,minute=0,second=0,microsecond=0)
         if now>=target:
@@ -38,6 +38,7 @@ def main():
     while response is None:
         _,response=req.next_chunk(num_retries=2)
     video_id=response["id"]
+    print("YouTube visibility:", response.get("status", {}).get("privacyStatus"))
     print("Uploaded:", "https://youtu.be/"+video_id)
     (folder/"youtube_id.txt").write_text(video_id)
 if __name__=="__main__": main()

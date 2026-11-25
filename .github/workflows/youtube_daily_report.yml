@@ -1,5 +1,8 @@
 name: BloFin daily YouTube report
 on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/youtube_daily_report.yml']
   workflow_dispatch:
   schedule:
     - cron: '25 5 * * *'
@@ -11,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   report:
-    if: vars.YOUTUBE_ENABLED == 'true'
+    if: vars.YOUTUBE_ENABLED == 'true' && (github.event_name != 'push' || github.event.head_commit.message == 'Publish one YouTube report on 2026-11-25')
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -45,7 +48,7 @@ jobs:
           "$FF" -v error -i youtube_output/report.mp4 -f null -
           echo 'MP4 decoding passed'
       - name: Upload to authorized YouTube channel
-        if: github.ref == 'refs/heads/main' && github.event_name != 'push' && vars.YOUTUBE_ENABLED == 'true'
+        if: github.ref == 'refs/heads/main' && vars.YOUTUBE_ENABLED == 'true'
         env:
           YOUTUBE_ENABLED: ${{ vars.YOUTUBE_ENABLED }}
           YOUTUBE_CHANNEL_ID: UCzcQGgJtUl7LWv0ktffMnFg
