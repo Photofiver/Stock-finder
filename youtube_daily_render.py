@@ -1,5 +1,6 @@
 """Read-only daily video. No exchange API credentials or trading calls."""
-import asyncio, json, math, os, subprocess, textwrap
+import asyncio, json, math, os, re, subprocess, textwrap
+import numpy as np
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
@@ -105,18 +106,30 @@ async def render():
     sections.append(("RSI short strategy record",[f"Since {START:%d/%m/%Y}",f"Net P&L: {ptotal:+.4f} USDT | Win rate: {rate:.1f}%",f"{wins} wins, {losses} losses, {neutral} flat"],"Since the twenty eighth of October, the recorded R S I short sample contains "+words(len(sample))+" closed trades. "+words(wins)+" were profitable, "+words(losses)+" lost money, and "+words(neutral)+" broke even. The win rate is "+ratewords+". "+pnl_text(ptotal)+". The chart shows the cumulative recorded net result for this sample. Earlier strategies are not included.",chart))
     sections.append(("Risk and next update",["A high win rate does not guarantee profits.","Results can vary. Capital is at risk."],"A high win rate does not guarantee profits. Losing trades and trading fees matter. This journal reports historical results for the specified strategy, not a recommendation to trade. Thank you for watching.",None))
     kokoro=Kokoro("kokoro-v1.0.onnx","voices-v1.0.bin")
-    segments=[]
-    for i,(title,body,narration,chart) in enumerate(sections):
-        image=slide(title,body,i,chart)
-        voice=OUT/f"voice-{i}.wav"
-        samples, sr=kokoro.create(narration,voice="bm_george",speed=1.0,lang="en-gb")
-        soundfile.write(str(voice),samples,sr)
-        segment=OUT/f"seg-{i}.mp4"
-        # Audio starts without an artificial intro delay. Use the same settings throughout.
-        subprocess.run([FF,"-y","-v","error","-loop","1","-framerate","24","-i",str(image),"-i",str(voice),"-c:v","libx264","-preset","veryfast","-tune","stillimage","-pix_fmt","yuv420p","-c:a","aac","-ar","48000","-ac","2","-shortest",str(segment)],check=True)
-        segments.append(segment)
+    segments = []
+    voice_path = OUT/"narration.wav"
+    sample_rate = 24000
+    frames_per_second = 24
+    samples_per_frame = sample_rate // frames_per_second
+    with soundfile.SoundFile(voice_path, mode="w", samplerate=sample_rate, channels=1, subtype="FLOAT") as track:
+        for i, (title, body, narration, chart) in enumerate(sections):
+            image = slide(title, body, i, chart)
+            start = track.tell()
+            for sentence in re.split(r"(?<=[.!?])\s+", narration):
+                samples, rate = kokoro.create(sentence, voice="bm_george", speed=1.0, lang="en-gb", trim=False)
+                if rate != sample_rate or not len(samples) or not np.isfinite(samples).all():
+                    raise ValueError("Invalid synthesized sentence audio")
+                track.write(samples)
+            frame_count = math.ceil((track.tell() - start) / samples_per_frame)
+            track.write(np.zeros(frame_count * samples_per_frame - (track.tell() - start), dtype=np.float32))
+            segment = OUT/f"seg-{i}.mp4"
+            subprocess.run([FF, "-y", "-v", "error", "-loop", "1", "-framerate", str(frames_per_second),
+                            "-i", str(image), "-frames:v", str(frame_count), "-c:v", "libx264",
+                            "-preset", "veryfast", "-tune", "stillimage", "-pix_fmt", "yuv420p", str(segment)], check=True)
+            segments.append(segment)
+        total_samples = track.tell()
     (OUT/"concat.txt").write_text("".join("file '"+s.name+"'\n" for s in segments))
-    inputs = [FF, "-hide_banner", "-nostats", "-f", "concat", "-safe", "0", "-i", str(OUT/"concat.txt")]
+    inputs = [FF, "-hide_banner", "-nostats", "-f", "concat", "-safe", "0", "-i", str(OUT/"concat.txt"), "-i", str(voice_path)]
     target = "loudnorm=I=-13:LRA=7:TP=-1.5"
 
     def measure(source):
@@ -128,9 +141,23 @@ async def render():
     stats = ":".join(f"measured_{key}={before['input_' + key]}" for key in ("i", "lra", "tp", "thresh"))
     audio_filter = f"{target}:{stats}:offset={before['target_offset']}:linear=true"
     report_path = OUT/"report.mp4"
-    subprocess.run(inputs + ["-y", "-v", "error", "-map", "0:v:0", "-map", "0:a:0",
+    subprocess.run(inputs + ["-y", "-v", "error", "-map", "0:v:0", "-map", "1:a:0",
                              "-c:v", "copy", "-af", audio_filter, "-c:a", "aac", "-b:a", "192k",
                              "-ar", "48000", "-movflags", "+faststart", str(report_path)], check=True)
+    decoded = subprocess.check_output([FF, "-v", "error", "-i", str(report_path), "-vn",
+                                       "-ac", "1", "-ar", str(sample_rate), "-f", "f32le", "-"])
+    final_samples = np.frombuffer(decoded, dtype="<f4")
+    if abs(len(final_samples) - total_samples) > sample_rate * 0.05:
+        raise RuntimeError("Final audio length differs from the continuous narration")
+    original, _ = soundfile.read(voice_path, dtype="float32")
+    # Detect lost speech within a 20 ms window after the final encode.
+    window = sample_rate // 50
+    usable = min(len(original), len(final_samples)) // window * window
+    def rms(signal):
+        return np.sqrt(np.mean(signal[:usable].reshape(-1, window)**2, axis=1))
+    if np.any((rms(original) > 0.01) & (rms(final_samples) < 0.0001)):
+        raise RuntimeError("Final audio contains a dropout during voiced speech")
+    print(f"Continuous narration checked: {total_samples / sample_rate:.2f} seconds, 0 missing speech windows")
     after = measure([FF, "-hide_banner", "-nostats", "-i", str(report_path)])
     print(f"Loudness before {before['input_i']} LUFS, final {after['input_i']} LUFS, peak {after['input_tp']} dBTP")
     if not -14.5 <= float(after["input_i"]) <= -11.5 or not float(after["input_tp"]) < 0:
