@@ -117,6 +117,95 @@ def coin_data(path):
         return json.load(response, parse_float=Decimal)
 
 
+# CoinGecko USD records checked on 26 November 2026. Slugs identify the
+# source pages. Dated observations remain usable during public API throttling.
+VERIFIED_PROFILES = {
+  "CFG": [
+    "Centrifuge",
+    "centrifuge",
+    "Centrifuge brings real-world assets such as credit funds onto blockchains as tokens.",
+    "0.4004",
+    "0.04401"
+  ],
+  "CLO": [
+    "Clovis Network",
+    "clovis-network",
+    "Clovis, originally Yei Finance, connects lending, swaps and liquidity across blockchains.",
+    "0.9101",
+    "0.02523"
+  ],
+  "CP": [
+    "Cluster Protocol",
+    "cluster-protocol",
+    "Cluster Protocol connects GPU providers with developers who need computing power for AI models.",
+    "0.04629",
+    "0.005121"
+  ],
+  "ME": [
+    "Magic Eden",
+    "magic-eden",
+    "Magic Eden operates a marketplace for buying and selling digital collectibles across blockchains.",
+    "17.00",
+    "0.03313"
+  ],
+  "MOVE": [
+    "Movement",
+    "movement",
+    "Movement is a blockchain network that lets developers build applications using the Move language.",
+    "1.45",
+    "0.004293"
+  ],
+  "MTL": [
+    "Metal DAO",
+    "metal-dao",
+    "Metal DAO uses MTL for governance, including decisions about the Metal Dollar stablecoin basket.",
+    "17.03",
+    "0.1173"
+  ],
+  "SPACE": [
+    "Spacecoin",
+    "spacecoin",
+    "Spacecoin is developing a satellite network to provide decentralized internet access.",
+    "0.02603",
+    "0.002619"
+  ],
+  "TRX": [
+    "TRON",
+    "tron",
+    "TRON is a blockchain for smart contracts and transfers of digital assets, including stablecoins.",
+    "0.4313",
+    "0.001804"
+  ]
+}
+
+def verified_markets(symbols):
+    slugs = [VERIFIED_PROFILES[s][1] for s in symbols if s in VERIFIED_PROFILES]
+    if not slugs:
+        return {}
+    try:
+        rows = coin_data("coins/markets?vs_currency=usd&ids=" + ",".join(slugs))
+        return {(row["symbol"].upper(), row["id"]): row for row in rows}
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        print("Using dated CoinGecko records:", error)
+        return {}
+
+
+def verified_profile(symbol, markets):
+    name, slug, summary, high, low = VERIFIED_PROFILES[symbol]
+    row = markets.get((symbol, slug), {})
+    source = "CoinGecko | checked 26 Nov 2026"
+    if row.get("ath") and row.get("atl") and row.get("last_updated"):
+        high, low = row["ath"], row["atl"]
+        source = "CoinGecko | " + row["last_updated"][:10]
+    amount_high = format(Decimal(str(high)), "f")
+    amount_low = format(Decimal(str(low)), "f")
+    body = [summary, f"All-time high: USD {amount_high}", f"All-time low: USD {amount_low}", source]
+    speech = (f"{summary} According to CoinGecko, as of {source.split('| ')[1].removeprefix('checked ')}, "
+              f"its recorded high was {amount_high} US dollars and its low was {amount_low} US dollars.")
+    print("Verified project:", symbol, name, amount_high, amount_low, source)
+    return body, speech
+
+
 def project_sections(instruments):
     symbols = set()
     for instrument in instruments:
@@ -128,15 +217,23 @@ def project_sections(instruments):
     known = {"DOGE": "dogecoin", "BTC": "bitcoin", "ETH": "ethereum",
              "SOL": "solana", "MERL": "merlin-chain"}
     candidates = {}
-    if symbols - known.keys():
+    markets = verified_markets(symbols)
+    if symbols - known.keys() - VERIFIED_PROFILES.keys():
         try:
             for coin in coin_data("coins/list"):
                 candidates.setdefault(coin["symbol"].upper(), []).append(coin["id"])
         except (OSError, ValueError, KeyError) as error:
             print("CoinGecko asset list unavailable:", error)
     for symbol in sorted(symbols):
-        body, speech = project_profile(symbol, known, candidates) or ([], symbol + " futures on BloFin.")
+        profile = verified_profile(symbol, markets) if symbol in VERIFIED_PROFILES else project_profile(symbol, known, candidates)
+        body, speech = profile or (["Project identity or historical records unverified."], f"{symbol} futures on BloFin.")
         prices = market_closes(symbol)
+        if prices and not profile:
+            start, finish = prices[0][1], prices[-1][1]
+            change = 100 * (finish / start - 1)
+            body.append(f"First / last close: {start:.7g} / {finish:.7g} USDT")
+            body.append(f"Change across plotted closes: {change:+.2f}%")
+            speech += f" Across the chart, the futures price changed by {change:.2f} percent."
         if not prices:
             body.append("5-minute price history unavailable")
         yield (symbol + " | Project profile", body, speech, {"prices": prices})
@@ -288,6 +385,8 @@ async def render():
     if not -14.5 <= float(after["input_i"]) <= -11.5 or not float(after["input_tp"]) < 0:
         raise RuntimeError("Final narration loudness or peak outside target")
     print("Rendered verified trades:",len(sample),"report bytes:",(OUT/"report.mp4").stat().st_size)
+    if os.environ.get("REPORT_EDITION"):
+        date += " | " + os.environ["REPORT_EDITION"]
     (OUT/"metadata.json").write_text(json.dumps({"title":"BloFin RSI Short Bot | Daily Trading Report | "+date,"description":"Historical results for RSI89_SHORT since 28 October 2026 only; excludes earlier strategies. Last 24-hour results are realized net of recorded fees. Not financial or any other advice. Capital is at risk.\nSource: https://github.com/Photofiver/Stock-finder","tags":["BloFin","RSI","trading bot","crypto trading","trading journal"]},indent=2))
 if __name__=="__main__":
     asyncio.run(render())
