@@ -122,14 +122,14 @@ def coin_data(path):
 VERIFIED_PROFILES = {
   "CFG": [
     "Centrifuge",
-    "centrifuge",
+    "centrifuge-2",
     "Centrifuge brings real-world assets such as credit funds onto blockchains as tokens.",
     "0.4004",
     "0.04401"
   ],
   "CLO": [
     "Clovis Network",
-    "clovis-network",
+    "yei-finance",
     "Clovis, originally Yei Finance, connects lending, swaps and liquidity across blockchains.",
     "0.9101",
     "0.02523"
@@ -157,14 +157,14 @@ VERIFIED_PROFILES = {
   ],
   "MTL": [
     "Metal DAO",
-    "metal-dao",
+    "metal",
     "Metal DAO uses MTL for governance, including decisions about the Metal Dollar stablecoin basket.",
     "17.03",
     "0.1173"
   ],
   "SPACE": [
     "Spacecoin",
-    "spacecoin",
+    "spacecoin-2",
     "Spacecoin is developing a satellite network to provide decentralized internet access.",
     "0.02603",
     "0.002619"
