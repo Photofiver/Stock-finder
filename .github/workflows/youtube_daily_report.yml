@@ -1,8 +1,5 @@
 name: BloFin daily YouTube report
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/youtube_daily_report.yml']
   workflow_dispatch:
   schedule:
     - cron: '17 4 * * *'
@@ -14,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   report:
-    if: vars.YOUTUBE_ENABLED == 'true' && (github.event_name != 'push' || github.event.head_commit.message == 'Publish November 26 verified project edition')
+    if: vars.YOUTUBE_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -26,13 +23,7 @@ jobs:
           for file in youtube_daily_render.py youtube_daily_upload.py; do
             gh api -H 'Accept: application/vnd.github.raw+json' "repos/$GITHUB_REPOSITORY/contents/$file?ref=$GITHUB_SHA" > "$file"
           done
-          state_ref=main
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
-            state_ref=16f605f3673e5d6237b389424e27106eda135322
-            sed -i 's/^    now=datetime.now(timezone.utc)$/    now=datetime.fromisoformat("2026-11-26T07:24:00+00:00")/' youtube_daily_render.py
-            echo 'REPORT_EDITION=Project data' >> "$GITHUB_ENV"
-          fi
-          gh api -H 'Accept: application/vnd.github.raw+json' "repos/$GITHUB_REPOSITORY/contents/blofin_live_state.json?ref=$state_ref" > blofin_live_state.json
+          gh api -H 'Accept: application/vnd.github.raw+json' "repos/$GITHUB_REPOSITORY/contents/blofin_live_state.json?ref=main" > blofin_live_state.json
           python3 -m py_compile youtube_daily_render.py youtube_daily_upload.py
       - name: Render MP4 without publishing
         run: |
@@ -46,13 +37,7 @@ jobs:
           /tmp/bootstrap/bin/uv pip install --python /tmp/youtube-video/bin/python pillow num2words kokoro-onnx soundfile imageio-ffmpeg google-api-python-client google-auth
           curl -fL --retry 2 -o kokoro-v1.0.onnx https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.onnx
           curl -fL --retry 2 -o voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin
-          set -o pipefail
-          /tmp/youtube-video/bin/python youtube_daily_render.py | tee /tmp/blofin-render.log
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
-            for symbol in CFG CLO CP ME MOVE MTL SPACE TRX; do
-              grep -F "Verified project: $symbol " /tmp/blofin-render.log
-            done
-          fi
+          /tmp/youtube-video/bin/python youtube_daily_render.py
       - name: Verify rendered file without storing artifacts
         run: |
           test -s youtube_output/report.mp4
@@ -60,7 +45,7 @@ jobs:
           "$FF" -v error -i youtube_output/report.mp4 -f null -
           echo 'MP4 decoding passed'
       - name: Upload to authorized YouTube channel
-        if: github.ref == 'refs/heads/main' && vars.YOUTUBE_ENABLED == 'true'
+        if: github.ref == 'refs/heads/main' && github.event_name != 'push' && vars.YOUTUBE_ENABLED == 'true'
         env:
           YOUTUBE_ENABLED: ${{ vars.YOUTUBE_ENABLED }}
           YOUTUBE_CHANNEL_ID: UCzcQGgJtUl7LWv0ktffMnFg
