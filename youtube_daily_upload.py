@@ -1,5 +1,5 @@
 """Upload only when the owner enables publishing and supplies OAuth credentials."""
-import json, os
+import json, os, sys
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from pathlib import Path
@@ -15,11 +15,14 @@ def main():
     if not all(os.environ.get(k) for k in fields):
         raise SystemExit("Missing YouTube OAuth secrets; no upload attempted")
     folder=Path("youtube_output")
-    meta=json.loads((folder/"metadata.json").read_text())
+    check_only = "--check-existing" in sys.argv
+    now = datetime.now(ZoneInfo("Europe/London"))
+    title = "BloFin RSI Short Bot | Daily Trading Report | " + now.strftime("%d %B %Y")
+    meta = {"title": title} if check_only else json.loads((folder/"metadata.json").read_text())
     privacy=os.environ.get("YOUTUBE_PRIVACY","private")
     if privacy not in ("private","unlisted","public"): raise ValueError("Invalid privacy")
     status={"privacyStatus":privacy,"selfDeclaredMadeForKids":False}
-    if privacy=="public" and os.environ.get("GITHUB_EVENT_NAME") == "schedule":
+    if privacy=="public":
         now=datetime.now(ZoneInfo("Europe/London"))
         target=now.replace(hour=6,minute=0,second=0,microsecond=0)
         if now < target:
@@ -37,9 +40,21 @@ def main():
     for item in recent.get("items", []):
         if item["snippet"]["title"] == meta["title"]:
             video_id = item["contentDetails"]["videoId"]
+            details = youtube.videos().list(part="status", id=video_id).execute().get("items", [])
+            current = details[0]["status"] if details else {}
+            visible = current.get("privacyStatus") == "public"
+            scheduled = current.get("privacyStatus") == "private" and current.get("publishAt") and datetime.fromisoformat(current["publishAt"].replace("Z", "+00:00")) == now.replace(hour=6,minute=0,second=0,microsecond=0)
+            if not (visible or scheduled):
+                raise SystemExit("Existing report is not public or scheduled for 06:00: https://youtu.be/" + video_id)
             print("Existing report: https://youtu.be/" + video_id)
+            print("YouTube status:", current.get("privacyStatus"), current.get("publishAt", ""))
+            folder.mkdir(exist_ok=True)
             (folder / "youtube_id.txt").write_text(video_id)
+            if check_only: print("REPORT_EXISTS=true")
             return
+    if check_only:
+        print("REPORT_EXISTS=false")
+        return
     req=youtube.videos().insert(part="snippet,status",body={"snippet":{"title":meta["title"],"description":meta["description"],"tags":meta["tags"],"categoryId":"22","defaultLanguage":"en"},"status":status},media_body=MediaFileUpload(str(folder/"report.mp4"),mimetype="video/mp4",resumable=True))
     response=None
     while response is None:
