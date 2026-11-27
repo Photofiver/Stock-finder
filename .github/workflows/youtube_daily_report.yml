@@ -1,9 +1,24 @@
 name: BloFin daily YouTube report
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/youtube_daily_report.yml']
   schedule:
     - cron: '17 4 * * *'
       timezone: 'Europe/London'
+    - cron: '37 4 * * *'
+      timezone: 'Europe/London'
+    - cron: '07 5 * * *'
+      timezone: 'Europe/London'
+    - cron: '27 5 * * *'
+      timezone: 'Europe/London'
+    - cron: '07 6 * * *'
+      timezone: 'Europe/London'
+  workflow_run:
+    workflows: ['BloFin LIVE signal watch']
+    types: [completed]
+    branches: [main]
 permissions:
   contents: read
 concurrency:
@@ -11,9 +26,16 @@ concurrency:
   cancel-in-progress: false
 jobs:
   report:
-    if: vars.YOUTUBE_ENABLED == 'true'
+    if: >-
+      vars.YOUTUBE_ENABLED == 'true' &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        (contains(github.event.workflow_run.created_at, 'T03:20:') ||
+         contains(github.event.workflow_run.created_at, 'T04:20:') ||
+         contains(github.event.workflow_run.created_at, 'T05:20:') ||
+         contains(github.event.workflow_run.created_at, 'T06:20:'))))
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 40
     steps:
       - name: Read source and current state
         env:
@@ -25,7 +47,23 @@ jobs:
           done
           gh api -H 'Accept: application/vnd.github.raw+json' "repos/$GITHUB_REPOSITORY/contents/blofin_live_state.json?ref=main" > blofin_live_state.json
           python3 -m py_compile youtube_daily_render.py youtube_daily_upload.py
+      - name: Set up Python and check today's publication
+        id: preflight
+        env:
+          YOUTUBE_ENABLED: ${{ vars.YOUTUBE_ENABLED }}
+          YOUTUBE_CHANNEL_ID: UCzcQGgJtUl7LWv0ktffMnFg
+          YOUTUBE_PRIVACY: public
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 -m venv /tmp/youtube-check
+          /tmp/youtube-check/bin/pip install google-api-python-client google-auth
+          /tmp/youtube-check/bin/python youtube_daily_upload.py --check-existing | tee /tmp/youtube-check.log
+          grep '^REPORT_EXISTS=' /tmp/youtube-check.log | tr '[:upper:]' '[:lower:]' >> "$GITHUB_OUTPUT"
       - name: Render MP4 without publishing
+        if: steps.preflight.outputs.report_exists == 'false'
         run: |
           set -eu
           if ! test -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf; then
@@ -39,17 +77,18 @@ jobs:
           curl -fL --retry 2 -o voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin
           /tmp/youtube-video/bin/python youtube_daily_render.py
       - name: Verify rendered file without storing artifacts
+        if: steps.preflight.outputs.report_exists == 'false'
         run: |
           test -s youtube_output/report.mp4
           FF=$(/tmp/youtube-video/bin/python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')
           "$FF" -v error -i youtube_output/report.mp4 -f null -
           echo 'MP4 decoding passed'
       - name: Upload to authorized YouTube channel
-        if: github.ref == 'refs/heads/main' && github.event_name != 'push' && vars.YOUTUBE_ENABLED == 'true'
+        if: github.ref == 'refs/heads/main' && steps.preflight.outputs.report_exists == 'false' && vars.YOUTUBE_ENABLED == 'true'
         env:
           YOUTUBE_ENABLED: ${{ vars.YOUTUBE_ENABLED }}
           YOUTUBE_CHANNEL_ID: UCzcQGgJtUl7LWv0ktffMnFg
-          YOUTUBE_PRIVACY: ${{ vars.YOUTUBE_PRIVACY || 'public' }}
+          YOUTUBE_PRIVACY: public
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
