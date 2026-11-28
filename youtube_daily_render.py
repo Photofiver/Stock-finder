@@ -624,7 +624,22 @@ def story_sections(daily, sample, opened, prior, weekly, date):
         add("Seven-day record",[f"{len(weekly)} closed",f"{weekrate:.1f}% wins"],f"Over the past seven days, {len(weekly)} trades closed. The observed win rate was {weekrate:.1f} percent.")
     rate_all=100*wins(sample)/len(sample)
     add("Overall record",[f"{len(sample)} closed",f"{rate_all:.1f}% wins"],f"The current strategy has {len(sample)} recorded closed trades since October twenty-eighth. Its observed win rate is {rate_all:.1f} percent.")
-    add("Tomorrow",["New events. New markets."],"Tomorrow, we will check whether the pattern holds or breaks. These are recorded results, not a forecast.")
+    # Final verdict uses actual realized net P&L, not win rate or price moves.
+    daily_net=sum((x[1] for x in daily),Decimal("0"))
+    if not daily:
+        verdict="NO CLOSED TRADES"
+        closing="No trades closed in the last twenty-four hours, so there is no realized trading result for this period."
+    elif daily_net>0:
+        verdict="NET PROFIT"
+        closing="And the final verdict? The last twenty-four hours finished in profit after trading fees."
+    elif daily_net<0:
+        verdict="NET LOSS"
+        closing="And the final verdict? The last twenty-four hours ended in a loss after trading fees."
+    else:
+        verdict="BREAK-EVEN"
+        closing="And the final verdict? The last twenty-four hours ended at break-even after trading fees."
+    add("Final verdict | "+verdict,[verdict,"Last 24 hours | Closed positions | After recorded fees"],closing+" These are realized trading results, not a forecast.")
+    print("Daily net verdict:",verdict,"Net P&L USDT:",daily_net)
     print("Daily markets covered:",",".join(sym for sym,_ in order),"Closed trades covered:",len(daily))
     for label,_,speech,_ in beats:
         print("SCRIPT:",label,"|",speech)
