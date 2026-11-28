@@ -5,16 +5,9 @@ on:
     branches: [main]
     paths: ['.github/workflows/youtube_daily_report.yml']
   schedule:
-    - cron: '17 4 * * *'
-      timezone: 'Europe/London'
-    - cron: '37 4 * * *'
-      timezone: 'Europe/London'
-    - cron: '07 5 * * *'
-      timezone: 'Europe/London'
-    - cron: '27 5 * * *'
-      timezone: 'Europe/London'
-    - cron: '07 6 * * *'
-      timezone: 'Europe/London'
+    # Prepare well before 06:00 London, including during British Summer Time.
+    - cron: '17 3,4,5,6 * * *'
+    - cron: '43 3,4,5 * * *'
   workflow_run:
     workflows: ['BloFin LIVE signal watch']
     types: [completed]
@@ -30,12 +23,16 @@ jobs:
       vars.YOUTUBE_ENABLED == 'true' &&
       (github.event_name != 'workflow_run' ||
        (github.event.workflow_run.conclusion == 'success' &&
-        (contains(github.event.workflow_run.created_at, 'T03:20:') ||
-         contains(github.event.workflow_run.created_at, 'T04:20:') ||
-         contains(github.event.workflow_run.created_at, 'T05:20:') ||
-         contains(github.event.workflow_run.created_at, 'T06:20:'))))
+        (contains(github.event.workflow_run.created_at, 'T03:0') ||
+         contains(github.event.workflow_run.created_at, 'T03:3') ||
+         contains(github.event.workflow_run.created_at, 'T04:0') ||
+         contains(github.event.workflow_run.created_at, 'T04:3') ||
+         contains(github.event.workflow_run.created_at, 'T05:0') ||
+         contains(github.event.workflow_run.created_at, 'T05:3') ||
+         contains(github.event.workflow_run.created_at, 'T06:0') ||
+         contains(github.event.workflow_run.created_at, 'T06:3'))))
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - name: Read source and current state
         env:
