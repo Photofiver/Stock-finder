@@ -125,6 +125,10 @@ def coin_data(path):
 # CoinGecko USD records checked on 26 November 2026. Slugs identify the
 # source pages. Dated observations remain usable during public API throttling.
 VERIFIED_PROFILES = {
+  # Exact BloFin contract identities checked 28 Nov 2026 against CoinGecko.
+  "ACE": ["Fusionist", "endurance", "Fusionist develops a blockchain-based video game and its Endurance network.", "16.73", "0.05705"],
+  "SKY": ["Sky", "sky", "Sky is a decentralised finance protocol. SKY holders vote on its governance.", "0.1009", "0.03583"],
+  "STABLE": ["Stable", "stable-2", "Stable is a blockchain designed for stablecoin payments and settlement.", "0.04324", "0.009221"],
   "CFG": [
     "Centrifuge",
     "centrifuge-2",
@@ -198,7 +202,7 @@ def verified_markets(symbols):
 def verified_profile(symbol, markets):
     name, slug, summary, high, low = VERIFIED_PROFILES[symbol]
     row = markets.get((symbol, slug), {})
-    source = "CoinGecko | checked 26 Nov 2026"
+    source = "CoinGecko | checked " + ("28 Nov 2026" if symbol in {"ACE","SKY","STABLE"} else "26 Nov 2026")
     if row.get("ath") and row.get("atl") and row.get("last_updated"):
         high, low = row["ath"], row["atl"]
         source = "CoinGecko | " + row["last_updated"][:10]
@@ -540,7 +544,8 @@ def story_sections(daily, sample, opened, prior, weekly, date):
                 add(f"{sym} | {result}",[result+" after fees"]+([f"Coin move {change:+.2f}%"] if change is not None else []),spoken,replay or chart)
             records=[b for b in body if b.startswith(("All-time high","All-time low"))]
             if records:
-                add(f"{sym} | Price history",records+["Source: CoinGecko"],f"These are {sym}'s verified all-time high and low prices. They are historical market records.",chart)
+                source=next((b for b in body if b.startswith(("CoinGecko","Source:"))),"Source: CoinGecko")
+                add(f"{sym} | Price history",records+[source],f"These are {sym}'s recorded all-time high and low prices. They are historical market records.",chart)
             if market_prices:
                 market_change=(market_prices[-1][1]/market_prices[0][1]-1)*100
                 add(f"{sym} | Market today",[f"{market_change:+.2f}%","Available 5-minute closes"],f"Across the available daily candles, {sym} {move_words(market_change)}. This is the wider market move, not an individual trade.",chart)
@@ -563,6 +568,8 @@ def story_sections(daily, sample, opened, prior, weekly, date):
     add("Overall record",[f"{len(sample)} closed",f"{rate_all:.1f}% wins"],f"The current strategy has {len(sample)} recorded closed trades since October twenty-eighth. Its observed win rate is {rate_all:.1f} percent.")
     add("Tomorrow",["New events. New markets."],"Tomorrow brings another market journal. We will see which projects appear next, and what their prices actually do. Historical results are not a forecast.")
     print("Daily markets covered:",",".join(sym for sym,_ in order),"Closed trades covered:",len(daily))
+    for label,_,speech,_ in beats:
+        print("SCRIPT:",label,"|",speech)
     return title,thumb,beats
 
 
