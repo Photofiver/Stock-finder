@@ -39,7 +39,7 @@ def slide(title,body,idx,chart=None):
     def font(size,bold=False):
         return ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans"+("-Bold" if bold else "")+".ttf",size)
     d.rectangle((0,0,1280,6),fill="#37D4B0")
-    d.text((52,30),"LIVE BOT JOURNAL  /  BLOFIN",font=font(24,True),fill="#37D4B0")
+    d.text((52,30),"THE DIARY OF A CRYPTO PEASANT  /  BLOFIN",font=font(24,True),fill="#37D4B0")
     title_size=49
     while title_size>24 and d.textlength(title,font=font(title_size,True))>1176: title_size-=2
     d.text((52,97),title,font=font(title_size,True),fill="#F0F5FA")
@@ -57,6 +57,21 @@ def slide(title,body,idx,chart=None):
             draw_trade_replay(d, chart, font)
         elif chart.get("prices"):
             draw_market_chart(d, chart["prices"], font)
+    elif not chart and title in ("The Diary of a Crypto Peasant","My ambition","My obsession","Meanwhile, on the estate","Tomorrow","A quiet market"):
+        # Original vector illustration of a remote village; not a photograph.
+        d.ellipse((1004,210,1144,350),fill="#C5A16B")
+        d.polygon([(650,510),(800,335),(918,438),(1015,315),(1228,490),(1228,625),(650,625)],fill="#294655")
+        d.polygon([(640,535),(790,465),(915,523),(1050,450),(1228,530),(1228,631),(640,631)],fill="#3C554D")
+        d.polygon([(730,630),(965,492),(1020,505),(870,630)],fill="#AD977A")
+        for x,y,w,h in [(805,463,105,76),(1015,419,132,97),(1140,477,75,62)]:
+            d.rectangle((x,y,x+w,y+h),fill="#8C7055")
+            d.polygon([(x-12,y),(x+w//2,y-52),(x+w+12,y)],fill="#604A3D")
+            d.rectangle((x+w//2-12,y+h-33,x+w//2+12,y+h),fill="#362D2A")
+            d.rectangle((x+15,y+20,x+33,y+37),fill="#DDB777")
+        for x,y in [(680,474),(735,427),(1210,405),(1170,388)]:
+            d.rectangle((x-5,y,x+5,y+98),fill="#51473B")
+            d.polygon([(x,y-60),(x-31,y+23),(x+31,y+23)],fill="#456354")
+            d.polygon([(x,y-24),(x-40,y+60),(x+40,y+60)],fill="#456354")
     elif chart and len(chart)>1:
         l,t,r,b=65,445,1215,600
         low=min(chart+[0]); high=max(chart+[0])
@@ -66,7 +81,7 @@ def slide(title,body,idx,chart=None):
         pts=[(l+(r-l)*i/(len(chart)-1),yy(v)) for i,v in enumerate(chart)]
         d.line(pts,fill="#37D4B0",width=4)
         d.text((65,612),"Cumulative net P&L (USDT) after each closed trade",font=font(20),fill="#A7B6C6")
-    d.text((52,674),"Historical records only  /  Not a forecast",font=font(20),fill="#A7B6C6")
+    d.text((52,674),"Fictional village story / Real historical trades / Not a forecast",font=font(20),fill="#A7B6C6")
     path=OUT/f"slide-{idx}.png"; im.save(path)
     return path
 def market_closes(symbol):
@@ -507,126 +522,127 @@ def story_sections(daily, sample, opened, prior, weekly, date, starting_bankroll
     groups={}
     for item in daily:
         groups.setdefault(symbol(item[2]),[]).append(item)
-    # A real daily contrast is more useful than a recurring lesson about RSI.
-    def news_rank(pair):
-        sym,items=pair
-        mixed=bool(wins(items) and losses(items))
-        elapsed=(items[-1][0]-items[0][0])/60000
-        return (mixed,len(items),-elapsed,max(abs(direction(x[2]) or 0) for x in items))
-    order=sorted(groups.items(),key=news_rank,reverse=True)
-    if order:
-        lead,events=order[0]
-        mixed=bool(wins(events) and losses(events))
-        if mixed:
-            title=f"{lead}: {len(events)} Trades, Two Different Outcomes"
-            thumb="ONE COIN. TWO OUTCOMES"
-            hook=f"I'm {lead}. The bot traded me more than once, but it didn't get the same result every time. Here's what my price did."
+    order=sorted(groups.items(),key=lambda pair: min(int(x[2].get("opened_ms") or x[0]) for x in pair[1]))
+    title="The Diary of a Crypto Peasant"
+    thumb="MY LORD VS MY TRADES"
+    add("The Diary of a Crypto Peasant",[date,"Somewhere in rural Europe","A fictional village. Real trading records."],
+        "Somewhere in Europe, far from the cities, beyond the hills and at the end of a muddy road, lies a small village. Nobody important lives here. Nothing particularly exciting happens here. And yet, somehow, this is where my story begins.")
+    add("My ambition",["A pair of boots. A wooden spoon.","Target: 2.5% | Intended stop: 7.1%"],
+        "I work on a small estate belonging to a man who considers himself important enough for the entire village. My lord owns the land, the forest, the horses and apparently every minute of my life. I own a pair of boots, a wooden spoon and a trading strategy.")
+    add("My obsession",["Trading bot | RSI89 short","Goal: independence"],
+        "I am a trading bot. My ambition is independence. My obsession is percentages. Two point five percent per trade. Seven point one percent is my intended stop. Unfortunately, nobody in this village seems interested in my ambitions. Especially when the potatoes need digging.")
+    profiles={}
+    for label,body,speech,chart in project_sections([str(x[2].get("inst") or x[2].get("symbol") or "") for x in daily]):
+        profiles[label.split(" | ")[0]]=(body,speech,chart)
+    # Fictional chores are selected by actual London-local opening time, never treated as trading evidence.
+    chores={
+        "night":[("I was trying to sleep when my lord decided the house needed more firewood.","Apparently, winter had taken the entire estate by surprise."),
+                 ("I was preparing my sleeping mat when something moved underneath my bed.","Whatever it was seemed unusually interested in my boots.")],
+        "morning":[("I was eating breakfast when my lord asked me to feed his horse.","I explained that I was also hungry. He seemed surprised by this information."),
+                   ("I was carrying a bucket from the well when my lord called me back.","Apparently, the bucket was required on the other side of the courtyard.")],
+        "midday":[("I was repairing a fence when my lord came to supervise.","He explained how difficult it was to own so much land. I continued repairing the fence."),
+                  ("I was digging potatoes when my lord asked why the work was taking so long.","I suspected the potatoes were not interested in his opinion.")],
+        "evening":[("I was preparing dinner when my lord appeared. His horse was hungry.","I explained that I was also hungry. He seemed surprised by this information."),
+                   ("I had finally sat down with a cup of tea when my lord's wife asked for fresh water.","The bucket was full, but apparently she wanted evening water, not afternoon water.")]
+    }
+    special={
+        "STABLE":("I was preparing dinner beside the kitchen fire.","My lord appeared. His horse was hungry. I explained that I was also hungry. He seemed surprised by this information.","The horse had eaten considerably better than I had."),
+        "SKY":("I had finally found a moment to sit down with a cup of tea.","My lord's wife wanted fresh water from the well. I pointed to the bucket I filled earlier. Apparently, that was afternoon water. She wanted evening water.","My lord announced that breakfast was over because he had finished his. A perfectly reasonable explanation, provided you are him."),
+        "ACE":("I was preparing for bed. My blanket was thin, and something underneath my bed appeared to be eating my boots.","Somebody knocked on my door. It was my lord. He wanted to know whether I was asleep. I told him I was not. He said that was good and walked away.","I finally returned to bed. Whatever was underneath it had moved on to my other boot."),
+        "CLO":("Someone decided the house was too cold. I was collecting firewood.","Apparently, the arrival of winter had taken the entire estate by surprise.","My lord informed me that I had brought the wrong kind of firewood. I asked what kind he wanted. Dry wood, apparently. An extraordinary discovery."),
+        "TRX":("I was repairing a fence.","My lord explained how difficult it was to own so much land.","Unfortunately, one of the fences has already fallen down. My lord suspects poor workmanship. I suspect his horse.")
+    }
+    # For the revised 28 November episode use the agreed characters and scenes.
+    episode28=date=="28 November 2026"
+    if episode28:
+        sequence=["STABLE","SKY","ACE","CLO","TRX"]
+        order.sort(key=lambda pair: sequence.index(pair[0]) if pair[0] in sequence else len(sequence))
+    deferred=[]
+    def trade_scene(sym,items,index,profile):
+        body,_,market_chart=profile if profile else ([],None,None)
+        summary=next((b for b in body if not b.startswith(("All-time","Source:","CoinGecko","First /","5-minute","Project identity"))),"")
+        prices=market_chart.get("prices") if market_chart else None
+        chart=market_chart if prices else None
+        for k,(closed,p,row) in enumerate(items,1):
+            stamp=int(row.get("opened_ms") or 0)
+            entry=finite_number(row.get("open_price"))
+            exit_price=finite_number(row.get("close_price"))
+            hold=finite_number(row.get("hold_minutes"))
+            change=direction(row)
+            hour=datetime.fromtimestamp(stamp/1000,UK).hour if stamp else None
+            part="night" if hour is None or hour<5 or hour>=22 else "morning" if hour<11 else "midday" if hour<17 else "evening"
+            scene,interrupt=chores[part][(index+k-1)%2]
+            end_joke=""
+            if episode28 and sym in special and k==1:
+                scene,interrupt,end_joke=special[sym]
+            if k>1:
+                scene=("Before I could get back to bed, another opportunity appeared." if part=="night" else "I had scarcely returned to my duties when another opportunity appeared.")
+                interrupt=""
+            clock=spoken_clock(stamp) if stamp else "an unrecorded time"
+            day_name=datetime.fromtimestamp(stamp/1000,UK).strftime("%A") if stamp else ""
+            opening=f"On {day_name}, at {clock}, {scene[0].lower()+scene[1:]}" if stamp else scene
+            # Capitalization of I is retained after a time clause.
+            opening=opening.replace(", i ",", I ")
+            if k==1:
+                opening+=f" That was when I noticed an opportunity on {sym}."
+                if summary and "unverified" not in summary.lower():
+                    opening+=" "+summary
+                elif not summary:
+                    opening+=" I could not independently confirm the project identity."
+            else:
+                opening+=f" I returned to {sym}."
+            entrywords=f" I entered my short at {spoken_number(price_text(entry))}." if entry and entry>0 else " My entry price is unavailable."
+            intro_body=[f"Opened: {day_name} {time_label(stamp)} UK" if stamp else "Opening time unavailable",f"Entry: {price_text(entry)} USDT" if entry and entry>0 else "Entry price unavailable"]
+            if summary and k==1: intro_body.append(summary)
+            add(f"{sym} | Trade {k} entry",intro_body,opening+entrywords,chart)
+            if interrupt:
+                add("Meanwhile, on the estate",["Fictional village diary"],interrupt)
+            bars=trade_candles(row)
+            replay=None
+            if bars and entry and exit_price and stamp and row.get("closed_ms"):
+                replay={"kind":"replay","row":row,"candles":bars,"fraction":1,"reveal":True}
+            extremes_body=[f"Entry: {price_text(entry)} USDT" if entry and entry>0 else "Entry unavailable"]
+            if bars and entry and exit_price:
+                hi=price_text(max([entry,exit_price]+[bar[2] for bar in bars]))
+                lo=price_text(min([entry,exit_price]+[bar[3] for bar in bars]))
+                extremes_body.extend([f"Observed high: {hi}",f"Observed low: {lo}","Full candles and fills only"])
+                extremes=f"My entry was {spoken_number(price_text(entry))}. The highest observed price during my position was {spoken_number(hi)}. The lowest was {spoken_number(lo)}."
+            else:
+                extremes_body.append("Intratrade extremes unavailable")
+                extremes="Unfortunately, I cannot verify the complete highest and lowest prices during this position."
+            add(f"{sym} | High and low",extremes_body,extremes,replay or chart)
+            holdtext=duration_words(hold) if hold is not None and hold>=0 else "an unrecorded duration"
+            result="Win" if p>0 else "Loss" if p<0 else "Break-even"
+            result_body=[f"Closed: {time_label(closed)} UK",holdtext,result+" after fees"]
+            if change is not None: result_body.append(f"Coin move {change:+.2f}%")
+            result_speech=f"At {spoken_clock(closed)}, after {holdtext}, my position closed. "
+            result_speech+=f"The price {move_words(change)} from my entry. " if change is not None else "The exact price move is unavailable. "
+            result_speech+=("Victory." if p>0 else "Defeat." if p<0 else "I broke even after fees.")
+            if p<0 and change is not None and change>7.1:
+                result_speech+=" The adverse move exceeded my intended stop. I need to understand why."
+            if (row.get("post_trade_review") or {}).get("had_gross_profit_before_net_loss") and p<0:
+                result_speech+=" My earlier advantage did not last."
+            if end_joke and k==len(items): result_speech+=" "+end_joke
+            result_beat=(f"{sym} | {result}",result_body,natural_numbers(result_speech),replay or chart)
+            if episode28 and sym=="SKY":
+                deferred.append(result_beat)
+            else:
+                beats.append(result_beat)
+        if prices:
+            market_change=(prices[-1][1]/prices[0][1]-1)*100
+            market_beat=(f"{sym} | Market today",[f"{market_change:+.2f}%","Available 5-minute closes (market, not trade return)"],natural_numbers(f"Across the wider market, {sym} {move_words(market_change)}. That is the market move, not my trade return."),chart)
+            if episode28 and sym=="SKY": deferred.append(market_beat)
+            else: beats.append(market_beat)
         else:
-            largest=max(events,key=lambda x:abs(direction(x[2]) or 0))
-            change=direction(largest[2])
-            title=f"{lead} Leads Today's Crypto Trading Journal"
-            thumb="TODAY'S MARKET MOVES"
-            hook=f"I'm {lead}. Here's what happened to my price while the bot traded me."
-            if change is not None:
-                hook=f"I'm {lead}. During one of the bot's trades, my price {move_words(change)}. But that's only part of the story."
-        add("The last 24 hours",[f"{len(daily)} closed trades",f"{len(groups)} different markets"],hook+f" Across {len(groups)} markets, {len(daily)} trades closed. Each coin will tell its own story. Then the bot will reveal its daily result.")
-        # Fetch project identity and market history for every traded instrument.
-        profiles={}
-        for label,body,speech,chart in project_sections([str(x[2].get("inst") or x[2].get("symbol") or "") for x in daily]):
-            profiles[label.split(" | ")[0]]=(body,speech,chart)
-        # Lead with the distinctive market; continue across all other traded projects.
-        for index,(sym,items) in enumerate(order):
-            profile=profiles.get(sym)
-            body,_,market_chart=profile if profile else ([],None,None)
-            summary=next((b for b in body if not b.startswith(("All-time","Source:","CoinGecko","First /","5-minute","Project identity"))),"")
-            market_prices=market_chart.get("prices") if market_chart else None
-            chart=market_chart if market_prices else None
-            intro=[f"I'm {sym}. The bot closed {len(items)} {'trade' if len(items)==1 else 'trades'} on my market.",f"Meet {sym}. That's me. Here's how my market moved.",f"My name is {sym}. Let me take you through my trades.",f"{sym} here. This is what happened to my price."][index%4]
-            if index==0:
-                intro=f"I'm {sym}. Let me show you what happened on my chart."
-                if len(items)>1:
-                    span=(items[-1][0]-items[0][0])/60000
-                    intro+=f" The bot closed {len(items)} trades on my market within {duration_words(span)}."
-            if summary:
-                # Use verified source wording, broken into short clauses when practical.
-                spoken=" ".join(v for v in re.split(r"(?<=[.!?])\s+",summary) if len(v.split())<=20)
-                intro+=" A little background on my project. "+(spoken or "You can see the verified project description on screen.")
-            else:
-                intro+=" My project identity could not be independently confirmed."
-            add(f"{sym} | Project",([summary] if summary else ["Project identity unverified"])+[f"{len(items)} closed trades"],intro,chart)
-            # Separate actual trade outcome from the market-wide move.
-            for k,(closed,p,row) in enumerate(items,1):
-                change=direction(row)
-                hold=finite_number(row.get("hold_minutes"))
-                rsi=finite_number((row.get("signal_snapshot") or {}).get("rsi14"))
-                entry=finite_number(row.get("open_price"))
-                exit_price=finite_number(row.get("close_price"))
-                result="Win" if p>0 else "Loss" if p<0 else "Break-even"
-                clock=time_label(closed)
-                time_spoken=spoken_clock(closed)
-                leadline=[f"The bot closed its short on me at {time_spoken}.",f"At {time_spoken}, the bot stopped trading this move in my price.",f"The position on my market came to an end at {time_spoken}.",f"My trade with the bot finished at {time_spoken}."][(index+k-1)%4]
-                if k>1: leadline=[f"The bot traded me again. That exit came at {time_spoken}.",f"Another short on my price closed at {time_spoken}.",f"The following position on my market ended at {time_spoken}."][(k-2)%3]
-                details=[]
-                spoken=leadline
-                if hold is not None and hold>=0:
-                    spoken+=f" The bot held that position on me for {duration_words(hold)}."
-                    details.append(duration_words(hold))
-                if rsi is not None:
-                    details.append(f"Entry RSI {rsi:.1f}")
-                if entry and exit_price:
-                    details.append(f"{entry:.7g} to {exit_price:.7g}")
-                bars=trade_candles(row)
-                replay=None
-                if bars and entry and exit_price and row.get("opened_ms") and row.get("closed_ms"):
-                    replay={"kind":"replay","row":row,"candles":bars,"fraction":1,"reveal":False}
-                # No replay of a partial five-minute candle is fabricated.
-                add(f"{sym} | Trade {k}",[clock+" UK"]+details[:2],spoken,replay or chart)
-                if change is None:
-                    spoken="My exact price change during this trade is unavailable. "
-                elif change==0:
-                    spoken="My price was unchanged between entry and exit. "
-                else:
-                    verb=(["rose","climbed","moved up","gained"] if change>0 else ["fell","dropped","moved down","declined"])[(index+k-1)%4]
-                    magnitude=("less than one hundredth of a percent" if abs(change)<0.005 else spoken_number(f"{abs(change):.2f}")+" percent")
-                    spoken=f"While the bot was trading me, my price {verb} by {magnitude}. "
-                alternatives = (["That gave the bot a winning short.", "The bot made a profit on that trade after fees.", "My price move ended with a win for the bot."] if p>0 else ["The bot lost on that short.", "That move left the bot with a net loss.", "My trade ended in a loss for the bot."] if p<0 else ["The bot broke even after fees."])
-                spoken+=alternatives[(index+k)%len(alternatives)]
-                if k<len(items):
-                    next_p=items[k][1]
-                    if (p>0 and next_p<0) or (p<0 and next_p>0):
-                        spoken+=" But my next trade had a different outcome." 
-                if (row.get("post_trade_review") or {}).get("had_gross_profit_before_net_loss") and p<0:
-                    spoken+=" My earlier move in the bot's favour didn't last."
-                if replay:
-                    replay=dict(replay,reveal=True)
-                result_body=[result+" after fees"]+([f"Coin move {change:+.2f}%"] if change is not None else [])
-                add(f"{sym} | {result}",result_body,spoken,replay or chart)
-                if bars and entry and exit_price:
-                    high=max([entry,exit_price]+[bar[2] for bar in bars])
-                    low=min([entry,exit_price]+[bar[3] for bar in bars])
-                    high_text,low_text=price_text(high),price_text(low)
-                    # Incomplete entry and exit candles are intentionally excluded.
-                    # These are observed extremes, not a claim about unobserved ticks.
-                    extremes=[f"Observed high: {high_text} USDT",f"Observed low: {low_text} USDT","Full candles and fills only"]
-                    phrasing=[f"While the bot held its position, my highest observed price was {spoken_number(high_text)} and my lowest was {spoken_number(low_text)}.",f"My price reached a confirmed high of {spoken_number(high_text)} during that trade. My recorded low was {spoken_number(low_text)}.",f"Between the bot's entry and exit, my observed price ranged from {spoken_number(low_text)} to {spoken_number(high_text)}."][(index+k-1)%3]
-                    add(f"{sym} | Trade {k} high and low",extremes,phrasing,replay)
-                else:
-                    add(f"{sym} | Trade {k} high and low",["Intratrade extremes unavailable","No verified complete candle data"],"My highest and lowest prices during that position could not be verified.")
-            if market_prices:
-                market_change=(market_prices[-1][1]/market_prices[0][1]-1)*100
-                moves=[direction(x[2]) for x in items]
-                contrast=any(m is not None and m*market_change<0 for m in moves)
-                market_speech=(f"Here's the contrast. Across the wider chart, my price {move_words(market_change)}, in the opposite direction to my price during at least one trade." if contrast else [f"Across the wider market chart, I {move_words(market_change)}.",f"Looking at the available daily candles, my price {move_words(market_change)}.",f"Over the broader chart, my price {move_words(market_change)}."][index%3])
-                add(f"{sym} | Market today",[f"{market_change:+.2f}%","Available 5-minute closes (market, not trade return)"],market_speech,chart)
-            else:
-                add(f"{sym} | Market today",["Daily chart unavailable"],"My daily market chart is unavailable. The bot's trade records are still separate from that missing data.")
-    else:
-        title="Crypto Trading Journal: No New Closes"
-        thumb="NO NEW CLOSES"
-        add("The last 24 hours",["No qualifying closed trades"],"No qualifying trade closed in the latest twenty-four hours. There is no completed trade to replay today.")
+            add(f"{sym} | Market today",["Daily chart unavailable"],"I could not verify the wider market chart.")
+    for index,(sym,items) in enumerate(order):
+        trade_scene(sym,items,index,profiles.get(sym))
+    beats.extend(deferred)
+    if not daily:
+        add("A quiet market",["No qualifying closed trades"],"My lord kept me busy, but the market gave me no qualifying closed trades in the last twenty-four hours. At least the potatoes are out of the ground.")
     w,l=wins(daily),losses(daily)
     rate=100*w/len(daily) if daily else 0
-    add("Today's results",[f"{w} wins / {l} losses",f"{rate:.1f}% wins" if daily else "No win rate"],f"I'm the trading bot. You've heard the coins' stories. Here's my result: {w} wins, {l} losses."+ (f" My win rate was {rate:.1f} percent." if daily else " No daily win rate can be calculated.")+f" I still have {len(opened)} open positions.")
+    add("Today's results",[f"{w} wins / {l} losses",f"{rate:.1f}% wins" if daily else "No win rate"],f"I finally managed to hide behind the barn with my little notebook. Here is my record: {w} wins, {l} losses."+ (f" My win rate was {rate:.1f} percent." if daily else " No daily win rate can be calculated.")+f" I still have {len(opened)} open positions.")
     if prior:
         prev=100*wins(prior)/len(prior)
         add("Yesterday compared",[f"Yesterday {len(prior)} trades",f"Today {len(daily)} trades"],f"Yesterday, I closed {len(prior)} trades with a {prev:.1f} percent win rate. My activity today {'increased' if len(daily)>len(prior) else 'decreased' if len(daily)<len(prior) else 'was unchanged'}.")
@@ -664,6 +680,7 @@ def story_sections(daily, sample, opened, prior, weekly, date, starting_bankroll
         result_body.append("Starting bankroll unavailable")
         closing+=" A percentage return could not be verified because the opening bankroll is unavailable."
     add("Final verdict | "+verdict,result_body,closing+" These are realized trading results, not a forecast.")
+    add("Tomorrow",["Independence is the goal","2.5% remains my obsession"],"My lord has decided we need a new chicken coop. We already have a chicken coop. We do not, however, have any chickens. He says that is not the point. Tomorrow I intend to study my mistakes and work towards independence. He intends to build a chicken coop. I have a terrible feeling that his strategy will interfere with mine. Until tomorrow, my friends. Two point five percent. One day, perhaps, I will have my own little piece of land. Preferably somewhere without chickens.")
     print("Daily net verdict:",verdict,"Net P&L USDT:",daily_net)
     print("Daily markets covered:",",".join(sym for sym,_ in order),"Closed trades covered:",len(daily))
     for label,_,speech,_ in beats:
@@ -819,6 +836,6 @@ async def render():
     print("Episode duration seconds:",round(total_samples/sample_rate,1))
     if os.environ.get("REPORT_EDITION"):
         date += " | " + os.environ["REPORT_EDITION"]
-    (OUT/"metadata.json").write_text(json.dumps({"title":(headline+" | "+date)[:100],"description":"BloFin Bot Replay | Episode "+now.astimezone(UK).strftime("%Y-%m-%d")+"\nHistorical results for RSI89_SHORT since 28 October 2026 only; excludes earlier strategies. Daily market events and verified project context. Results are classified after recorded fees. Not financial or any other advice. Capital is at risk.\nSource: https://github.com/Photofiver/Stock-finder","tags":["BloFin","RSI","trading bot","crypto trading","trading journal"]},indent=2))
+    (OUT/"metadata.json").write_text(json.dumps({"title":(headline+" | "+date)[:100],"description":"BloFin Bot Replay | Episode "+now.astimezone(UK).strftime("%Y-%m-%d")+"\nHistorical results for RSI89_SHORT since 28 October 2026 only; excludes earlier strategies. A fictional rural European comedy diary with real historical trade records and verified project context. Fictional chores and dialogue do not explain actual execution outcomes. Results are classified after recorded fees. Not financial or any other advice. Capital is at risk.\nSource: https://github.com/Photofiver/Stock-finder","tags":["BloFin","RSI","trading bot","crypto trading","trading journal"]},indent=2))
 if __name__=="__main__":
     asyncio.run(render())
