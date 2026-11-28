@@ -61,7 +61,7 @@ jobs:
           /tmp/youtube-check/bin/python youtube_daily_upload.py --check-existing | tee /tmp/youtube-check.log
           grep '^REPORT_EXISTS=' /tmp/youtube-check.log | tr '[:upper:]' '[:lower:]' >> "$GITHUB_OUTPUT"
       - name: Render MP4 without publishing
-        if: steps.preflight.outputs.report_exists == 'false'
+        if: steps.preflight.outputs.report_exists == 'false' || github.event_name == 'push'
         run: |
           set -eu
           if ! test -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf; then
@@ -75,7 +75,7 @@ jobs:
           curl -fL --retry 2 -o voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin
           /tmp/youtube-video/bin/python youtube_daily_render.py
       - name: Verify rendered file without storing artifacts
-        if: steps.preflight.outputs.report_exists == 'false'
+        if: steps.preflight.outputs.report_exists == 'false' || github.event_name == 'push'
         run: |
           test -s youtube_output/report.mp4
           FF=$(/tmp/youtube-video/bin/python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')
