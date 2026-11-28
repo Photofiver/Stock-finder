@@ -228,12 +228,13 @@ def project_sections(instruments):
         profile = verified_profile(symbol, markets) if symbol in VERIFIED_PROFILES else project_profile(symbol, known, candidates)
         body, speech = profile or (["Project identity or historical records unverified."], f"{symbol} futures on BloFin.")
         prices = market_closes(symbol)
-        if prices and not profile:
+        if prices:
             start, finish = prices[0][1], prices[-1][1]
             change = 100 * (finish / start - 1)
-            body.append(f"First / last close: {start:.7g} / {finish:.7g} USDT")
-            body.append(f"Change across plotted closes: {change:+.2f}%")
-            speech += f" Across the chart, the futures price changed by {change:.2f} percent."
+            if not profile:
+                body.append(f"First / last close: {start:.7g} / {finish:.7g} USDT")
+            direction = "rose" if change > 0 else "fell" if change < 0 else "was unchanged"
+            speech += (f" On BloFin, the price {direction}" + (f" by {abs(change):.2f} percent" if change else "") + " across the available five minute closes. This is the market move, not the bot's trade return.")
         if not prices:
             body.append("5-minute price history unavailable")
         yield (symbol + " | Project profile", body, speech, {"prices": prices})
@@ -313,13 +314,40 @@ async def render():
     date=now.astimezone(UK).strftime("%d %B %Y")
     day=now.astimezone(UK).day
     datewords=words(day,to="ordinal")+" of "+now.astimezone(UK).strftime("%B")+", "+words(now.astimezone(UK).year)
+    daily_wins = sum(x[1]>0 for x in daily)
+    daily_losses = sum(x[1]<0 for x in daily)
+    prior = [x for x in sample if (now-timedelta(hours=48)).timestamp()*1000 <= x[0] < (now-timedelta(hours=24)).timestamp()*1000]
+    previous_pnl = sum((x[1] for x in prior), Decimal(0))
+    weekly = [x for x in sample if x[0] >= (now-timedelta(days=7)).timestamp()*1000]
+    weekly_pnl = sum((x[1] for x in weekly), Decimal(0))
+    def trade_symbol(row):
+        return str(row.get("inst") or row.get("instId") or row.get("symbol") or "Unspecified instrument")
+    hook = (f"The bot closed {words(len(daily))} trades, with {words(daily_wins)} wins and {words(daily_losses)} losses. {pnl_text(p24)}." if daily else "No qualifying trades closed in the last twenty four hours. Today we look at existing exposure and the seven day record.")
     sections=[
+      ("Today's trading headline", [f"{date} | Data as of {now.astimezone(UK):%H:%M} UK", f"{p24:+.4f} USDT | {len(daily)} closed trades", f"{daily_wins} wins / {daily_losses} losses"], hook + " Here is what changed and what the actual trades show. This is not financial advice.",None),
       ("Important notice",["This is not financial advice or any other advice.","Historical trading results are not a prediction."],"This is not financial advice, trading advice, or any other advice. This video is for informational purposes only. Past performance does not guarantee future results.",None),
       ("Daily trading report",[f"Reporting date: {now.astimezone(UK):%d/%m/%Y}","Live RSI short strategy. Actual recorded trades."],"Welcome to the daily crypto trading bot report for the "+datewords+". We review actual recorded results for the current R S I short strategy on BloFin, including the last twenty four hours.",None),
       ("Trading capital",[f"Current operating capital: {operational:.2f} USDT","10 consecutive wins: add up to 10 USDT","Current capital limit: 70 USDT"],"My current operating capital is "+money(operational)+". After each streak of ten consecutive winning trades, the bot adds up to ten Tether to the trading capital, subject to the current limit of seventy Tether.",None),
       ("Last 24 hours",[f"Net P&L: {p24:+.4f} USDT",f"{len(daily)} closed trades",f"{sum(x[1]>0 for x in daily)} wins, {sum(x[1]<0 for x in daily)} losses"],"The current strategy recorded "+words(len(daily))+" closed trades in the last twenty four hours. "+pnl_text(p24)+". These results include the recorded trading fees.",None),
       ("Open positions",[f"{len(opened)} open positions","; ".join(opened) if opened else "No open positions","Unrealized results are excluded from realized profit."],"There are currently "+words(len(opened))+" open positions across the bot. Unrealized results are not included in the realized profit. Their outcomes are not yet known.",None),
     ]
+    comparison = p24 - previous_pnl
+    sections.append(("What changed since yesterday", [f"Previous 24h: {previous_pnl:+.4f} USDT", f"Latest 24h: {p24:+.4f} USDT", f"Difference: {comparison:+.4f} USDT"], "The preceding twenty four hour window recorded " + money(previous_pnl) + " net. Today's window is " + ("higher by " if comparison >= 0 else "lower by ") + money(abs(comparison)) + ". These are realized results, not price changes.",None))
+    if daily:
+        best = max(daily,key=lambda x:x[1])
+        worst = min(daily,key=lambda x:x[1])
+        grouped = {}
+        for _,p,row in daily:
+            symbol = trade_symbol(row)
+            grouped[symbol] = grouped.get(symbol,Decimal(0)) + p
+        ranked = sorted(grouped.items(),key=lambda x:x[1],reverse=True)
+        sections.append(("Trade breakdown", [f"Largest result: {trade_symbol(best[2])} {best[1]:+.4f} USDT", f"Smallest result: {trade_symbol(worst[2])} {worst[1]:+.4f} USDT", f"Leading instrument: {ranked[0][0]} {ranked[0][1]:+.4f} USDT"], f"The largest recorded trade result was {trade_symbol(best[2])}, at {money(best[1])}. The smallest was {trade_symbol(worst[2])}, at {money(worst[1])}. The leading instrument by combined net result was {ranked[0][0]}, at {money(ranked[0][1])}.",None))
+    week_curve = [0.0]
+    week_running = Decimal(0)
+    for _, p, _ in weekly:
+        week_running += p
+        week_curve.append(float(week_running))
+    sections.append(("Seven-day performance", [f"{weekly_pnl:+.4f} USDT net", f"{len(weekly)} closed trades", f"{sum(x[1]>0 for x in weekly)} wins / {sum(x[1]<0 for x in weekly)} losses"], f"In the last seven days, {words(len(weekly))} qualifying trades closed. {pnl_text(weekly_pnl)}. The graph tracks the cumulative net outcome within this window.",week_curve))
     traded = [row.get("inst") or row.get("instId") or row.get("symbol") for _, _, row in daily]
     sections.extend(project_sections(traded + opened))
     chart=[0.0]; running=Decimal(0)
