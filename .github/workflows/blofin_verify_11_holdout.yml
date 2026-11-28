@@ -1,0 +1,56 @@
+name: Verify ALL 11 90d profit strategies (READ ONLY)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/blofin-ml-winloss-20261025
+    paths:
+      - research/blofin_verify_11_holdout.py
+      - .github/workflows/blofin_verify_11_holdout.yml
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  test-every-strategy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          persist-credentials: false
+          sparse-checkout: |
+            research/blofin_verify_11_holdout.py
+            research/blofin_full90_strong_signals.py
+            research/blofin_free_history/latest_summary.json
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'numpy>=1.26,<3' 'pandas>=2.2,<3'
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 39994070142
+          github-token: ${{ github.token }}
+          pattern: blofin-free-90d-shard-*
+          merge-multiple: true
+          path: existing-90d
+      - name: Verify syntax
+        run: python -m py_compile research/blofin_verify_11_holdout.py
+      - name: Verify all 11 previously qualified rules with frozen parameters
+        run: |
+          python -u -m research.blofin_verify_11_holdout \
+            --archive existing-90d/candles \
+            --universe research/blofin_free_history/latest_summary.json \
+            --out verify-11-report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blofin-all-11-90d-holdout-verification
+          path: verify-11-report/
+          retention-days: 14
+          if-no-files-found: warn

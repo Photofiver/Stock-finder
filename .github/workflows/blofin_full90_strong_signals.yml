@@ -1,0 +1,54 @@
+name: BloFin 90d selective strong signals (READ ONLY)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/blofin-ml-winloss-20261025
+    paths:
+      - research/blofin_full90_strong_signals.py
+      - .github/workflows/blofin_full90_strong_signals.yml
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          persist-credentials: false
+          sparse-checkout: |
+            research/blofin_full90_strong_signals.py
+            research/blofin_free_history/latest_summary.json
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'numpy>=1.26,<3' 'pandas>=2.2,<3'
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 39994070142
+          github-token: ${{ github.token }}
+          pattern: blofin-free-90d-shard-*
+          merge-multiple: true
+          path: existing-90d
+      - run: python -m py_compile research/blofin_full90_strong_signals.py
+      - name: Test 3888 selective setups across 90 days, read only
+        run: |
+          python -u research/blofin_full90_strong_signals.py \
+            --archive existing-90d/candles \
+            --universe research/blofin_free_history/latest_summary.json \
+            --out strong90-report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blofin-90d-strong-signals-profit-report
+          path: strong90-report/
+          if-no-files-found: warn
+          retention-days: 7
