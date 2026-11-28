@@ -16,7 +16,7 @@ permissions:
   contents: read
 concurrency:
   group: blofin-youtube-daily
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 jobs:
   report:
     if: >-
