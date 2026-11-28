@@ -43,15 +43,18 @@ def slide(title,body,idx,chart=None):
     d.text((52,97),title,font=font(49,True),fill="#F0F5FA")
     d.line((52,172,1228,172),fill="#405368",width=2)
     profile = isinstance(chart, dict)
+    replay = profile and chart.get("kind") == "replay"
     y=210
     for line in body:
-        for text in textwrap.wrap(line,width=39 if profile else 62):
+        for text in textwrap.wrap(line,width=36 if replay else 39 if profile else 62):
             d.text((58,y),text,font=font(24 if profile else 30),fill="#E8EEF5")
             y+=33 if profile else 44
         y+=18
     if profile:
-        if chart['prices']:
-            draw_market_chart(d, chart['prices'], font)
+        if replay:
+            draw_trade_replay(d, chart, font)
+        elif chart.get("prices"):
+            draw_market_chart(d, chart["prices"], font)
     elif chart and len(chart)>1:
         l,t,r,b=65,445,1215,600
         low=min(chart+[0]); high=max(chart+[0])
@@ -62,7 +65,7 @@ def slide(title,body,idx,chart=None):
         d.line(pts,fill="#37D4B0",width=4)
         d.text((65,612),"Cumulative net P&L (USDT) after each closed trade",font=font(20),fill="#A7B6C6")
     d.text((52,674),"Historical records only  /  Not a forecast",font=font(20),fill="#A7B6C6")
-    path=OUT/f"slide-{idx:02}.png"; im.save(path)
+    path=OUT/f"slide-{idx}.png"; im.save(path)
     return path
 def market_closes(symbol):
     period = 300_000
@@ -278,6 +281,148 @@ def project_profile(symbol, known, candidates):
         print("CoinGecko project unavailable:", symbol, error)
 
 
+def finite_number(value):
+    try:
+        result = float(value)
+        return result if math.isfinite(result) else None
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+def trade_candles(row):
+    candles = []
+    for bar in (row.get("volume_candle_audit") or {}).get("candles", []):
+        try:
+            t = int(bar["close_ms"])
+            o,h,l,c = [float(bar[k]) for k in ("open","high","low","close")]
+            if all(math.isfinite(x) and x > 0 for x in (o,h,l,c)) and l <= min(o,c) <= max(o,c) <= h and bar.get("price_exposure") == "FULL" and t <= int(row["closed_ms"]):
+                candles.append((t,o,h,l,c))
+        except (KeyError, ValueError, TypeError, OverflowError):
+            continue
+    return sorted({x[0]: x for x in candles}.values())
+
+def draw_trade_replay(d, chart, font):
+    row = chart["row"]
+    candles = chart["candles"]
+    fraction = chart.get("fraction", 1)
+    left,right,top,bottom = 645,1200,260,550
+    opened,closed = int(row["opened_ms"]),int(row["closed_ms"])
+    entry,exit_price = float(row["open_price"]),float(row["close_price"])
+    values = [entry, exit_price] + [v for bar in candles for v in bar[1:]]
+    lo,hi = min(values),max(values)
+    pad=max((hi-lo)*0.09, hi*0.0001)
+    lo,hi=lo-pad,hi+pad
+    xx=lambda t:left+(right-left)*(t-opened)/max(1,closed-opened)
+    yy=lambda p:bottom-(p-lo)/(hi-lo)*(bottom-top)
+    d.text((left,210),"Trade replay | 5m candles",font=font(25,True),fill="#F0F5FA")
+    for value in (lo,(lo+hi)/2,hi):
+        y=yy(value)
+        d.line((left,y,right,y),fill="#405368")
+        d.text((left,y-23),f"{value:.7g}",font=font(17),fill="#A7B6C6")
+    limit=opened+(closed-opened)*fraction
+    width=max(1,min(8,(right-left)*300000/max(1,closed-opened)*0.32))
+    for t,o,h,l,c in candles:
+        if t>limit: continue
+        x=xx(t-150000)
+        if not left<=x<=right: continue
+        color="#37D4B0" if c>=o else "#F36B7D"
+        d.line((x,yy(h),x,yy(l)),fill=color,width=2)
+        y1,y2=sorted((yy(o),yy(c)))
+        d.rectangle((max(left,x-width),y1,min(right,x+width),max(y1+1,y2)),fill=color)
+    d.line((left,yy(entry),xx(limit),yy(entry)),fill="#EFC66B",width=2)
+    d.ellipse((left-5,yy(entry)-5,left+5,yy(entry)+5),fill="#EFC66B")
+    d.text((left,570),"ENTRY "+datetime.fromtimestamp(opened/1000,UK).strftime("%H:%M"),font=font(19),fill="#EFC66B")
+    if fraction>=1:
+        d.ellipse((right-6,yy(exit_price)-6,right+6,yy(exit_price)+6),fill="#F0F5FA")
+        d.text((right,570),"EXIT "+datetime.fromtimestamp(closed/1000,UK).strftime("%H:%M"),anchor="ra",font=font(19),fill="#F0F5FA")
+    else:
+        d.text((right,570),"REPLAY IN PROGRESS",anchor="ra",font=font(19),fill="#A7B6C6")
+    d.text((left,612),"Full candles only | gaps not estimated",font=font(18),fill="#A7B6C6")
+
+def replay_sections(item,label):
+    _,p,row=item
+    symbol=str(row.get("inst") or row.get("symbol") or "Instrument")
+    snap=row.get("signal_snapshot") or {}
+    rsi=finite_number(snap.get("rsi14"))
+    prev=finite_number(snap.get("rsi14_previous"))
+    entry=finite_number(row.get("open_price"))
+    exit_price=finite_number(row.get("close_price"))
+    minutes=finite_number(row.get("hold_minutes"))
+    peak=row.get("peak_position_before_exit") or {}
+    best=finite_number(peak.get("peak_profit_pct_before_exit")) if peak.get("available") else None
+    review=row.get("post_trade_review") or {}
+    actual=finite_number(review.get("actual_directional_price_pct"))
+    if actual is None and entry and exit_price:
+        actual=(entry-exit_price)/entry*100
+    result="a loss" if p<0 else "a win" if p>0 else "flat"
+    body=["SHORT | recorded entry signal"]
+    speech=f"Here is the {label.lower()} trade, {symbol}. The bot entered short."
+    if rsi is not None and prev is not None:
+        body.append(f"RSI: {prev:.2f} to {rsi:.2f}")
+        speech+=f" The five minute R S I moved from {prev:.2f} to {rsi:.2f}. A high R S I does not guarantee a reversal."
+    if entry and exit_price:
+        body.append(f"Entry {entry:.7g} | exit {exit_price:.7g}")
+    if minutes is not None:
+        body.append(f"Duration: {minutes:.1f} minutes")
+        speech+=f" The position remained open for {minutes:.1f} minutes."
+    if best is not None:
+        body.append(f"Best observed gross: {best:+.2f}%")
+        speech+=f" The most favourable observed gross price return was {best:.2f} percent, before fees. This is a historical observation, not an executable alternative."
+    if actual is not None:
+        body.append(f"Final price return: {actual:+.2f}%")
+        speech+=f" At the recorded exit the directional price return was {actual:.2f} percent."
+    body.append(f"Net result: {p:+.4f} USDT")
+    speech+=f" The recorded outcome was {result}. {pnl_text(p)}. "
+    if review.get("had_gross_profit_before_net_loss") is True:
+        speech+="The trade had an earlier favourable excursion, then finished negative. That is a reason to investigate exits, not proof that a different stop would work. "
+    speech+="The exact closing trigger is not assumed when the history only records an external close."
+    candles=trade_candles(row)
+    chart={"kind":"replay","row":row,"candles":candles} if candles and entry and exit_price and row.get("opened_ms") and row.get("closed_ms") else None
+    if chart is None:
+        body.append("Complete replay data unavailable")
+    return (f"{symbol} | {label}",body,speech,chart)
+
+def threshold_section(sample):
+    groups=[]
+    for threshold in (89,92,93):
+        subset=[x for x in sample if (finite_number((x[2].get("signal_snapshot") or {}).get("rsi14")) or 0)>=threshold]
+        if subset:
+            w=sum(x[1]>0 for x in subset)
+            groups.append((threshold,len(subset),100*w/len(subset)))
+    body=[f"RSI >= {t}: {n} trades | {w:.1f}% wins" for t,n,w in groups]
+    speech="Would a stricter entry threshold have selected a different group of past trades? "
+    speech+=" ".join(f"At R S I {t} or higher, {n} recorded trades qualified, with a win rate of {w:.1f} percent." for t,n,w in groups)
+    speech+=" This is a subset of actual entries, not a simulated strategy or a prediction. It does not establish how missed or alternative entries would behave."
+    return ("RSI threshold experiment",body+["Recorded subsets only; not a backtest"],speech,None)
+
+def headline_for(daily):
+    if not daily:
+        return "No New Closes: What Is the Bot Watching?"
+    twists=[x for x in daily if (x[2].get("post_trade_review") or {}).get("had_gross_profit_before_net_loss") is True]
+    if twists:
+        symbol=str(min(twists,key=lambda x:x[1])[2].get("inst") or "Trade")
+        return f"{symbol}: A Winning Moment, Then a Loss"
+    best=max(daily,key=lambda x:x[1])
+    worst=min(daily,key=lambda x:x[1])
+    if best[1]>0 and worst[1]<0:
+        return f"{best[2].get('inst','Trade')} vs {worst[2].get('inst','Trade')}: Same Signal, Different Ends"
+    if worst[1]<0:
+        return f"{worst[2].get('inst','Trade')}: When the RSI Signal Failed"
+    return f"{best[2].get('inst','Trade')}: How the RSI Signal Played Out"
+
+def make_thumbnail(headline,date):
+    im=Image.new("RGB",(1280,720),"#0D1825")
+    d=ImageDraw.Draw(im)
+    def font(size):
+        return ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",size)
+    d.rectangle((0,0,1280,16),fill="#37D4B0")
+    d.text((55,56),"LIVE BOT EXPERIMENT",font=font(43),fill="#37D4B0")
+    y=175
+    for line in textwrap.wrap(headline,width=22):
+        d.text((55,y),line,font=font(64),fill="#F0F5FA")
+        y+=78
+    d.text((55,650),date+" | BLOFIN",font=font(29),fill="#A7B6C6")
+    im.save(OUT/"thumbnail.png")
+
 async def render():
     data=json.loads(Path(os.environ.get("STATE_PATH","blofin_live_state.json")).read_text())
     now=datetime.now(timezone.utc)
@@ -322,26 +467,22 @@ async def render():
     weekly_pnl = sum((x[1] for x in weekly), Decimal(0))
     def trade_symbol(row):
         return str(row.get("inst") or row.get("instId") or row.get("symbol") or "Unspecified instrument")
-    hook = (f"The bot closed {words(len(daily))} trades, with {words(daily_wins)} wins and {words(daily_losses)} losses. {pnl_text(p24)}." if daily else "No qualifying trades closed in the last twenty four hours. Today we look at existing exposure and the seven day record.")
+    headline=headline_for(daily)
+    make_thumbnail(headline,date)
+    hook = ("The same R S I rule can lead to very different trades. Today: " + headline + ". Watch the actual price replay before judging the outcome." if daily else "No qualifying trades closed today. What does an inactive day reveal about a rule based bot?")
     sections=[
-      ("Today's trading headline", [f"{date} | Data as of {now.astimezone(UK):%H:%M} UK", f"{p24:+.4f} USDT | {len(daily)} closed trades", f"{daily_wins} wins / {daily_losses} losses"], hook + " Here is what changed and what the actual trades show. This is not financial advice.",None),
-      ("Important notice",["This is not financial advice or any other advice.","Historical trading results are not a prediction."],"This is not financial advice, trading advice, or any other advice. This video is for informational purposes only. Past performance does not guarantee future results.",None),
-      ("Daily trading report",[f"Reporting date: {now.astimezone(UK):%d/%m/%Y}","Live RSI short strategy. Actual recorded trades."],"Welcome to the daily crypto trading bot report for the "+datewords+". We review actual recorded results for the current R S I short strategy on BloFin, including the last twenty four hours.",None),
-      ("Trading capital",[f"Current operating capital: {operational:.2f} USDT","10 consecutive wins: add up to 10 USDT","Current capital limit: 70 USDT"],"My current operating capital is "+money(operational)+". After each streak of ten consecutive winning trades, the bot adds up to ten Tether to the trading capital, subject to the current limit of seventy Tether.",None),
-      ("Last 24 hours",[f"Net P&L: {p24:+.4f} USDT",f"{len(daily)} closed trades",f"{sum(x[1]>0 for x in daily)} wins, {sum(x[1]<0 for x in daily)} losses"],"The current strategy recorded "+words(len(daily))+" closed trades in the last twenty four hours. "+pnl_text(p24)+". These results include the recorded trading fees.",None),
-      ("Open positions",[f"{len(opened)} open positions","; ".join(opened) if opened else "No open positions","Unrealized results are excluded from realized profit."],"There are currently "+words(len(opened))+" open positions across the bot. Unrealized results are not included in the realized profit. Their outcomes are not yet known.",None),
+      ("Today's experiment",[headline,f"{date} | Data as of {now.astimezone(UK):%H:%M} UK","Real trading records | Not financial advice"],hook+" This is not financial advice.",None),
     ]
-    comparison = p24 - previous_pnl
-    sections.append(("What changed since yesterday", [f"Previous 24h: {previous_pnl:+.4f} USDT", f"Latest 24h: {p24:+.4f} USDT", f"Difference: {comparison:+.4f} USDT"], "The preceding twenty four hour window recorded " + money(previous_pnl) + " net. Today's window is " + ("higher by " if comparison >= 0 else "lower by ") + money(abs(comparison)) + ". These are realized results, not price changes.",None))
     if daily:
-        best = max(daily,key=lambda x:x[1])
-        worst = min(daily,key=lambda x:x[1])
-        grouped = {}
-        for _,p,row in daily:
-            symbol = trade_symbol(row)
-            grouped[symbol] = grouped.get(symbol,Decimal(0)) + p
-        ranked = sorted(grouped.items(),key=lambda x:x[1],reverse=True)
-        sections.append(("Trade breakdown", [f"Largest result: {trade_symbol(best[2])} {best[1]:+.4f} USDT", f"Smallest result: {trade_symbol(worst[2])} {worst[1]:+.4f} USDT", f"Leading instrument: {ranked[0][0]} {ranked[0][1]:+.4f} USDT"], f"The largest recorded trade result was {trade_symbol(best[2])}, at {money(best[1])}. The smallest was {trade_symbol(worst[2])}, at {money(worst[1])}. The leading instrument by combined net result was {ranked[0][0]}, at {money(ranked[0][1])}.",None))
+        best=max(daily,key=lambda x:x[1])
+        worst=min(daily,key=lambda x:x[1])
+        sections.append(replay_sections(worst,"Smallest result"))
+        if best is not worst:
+            sections.append(replay_sections(best,"Largest result"))
+    sections.append(("The last 24 hours",[f"{len(daily)} closed trades | {daily_wins} wins | {daily_losses} losses",f"Net P&L: {p24:+.4f} USDT"],f"The bot closed {len(daily)} qualifying trades, with {daily_wins} wins and {daily_losses} losses. {pnl_text(p24)}.",None))
+    sections.append(("Today versus yesterday",[f"Previous: {len(prior)} trades | {previous_pnl:+.4f} USDT",f"Latest: {len(daily)} trades | {p24:+.4f} USDT"],f"Yesterday's window contained {len(prior)} closed trades compared with {len(daily)} today. The previous net result was {money(previous_pnl)}, compared with {money(p24)} now.",None))
+    sections.append(threshold_section(sample))
+    sections.append(("What the bot is watching",[f"{len(opened)} open positions","; ".join(opened) if opened else "No open positions",f"Operating capital: {operational:.2f} USDT"],f"There are {len(opened)} open positions. Their outcomes are not known. The operating capital is {money(operational)}.",None))
     week_curve = [0.0]
     week_running = Decimal(0)
     for _, p, _ in weekly:
@@ -354,7 +495,7 @@ async def render():
     for _,p,_ in sample:
         running+=p; chart.append(float(running))
     sections.append(("Bot performance after fees",[f"Since {START:%d/%m/%Y}",f"Net P&L: {ptotal:+.4f} USDT | Win rate: {rate:.1f}%",f"{wins} wins, {losses} losses, {neutral} flat"],"Since the twenty eighth of October, the recorded R S I short sample contains "+words(len(sample))+" closed trades. "+words(wins)+" were profitable, "+words(losses)+" lost money, and "+words(neutral)+" broke even. The win rate is "+ratewords+". "+pnl_text(ptotal)+". The chart shows the cumulative recorded net result for this sample. Earlier strategies are not included.",chart))
-    sections.append(("Risk and next update",["A high win rate does not guarantee profits.","Results can vary. Capital is at risk."],"A high win rate does not guarantee profits. Losing trades and trading fees matter. This journal reports historical results for the specified strategy, not a recommendation to trade. Thank you for watching.",None))
+    sections.append(("Next episode",["Will the next RSI signals reverse or keep climbing?","Historical results only | Capital at risk"],"Next time, we will check how the new signals develop and whether the recorded win rate changes. A high win rate does not guarantee profits. This is a historical journal, not a recommendation to trade.",None))
     kokoro=Kokoro("kokoro-v1.0.onnx","voices-v1.0.bin")
     segments = []
     voice_path = OUT/"narration.wav"
@@ -363,7 +504,6 @@ async def render():
     samples_per_frame = sample_rate // frames_per_second
     with soundfile.SoundFile(voice_path, mode="w", samplerate=sample_rate, channels=1, subtype="FLOAT") as track:
         for i, (title, body, narration, chart) in enumerate(sections):
-            image = slide(title, body, i, chart)
             start = track.tell()
             for sentence in re.split(r"(?<=[.!?])\s+", narration):
                 samples, rate = kokoro.create(sentence, voice="bm_george", speed=1.0, lang="en-gb", trim=False)
@@ -372,11 +512,18 @@ async def render():
                 track.write(samples)
             frame_count = math.ceil((track.tell() - start) / samples_per_frame)
             track.write(np.zeros(frame_count * samples_per_frame - (track.tell() - start), dtype=np.float32))
-            segment = OUT/f"seg-{i}.mp4"
-            subprocess.run([FF, "-y", "-v", "error", "-loop", "1", "-framerate", str(frames_per_second),
-                            "-i", str(image), "-frames:v", str(frame_count), "-c:v", "libx264",
-                            "-preset", "veryfast", "-tune", "stillimage", "-pix_fmt", "yuv420p", str(segment)], check=True)
-            segments.append(segment)
+            stages=4 if isinstance(chart,dict) and chart.get("kind")=="replay" and frame_count>=4 else 1
+            for j in range(stages):
+                frames=frame_count*(j+1)//stages-frame_count*j//stages
+                stage_chart=dict(chart,fraction=(j+1)/stages) if stages>1 else chart
+                # Hide outcome until the last replay stage; use identical scaling.
+                stage_body=body if stages==1 or j==stages-1 else [v for v in body if not v.startswith(("Net result:","Final price return:"))]
+                image=slide(title,stage_body,f"{i:02}-{j}",stage_chart)
+                segment=OUT/f"seg-{i}-{j}.mp4"
+                subprocess.run([FF,"-y","-v","error","-loop","1","-framerate",str(frames_per_second),
+                                "-i",str(image),"-frames:v",str(frames),"-c:v","libx264",
+                                "-preset","veryfast","-tune","stillimage","-pix_fmt","yuv420p",str(segment)],check=True)
+                segments.append(segment)
         total_samples = track.tell()
     (OUT/"concat.txt").write_text("".join("file '"+s.name+"'\n" for s in segments))
     inputs = [FF, "-hide_banner", "-nostats", "-f", "concat", "-safe", "0", "-i", str(OUT/"concat.txt"), "-i", str(voice_path)]
@@ -415,6 +562,6 @@ async def render():
     print("Rendered verified trades:",len(sample),"report bytes:",(OUT/"report.mp4").stat().st_size)
     if os.environ.get("REPORT_EDITION"):
         date += " | " + os.environ["REPORT_EDITION"]
-    (OUT/"metadata.json").write_text(json.dumps({"title":"BloFin RSI Short Bot | Daily Trading Report | "+date,"description":"Historical results for RSI89_SHORT since 28 October 2026 only; excludes earlier strategies. Last 24-hour results are realized net of recorded fees. Not financial or any other advice. Capital is at risk.\nSource: https://github.com/Photofiver/Stock-finder","tags":["BloFin","RSI","trading bot","crypto trading","trading journal"]},indent=2))
+    (OUT/"metadata.json").write_text(json.dumps({"title":("BloFin Bot Replay | "+headline+" | "+date)[:100],"description":"BloFin Bot Replay | Episode "+now.astimezone(UK).strftime("%Y-%m-%d")+"\nHistorical results for RSI89_SHORT since 28 October 2026 only; excludes earlier strategies. Last 24-hour results are realized net of recorded fees. Not financial or any other advice. Capital is at risk.\nSource: https://github.com/Photofiver/Stock-finder","tags":["BloFin","RSI","trading bot","crypto trading","trading journal"]},indent=2))
 if __name__=="__main__":
     asyncio.run(render())
