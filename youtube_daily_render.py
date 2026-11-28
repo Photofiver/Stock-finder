@@ -520,16 +520,16 @@ def story_sections(daily, sample, opened, prior, weekly, date, starting_bankroll
         if mixed:
             title=f"{lead}: {len(events)} Trades, Two Different Outcomes"
             thumb="ONE COIN. TWO OUTCOMES"
-            hook=f"{lead}: the same bot, two very different outcomes. What happened between the wins and the losses?"
+            hook=f"I'm {lead}. The bot traded me more than once, but it didn't get the same result every time. Here's what my price did."
         else:
             largest=max(events,key=lambda x:abs(direction(x[2]) or 0))
             change=direction(largest[2])
             title=f"{lead} Leads Today's Crypto Trading Journal"
             thumb="TODAY'S MARKET MOVES"
-            hook=f"What happened to {lead} today? Its recorded trades stand out in the latest market journal."
+            hook=f"I'm {lead}. Here's what happened to my price while the bot traded me."
             if change is not None:
-                hook=f"Watch {lead}. Its price {move_words(change)} during one trade. But that move is only part of the picture."
-        add("The last 24 hours",[f"{len(daily)} closed trades",f"{len(groups)} different markets"],hook+f" Across {len(groups)} markets, {len(daily)} trades closed. Let’s follow the price, then compare the day with yesterday.")
+                hook=f"I'm {lead}. During one of the bot's trades, my price {move_words(change)}. But that's only part of the story."
+        add("The last 24 hours",[f"{len(daily)} closed trades",f"{len(groups)} different markets"],hook+f" Across {len(groups)} markets, {len(daily)} trades closed. Each coin will tell its own story. Then the bot will reveal its daily result.")
         # Fetch project identity and market history for every traded instrument.
         profiles={}
         for label,body,speech,chart in project_sections([str(x[2].get("inst") or x[2].get("symbol") or "") for x in daily]):
@@ -541,18 +541,18 @@ def story_sections(daily, sample, opened, prior, weekly, date, starting_bankroll
             summary=next((b for b in body if not b.startswith(("All-time","Source:","CoinGecko","First /","5-minute","Project identity"))),"")
             market_prices=market_chart.get("prices") if market_chart else None
             chart=market_chart if market_prices else None
-            intro=([f"Now switch markets to {sym}.", f"Over on {sym}, the picture changes.", f"Look at {sym} next.", f"That brings us to {sym}."][index%4] if len(items)==1 else f"{sym} deserves a closer look: {len(items)} trades closed.")
+            intro=[f"I'm {sym}. The bot closed {len(items)} {'trade' if len(items)==1 else 'trades'} on my market.",f"Meet {sym}. That's me. Here's how my market moved.",f"My name is {sym}. Let me take you through my trades.",f"{sym} here. This is what happened to my price."][index%4]
             if index==0:
-                intro=f"Start with {sym}. Look at the chart."
+                intro=f"I'm {sym}. Let me show you what happened on my chart."
                 if len(items)>1:
                     span=(items[-1][0]-items[0][0])/60000
-                    intro+=f" Its {len(items)} trades closed within {duration_words(span)}."
+                    intro+=f" The bot closed {len(items)} trades on my market within {duration_words(span)}."
             if summary:
                 # Use verified source wording, broken into short clauses when practical.
                 spoken=" ".join(v for v in re.split(r"(?<=[.!?])\s+",summary) if len(v.split())<=20)
-                intro+=" "+(spoken or f"The verified project description is shown here.")
+                intro+=" A little background on my project. "+(spoken or "You can see the verified project description on screen.")
             else:
-                intro+=" The project identity could not be confirmed."
+                intro+=" My project identity could not be independently confirmed."
             add(f"{sym} | Project",([summary] if summary else ["Project identity unverified"])+[f"{len(items)} closed trades"],intro,chart)
             # Separate actual trade outcome from the market-wide move.
             for k,(closed,p,row) in enumerate(items,1):
@@ -564,12 +564,12 @@ def story_sections(daily, sample, opened, prior, weekly, date, starting_bankroll
                 result="Win" if p>0 else "Loss" if p<0 else "Break-even"
                 clock=time_label(closed)
                 time_spoken=spoken_clock(closed)
-                leadline=[f"The short closed at {time_spoken}.",f"At {time_spoken}, the bot exited its position.",f"This position came to an end at {time_spoken}.",f"The trade finished at {time_spoken}."][(index+k-1)%4]
-                if k>1: leadline=[f"The next exit came at {time_spoken}.",f"Another position closed at {time_spoken}.",f"The following trade ended at {time_spoken}."][(k-2)%3]
+                leadline=[f"The bot closed its short on me at {time_spoken}.",f"At {time_spoken}, the bot stopped trading this move in my price.",f"The position on my market came to an end at {time_spoken}.",f"My trade with the bot finished at {time_spoken}."][(index+k-1)%4]
+                if k>1: leadline=[f"The bot traded me again. That exit came at {time_spoken}.",f"Another short on my price closed at {time_spoken}.",f"The following position on my market ended at {time_spoken}."][(k-2)%3]
                 details=[]
                 spoken=leadline
                 if hold is not None and hold>=0:
-                    spoken+=f" The position had been open for {duration_words(hold)}."
+                    spoken+=f" The bot held that position on me for {duration_words(hold)}."
                     details.append(duration_words(hold))
                 if rsi is not None:
                     details.append(f"Entry RSI {rsi:.1f}")
@@ -582,21 +582,21 @@ def story_sections(daily, sample, opened, prior, weekly, date, starting_bankroll
                 # No replay of a partial five-minute candle is fabricated.
                 add(f"{sym} | Trade {k}",[clock+" UK"]+details[:2],spoken,replay or chart)
                 if change is None:
-                    spoken="The exact price move is unavailable. "
+                    spoken="My exact price change during this trade is unavailable. "
                 elif change==0:
-                    spoken="The coin price did not move between entry and exit. "
+                    spoken="My price was unchanged between entry and exit. "
                 else:
                     verb=(["rose","climbed","moved up","gained"] if change>0 else ["fell","dropped","moved down","declined"])[(index+k-1)%4]
                     magnitude=("less than one hundredth of a percent" if abs(change)<0.005 else spoken_number(f"{abs(change):.2f}")+" percent")
-                    spoken=f"During this trade, {sym} {verb} by {magnitude}. "
-                alternatives = (["A win for the short.", "That trade finished in profit after fees.", "The short closed with a win."] if p>0 else ["But the short lost.", "That one went against the bot.", "The recorded result: a loss."] if p<0 else ["The result was break-even."])
+                    spoken=f"While the bot was trading me, my price {verb} by {magnitude}. "
+                alternatives = (["That gave the bot a winning short.", "The bot made a profit on that trade after fees.", "My price move ended with a win for the bot."] if p>0 else ["The bot lost on that short.", "That move left the bot with a net loss.", "My trade ended in a loss for the bot."] if p<0 else ["The bot broke even after fees."])
                 spoken+=alternatives[(index+k)%len(alternatives)]
                 if k<len(items):
                     next_p=items[k][1]
                     if (p>0 and next_p<0) or (p<0 and next_p>0):
-                        spoken+=" Now watch what happened on the next trade." 
+                        spoken+=" But my next trade had a different outcome." 
                 if (row.get("post_trade_review") or {}).get("had_gross_profit_before_net_loss") and p<0:
-                    spoken+=" An earlier favourable move did not last."
+                    spoken+=" My earlier move in the bot's favour didn't last."
                 if replay:
                     replay=dict(replay,reveal=True)
                 result_body=[result+" after fees"]+([f"Coin move {change:+.2f}%"] if change is not None else [])
@@ -608,33 +608,33 @@ def story_sections(daily, sample, opened, prior, weekly, date, starting_bankroll
                     # Incomplete entry and exit candles are intentionally excluded.
                     # These are observed extremes, not a claim about unobserved ticks.
                     extremes=[f"Observed high: {high_text} USDT",f"Observed low: {low_text} USDT","Full candles and fills only"]
-                    phrasing=[f"While that position was open, the recorded high was {spoken_number(high_text)} and the low was {spoken_number(low_text)}.",f"The highest confirmed price during the trade was {spoken_number(high_text)}. The lowest was {spoken_number(low_text)}.",f"Between entry and exit, the observed price range ran from {spoken_number(low_text)} to {spoken_number(high_text)}."][(index+k-1)%3]
+                    phrasing=[f"While the bot held its position, my highest observed price was {spoken_number(high_text)} and my lowest was {spoken_number(low_text)}.",f"My price reached a confirmed high of {spoken_number(high_text)} during that trade. My recorded low was {spoken_number(low_text)}.",f"Between the bot's entry and exit, my observed price ranged from {spoken_number(low_text)} to {spoken_number(high_text)}."][(index+k-1)%3]
                     add(f"{sym} | Trade {k} high and low",extremes,phrasing,replay)
                 else:
-                    add(f"{sym} | Trade {k} high and low",["Intratrade extremes unavailable","No verified complete candle data"],"The price extremes during this position could not be verified.")
+                    add(f"{sym} | Trade {k} high and low",["Intratrade extremes unavailable","No verified complete candle data"],"My highest and lowest prices during that position could not be verified.")
             if market_prices:
                 market_change=(market_prices[-1][1]/market_prices[0][1]-1)*100
                 moves=[direction(x[2]) for x in items]
                 contrast=any(m is not None and m*market_change<0 for m in moves)
-                market_speech=(f"Here is the contrast: the wider chart {move_words(market_change)}, in the opposite direction to at least one trade." if contrast else [f"Across the wider chart, {sym} {move_words(market_change)}.",f"Across the available daily candles, the price {move_words(market_change)}.",f"The broader market move? It {move_words(market_change)}."][index%3])
+                market_speech=(f"Here's the contrast. Across the wider chart, my price {move_words(market_change)}, in the opposite direction to my price during at least one trade." if contrast else [f"Across the wider market chart, I {move_words(market_change)}.",f"Looking at the available daily candles, my price {move_words(market_change)}.",f"Over the broader chart, my price {move_words(market_change)}."][index%3])
                 add(f"{sym} | Market today",[f"{market_change:+.2f}%","Available 5-minute closes (market, not trade return)"],market_speech,chart)
             else:
-                add(f"{sym} | Market today",["Daily chart unavailable"],"The current market chart could not be retrieved. The trade records remain separate from this missing data.")
+                add(f"{sym} | Market today",["Daily chart unavailable"],"My daily market chart is unavailable. The bot's trade records are still separate from that missing data.")
     else:
         title="Crypto Trading Journal: No New Closes"
         thumb="NO NEW CLOSES"
         add("The last 24 hours",["No qualifying closed trades"],"No qualifying trade closed in the latest twenty-four hours. There is no completed trade to replay today.")
     w,l=wins(daily),losses(daily)
     rate=100*w/len(daily) if daily else 0
-    add("Today's results",[f"{w} wins / {l} losses",f"{rate:.1f}% wins" if daily else "No win rate"],f"So where did the day finish? {w} wins, {l} losses."+ (f" The win rate was {rate:.1f} percent." if daily else " No daily win rate can be calculated.")+f" There are {len(opened)} positions still open.")
+    add("Today's results",[f"{w} wins / {l} losses",f"{rate:.1f}% wins" if daily else "No win rate"],f"I'm the trading bot. You've heard the coins' stories. Here's my result: {w} wins, {l} losses."+ (f" My win rate was {rate:.1f} percent." if daily else " No daily win rate can be calculated.")+f" I still have {len(opened)} open positions.")
     if prior:
         prev=100*wins(prior)/len(prior)
-        add("Yesterday compared",[f"Yesterday {len(prior)} trades",f"Today {len(daily)} trades"],f"Yesterday, {len(prior)} trades closed with a {prev:.1f} percent win rate. Today's activity {'increased' if len(daily)>len(prior) else 'decreased' if len(daily)<len(prior) else 'was unchanged'}.")
+        add("Yesterday compared",[f"Yesterday {len(prior)} trades",f"Today {len(daily)} trades"],f"Yesterday, I closed {len(prior)} trades with a {prev:.1f} percent win rate. My activity today {'increased' if len(daily)>len(prior) else 'decreased' if len(daily)<len(prior) else 'was unchanged'}.")
     if weekly:
         weekrate=100*wins(weekly)/len(weekly)
-        add("Seven-day record",[f"{len(weekly)} closed",f"{weekrate:.1f}% wins"],f"Over the past seven days, {len(weekly)} trades closed. The observed win rate was {weekrate:.1f} percent.")
+        add("Seven-day record",[f"{len(weekly)} closed",f"{weekrate:.1f}% wins"],f"Over the past seven days, I closed {len(weekly)} trades. My recorded win rate was {weekrate:.1f} percent.")
     rate_all=100*wins(sample)/len(sample)
-    add("Overall record",[f"{len(sample)} closed",f"{rate_all:.1f}% wins"],f"The current strategy has {len(sample)} recorded closed trades since October twenty-eighth. Its observed win rate is {rate_all:.1f} percent.")
+    add("Overall record",[f"{len(sample)} closed",f"{rate_all:.1f}% wins"],f"With my current strategy, I've closed {len(sample)} recorded trades since October twenty-eighth. My observed win rate is {rate_all:.1f} percent.")
     # Final verdict uses actual realized net P&L, not win rate or price moves.
     daily_net=sum((x[1] for x in daily),Decimal("0"))
     if not daily:
@@ -656,9 +656,9 @@ def story_sections(daily, sample, opened, prior, weekly, date, starting_bankroll
         magnitude=abs(daily_return)
         pct_words=("less than one hundredth of a percent" if 0<magnitude<Decimal("0.005") else spoken_number(f"{magnitude:.2f}")+" percent")
         if daily_net:
-            closing=f"The last twenty-four hours ended with a net {'profit' if daily_net>0 else 'loss'} of {pct_words}, relative to the bankroll near the start of the period, after trading fees."
+            closing=f"Here's how my last twenty-four hours ended. I {'gained' if daily_net>0 else 'lost'} {pct_words} of my bankroll near the start of the period, after trading fees."
         elif daily:
-            closing="The net return on the starting bankroll was zero percent, after trading fees."
+            closing="I broke even over the last twenty-four hours. My net return on the starting bankroll was zero percent, after trading fees."
         print("Daily return percent:",daily_return,"Reference bankroll USDT:",starting_bankroll)
     else:
         result_body.append("Starting bankroll unavailable")
