@@ -17,8 +17,10 @@ def main():
     folder=Path("youtube_output")
     check_only = "--check-existing" in sys.argv
     now = datetime.now(ZoneInfo("Europe/London"))
-    title = "BloFin RSI Short Bot | Daily Trading Report | " + now.strftime("%d %B %Y")
-    meta = {"title": title} if check_only else json.loads((folder/"metadata.json").read_text())
+    marker = "BloFin Bot Replay | Episode " + now.strftime("%Y-%m-%d")
+    meta = {} if check_only else json.loads((folder/"metadata.json").read_text())
+    if not check_only and not meta["description"].startswith(marker+"\n"):
+        raise SystemExit("Report date does not match the intended episode")
     privacy=os.environ.get("YOUTUBE_PRIVACY","private")
     if privacy not in ("private","unlisted","public"): raise ValueError("Invalid privacy")
     status={"privacyStatus":privacy,"selfDeclaredMadeForKids":False}
@@ -38,7 +40,7 @@ def main():
     uploads = channels["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
     recent = youtube.playlistItems().list(part="snippet,contentDetails", playlistId=uploads, maxResults=50).execute()
     for item in recent.get("items", []):
-        if item["snippet"]["title"] == meta["title"]:
+        if item["snippet"].get("description", "").startswith(marker+"\n") or (not check_only and item["snippet"]["title"] == meta["title"]):
             video_id = item["contentDetails"]["videoId"]
             details = youtube.videos().list(part="status", id=video_id).execute().get("items", [])
             current = details[0]["status"] if details else {}
@@ -63,4 +65,11 @@ def main():
     print("YouTube visibility:", response.get("status", {}).get("privacyStatus"))
     print("Uploaded:", "https://youtu.be/"+video_id)
     (folder/"youtube_id.txt").write_text(video_id)
+    thumbnail = folder/"thumbnail.png"
+    if thumbnail.exists():
+        try:
+            youtube.thumbnails().set(videoId=video_id, media_body=MediaFileUpload(str(thumbnail),mimetype="image/png")).execute()
+            print("Custom thumbnail uploaded")
+        except Exception as error:
+            print("Custom thumbnail unavailable:", type(error).__name__)
 if __name__=="__main__": main()
