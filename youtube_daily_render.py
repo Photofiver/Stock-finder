@@ -430,6 +430,44 @@ def make_thumbnail(headline,date):
     im.save(OUT/"thumbnail.png")
 
 
+def spoken_number(value):
+    # Read decimal digits explicitly, without relying on TTS normalization.
+    raw=str(value)
+    sign="minus " if raw.startswith("-") else ""
+    raw=raw.lstrip("+-")
+    whole,sep,fraction=raw.partition(".")
+    fraction=fraction.rstrip("0")
+    return sign+words(int(whole))+((" point "+" ".join(words(int(d)) for d in fraction)) if fraction else "")
+
+def natural_numbers(text):
+    # Apply only to standalone numbers, leaving token identifiers intact.
+    return re.sub(r"(?<![\w.])[-+]?\d+(?:\.\d+)?(?!\w|\.\d)",lambda m:spoken_number(m.group()),text)
+
+def spoken_clock(stamp):
+    local=datetime.fromtimestamp(stamp/1000,UK)
+    h=local.hour%12 or 12
+    m=local.minute
+    if not m:
+        clock=words(h)+" o'clock"
+    elif m==15:
+        clock="quarter past "+words(h)
+    elif m==30:
+        clock="half past "+words(h)
+    elif m==45:
+        clock="quarter to "+words(h%12+1)
+    else:
+        clock=words(h)+(" oh " if m<10 else " ")+words(m)
+    # Use the actual time's period, including quarter-to-midnight/noon.
+    if local.hour<5: period=" in the early morning"
+    elif local.hour<12: period=" in the morning"
+    elif local.hour<18: period=" in the afternoon"
+    else: period=" in the evening"
+    if local.hour==23 and m==45: return "quarter to midnight"
+    if local.hour==11 and m==45: return "quarter to noon"
+    if local.hour==0 and m==0: return "midnight"
+    if local.hour==12 and m==0: return "noon"
+    return clock+period
+
 def story_sections(daily, sample, opened, prior, weekly, date):
     """Daily market journal: actual events first, every traded project, no cash P&L."""
     def symbol(row):
@@ -447,16 +485,22 @@ def story_sections(daily, sample, opened, prior, weekly, date):
             return (exit_price-entry)/entry*100
         return None
     def move_words(change):
-        return ("rose" if change>0 else "fell" if change<0 else "was unchanged") + (f" {abs(change):.2f} percent" if change else "")
+        return ("rose" if change>0 else "fell" if change<0 else "was unchanged") + ((" by less than one hundredth of a percent" if 0<abs(change)<0.005 else f" by {spoken_number(f'{abs(change):.2f}')} percent") if change else "")
     def duration_words(minutes):
         if minutes<1:
-            return f"{round(minutes*60)} seconds"
-        if minutes>=120:
-            return f"{minutes/60:.1f} hours"
-        return f"{minutes:.1f} minutes"
+            seconds=max(0,round(minutes*60))
+            return words(seconds)+(" second" if seconds==1 else " seconds")
+        total=round(minutes)
+        days,remaining=divmod(total,1440)
+        hours,mins=divmod(remaining,60)
+        parts=[]
+        if days: parts.append(words(days)+(" day" if days==1 else " days"))
+        if hours: parts.append(words(hours)+(" hour" if hours==1 else " hours"))
+        if mins: parts.append(words(mins)+(" minute" if mins==1 else " minutes"))
+        return " and ".join(parts) or "less than a minute"
     beats=[]
     def add(title,body,speech,chart=None):
-        beats.append((title,body,speech,chart))
+        beats.append((title,body,natural_numbers(speech),chart))
     groups={}
     for item in daily:
         groups.setdefault(symbol(item[2]),[]).append(item)
@@ -516,8 +560,9 @@ def story_sections(daily, sample, opened, prior, weekly, date):
                 exit_price=finite_number(row.get("close_price"))
                 result="Win" if p>0 else "Loss" if p<0 else "Break-even"
                 clock=time_label(closed)
-                leadline=f"By {clock}, the short was over."
-                if k>1: leadline=f"Then came the next close, at {clock}."
+                time_spoken=spoken_clock(closed)
+                leadline=[f"The short closed at {time_spoken}.",f"At {time_spoken}, the bot exited its position.",f"This position came to an end at {time_spoken}.",f"The trade finished at {time_spoken}."][(index+k-1)%4]
+                if k>1: leadline=[f"The next exit came at {time_spoken}.",f"Another position closed at {time_spoken}.",f"The following trade ended at {time_spoken}."][(k-2)%3]
                 details=[]
                 spoken=leadline
                 if hold is not None and hold>=0:
@@ -533,7 +578,14 @@ def story_sections(daily, sample, opened, prior, weekly, date):
                     replay={"kind":"replay","row":row,"candles":bars,"fraction":1,"reveal":False}
                 # No replay of a partial five-minute candle is fabricated.
                 add(f"{sym} | Trade {k}",[clock+" UK"]+details[:2],spoken,replay or chart)
-                spoken=(f"The price {move_words(change)}. " if change is not None else "The exact price move is unavailable. ")
+                if change is None:
+                    spoken="The exact price move is unavailable. "
+                elif change==0:
+                    spoken="The coin price did not move between entry and exit. "
+                else:
+                    verb=(["rose","climbed","moved up","gained"] if change>0 else ["fell","dropped","moved down","declined"])[(index+k-1)%4]
+                    magnitude=("less than one hundredth of a percent" if abs(change)<0.005 else spoken_number(f"{abs(change):.2f}")+" percent")
+                    spoken=f"During this trade, {sym} {verb} by {magnitude}. "
                 alternatives = (["A win for the short.", "That trade finished in profit after fees.", "The short closed with a win."] if p>0 else ["But the short lost.", "That one went against the bot.", "The recorded result: a loss."] if p<0 else ["The result was break-even."])
                 spoken+=alternatives[(index+k)%len(alternatives)]
                 if k<len(items):
@@ -548,12 +600,12 @@ def story_sections(daily, sample, opened, prior, weekly, date):
             records=[b for b in body if b.startswith(("All-time high","All-time low"))]
             if records:
                 source=next((b for b in body if b.startswith(("CoinGecko","Source:"))),"Source: CoinGecko")
-                add(f"{sym} | Price history",records+[source],[f"Zoom out. Here are {sym}'s historical extremes.", "For perspective, check the recorded high and low.", "The price history gives us a wider frame.", "Here is the longer-term price range."][index%4],chart)
+                add(f"{sym} | Price history",records+[source],[f"Where does {sym} sit in its price history?", "For context, consider its highest and lowest recorded prices.", "Past market extremes offer another point of reference.", "Here are the historical price boundaries.", "Compare today's move with its lifetime records.", "The all-time high and low put that move into context."][index%6],chart)
             if market_prices:
                 market_change=(market_prices[-1][1]/market_prices[0][1]-1)*100
                 moves=[direction(x[2]) for x in items]
                 contrast=any(m is not None and m*market_change<0 for m in moves)
-                market_speech=(f"Here is the contrast: the wider chart {move_words(market_change)}, in the opposite direction to at least one trade." if contrast else [f"Across the wider chart, {sym} {move_words(market_change)}.",f"Now zoom out to the available daily candles: the price {move_words(market_change)}.",f"The broader market move? It {move_words(market_change)}."][index%3])
+                market_speech=(f"Here is the contrast: the wider chart {move_words(market_change)}, in the opposite direction to at least one trade." if contrast else [f"Across the wider chart, {sym} {move_words(market_change)}.",f"Across the available daily candles, the price {move_words(market_change)}.",f"The broader market move? It {move_words(market_change)}."][index%3])
                 add(f"{sym} | Market today",[f"{market_change:+.2f}%","Available 5-minute closes (market, not trade return)"],market_speech,chart)
             else:
                 add(f"{sym} | Market today",["Daily chart unavailable"],"The current market chart could not be retrieved. The trade records remain separate from this missing data.")

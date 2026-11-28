@@ -21,14 +21,14 @@ def main():
     # Owner requested one revised edition of the already published 28 Nov episode.
     # On later dates the regular one-episode-per-day marker is unchanged.
     revision = now.strftime("%Y-%m-%d") == "2026-11-28"
-    marker = base_marker + (" | natural voice edition" if revision else "")
+    marker = base_marker + (" | spoken numbers edition" if revision else "")
     meta = {} if check_only else json.loads((folder/"metadata.json").read_text())
     if not check_only:
         if not meta["description"].startswith(base_marker+"\n"):
             raise SystemExit("Report date does not match the intended episode")
         if revision:
             meta["description"] = marker + meta["description"][len(base_marker):]
-            meta["title"] = (meta["title"][:88] + " | Natural Voice")
+            meta["title"] = (meta["title"][:88] + " | Spoken Numbers")
     privacy=os.environ.get("YOUTUBE_PRIVACY","private")
     if privacy not in ("private","unlisted","public"): raise ValueError("Invalid privacy")
     status={"privacyStatus":privacy,"selfDeclaredMadeForKids":False}
