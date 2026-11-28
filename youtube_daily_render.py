@@ -511,7 +511,7 @@ def story_sections(daily, sample, opened, prior, weekly, date):
         outcome="Win" if p>0 else "Loss" if p<0 else "Break-even"
         result_body=[outcome+" after fees"]
         if actual is not None: result_body.append(f"Price move {actual:+.2f}%")
-        speech=f"Here is the recorded outcome. It was a {outcome.lower()}. "
+        speech=f"Here is the recorded outcome. It was {'a win' if p>0 else 'a loss' if p<0 else 'break-even'}. "
         if actual is not None: speech+=f"The directional price return was {actual:.2f} percent. "
         if review.get("had_gross_profit_before_net_loss") and p<0:
             speech+="The position had an earlier favourable move. Yet it closed negative after fees. This is why an entry signal is not the whole story."
@@ -603,7 +603,8 @@ async def render():
     headline,thumbnail_text,sections=story_sections(daily,sample,opened,prior,weekly,date)
     make_thumbnail(thumbnail_text,date)
     script_words=sum(len(narration.split()) for _,_,narration,_ in sections)
-    print("Story beats:",len(sections),"Narration words:",script_words)
+    sentence_lengths=[len(v.split()) for _,_,narration,_ in sections for v in re.split(r"(?<=[.!?])\s+",narration) if v.strip()]
+    print("Story beats:",len(sections),"Narration words:",script_words,"Longest sentence:",max(sentence_lengths))
     kokoro=Kokoro("kokoro-v1.0.onnx","voices-v1.0.bin")
     segments = []
     voice_path = OUT/"narration.wav"
@@ -613,11 +614,27 @@ async def render():
     with soundfile.SoundFile(voice_path, mode="w", samplerate=sample_rate, channels=1, subtype="FLOAT") as track:
         for i, (title, body, narration, chart) in enumerate(sections):
             start = track.tell()
-            for sentence in re.split(r"(?<=[.!?])\s+", narration):
+            sentences = [v for v in re.split(r"(?<=[.!?])\s+", narration) if v.strip()]
+            chunks=[]
+            for sentence in sentences:
                 samples, rate = kokoro.create(sentence, voice="bm_george", speed=1.0, lang="en-gb", trim=False)
                 if rate != sample_rate or not len(samples) or not np.isfinite(samples).all():
                     raise ValueError("Invalid synthesized sentence audio")
-                track.write(samples)
+                chunks.append(samples.astype(np.float32))
+            spoken=np.concatenate(chunks)
+            word_count=len(narration.split())
+            wpm=word_count*60*sample_rate/len(spoken)
+            if wpm<150 or wpm>170:
+                factor=max(.8,min(1.25,160/wpm))
+                paced=subprocess.run([FF,"-v","error","-f","f32le","-ar",str(sample_rate),"-ac","1",
+                                      "-i","pipe:0","-af",f"atempo={factor:.5f}",
+                                      "-f","f32le","pipe:1"],input=spoken.astype("<f4").tobytes(),
+                                      capture_output=True,check=True)
+                adjusted=np.frombuffer(paced.stdout,dtype="<f4")
+                if len(adjusted) and np.isfinite(adjusted).all(): spoken=adjusted
+            if title=="The result":
+                track.write(np.zeros(sample_rate//2,dtype=np.float32))
+            track.write(spoken)
             frame_count = math.ceil((track.tell() - start) / samples_per_frame)
             track.write(np.zeros(frame_count * samples_per_frame - (track.tell() - start), dtype=np.float32))
             stages=max(1,math.ceil(frame_count/(6*frames_per_second)))
@@ -626,8 +643,7 @@ async def render():
                 stage_chart=chart
                 if isinstance(chart,dict) and chart.get("kind")=="replay":
                     end=chart.get("fraction",1)
-                    beginning=max(0,end-.25) if title.startswith("Replay ") else end
-                    stage_chart=dict(chart,fraction=beginning+(end-beginning)*(j+1)/stages)
+                    stage_chart=dict(chart,fraction=end)
                 # Hide outcome until the last replay stage; use identical scaling.
                 stage_body=body
                 image=slide(title,stage_body,f"{i:02}-{j}",stage_chart)
