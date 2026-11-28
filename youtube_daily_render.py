@@ -427,132 +427,142 @@ def make_thumbnail(headline,date):
 
 
 def story_sections(daily, sample, opened, prior, weekly, date):
-    """One evidence-led story; no account balances, cash P&L or invented events."""
+    """Daily market journal: actual events first, every traded project, no cash P&L."""
     def symbol(row):
         return str(row.get("inst") or row.get("instId") or row.get("symbol") or "Market").split("-")[0]
-    def pct(x):
-        return f"{x:.1f} percent"
-    def chart_for(row, fraction, reveal=False):
-        bars=trade_candles(row)
-        entry=finite_number(row.get("open_price"))
-        close=finite_number(row.get("close_price"))
-        if not bars or not entry or not close or not row.get("opened_ms") or not row.get("closed_ms"):
-            return None
-        return {"kind":"replay","row":row,"candles":bars,"fraction":fraction,
-                "max_fraction":fraction,"reveal":reveal}
-    beats=[]
-    def add(title, body, speech, chart=None):
-        beats.append((title,body,speech,chart))
-    if daily:
-        # Prefer actual turning points with verified replay data, then directional movement.
-        def rank(item):
-            row=item[2]
-            review=row.get("post_trade_review") or {}
-            return (bool(trade_candles(row)), bool(review.get("had_gross_profit_before_net_loss") and item[1]<0),
-                    abs(finite_number(review.get("actual_directional_price_pct")) or 0),
-                    finite_number((row.get("signal_snapshot") or {}).get("rsi14")) or 0)
-        focus=max(daily,key=rank)
-        _,p,row=focus
-        sym=symbol(row)
-        snap=row.get("signal_snapshot") or {}
-        rsi=finite_number(snap.get("rsi14"))
-        previous=finite_number(snap.get("rsi14_previous"))
+    def wins(items):
+        return sum(x[1]>0 for x in items)
+    def losses(items):
+        return sum(x[1]<0 for x in items)
+    def time_label(stamp):
+        return datetime.fromtimestamp(stamp/1000,UK).strftime("%H:%M")
+    def direction(row):
         entry=finite_number(row.get("open_price"))
         exit_price=finite_number(row.get("close_price"))
-        duration=finite_number(row.get("hold_minutes"))
-        review=row.get("post_trade_review") or {}
-        peak=row.get("peak_position_before_exit") or {}
-        best=finite_number(peak.get("peak_profit_pct_before_exit")) if peak.get("available") else None
-        actual=finite_number(review.get("actual_directional_price_pct"))
-        if actual is None and entry and exit_price:
-            actual=(entry-exit_price)/entry*100
-        title=f"{sym}: Can RSI Predict a Reversal?"
-        thumb="REVERSAL OR TRAP?"
-        add("Reversal or trap?",[sym,"RSI experiment"],f"Can {sym} reverse after this signal? Watch the price. We will follow one real trade from entry to exit.",chart_for(row,0))
-        add("The rule",["RSI 89","Five-minute candles"],"The bot watches a measure called R S I. It measures the strength of recent price moves. The short signal appears when R S I crosses eighty-nine. A short position expects the price to fall. But a strong move can keep going.",chart_for(row,0))
-        if rsi is not None and previous is not None:
-            add("The signal",[f"RSI {previous:.2f} to {rsi:.2f}","Recorded entry"],f"Look at the signal. R S I moved from {previous:.2f} to {rsi:.2f}. The bot recorded a short entry. This tells us why the setup qualified. It does not tell us what happens next.",chart_for(row,0))
+        if entry and exit_price:
+            return (exit_price-entry)/entry*100
+        return None
+    def move_words(change):
+        return ("rose" if change>0 else "fell" if change<0 else "was unchanged") + (f" {abs(change):.2f} percent" if change else "")
+    def duration_words(minutes):
+        if minutes<1:
+            return f"{round(minutes*60)} seconds"
+        if minutes>=120:
+            return f"{minutes/60:.1f} hours"
+        return f"{minutes:.1f} minutes"
+    beats=[]
+    def add(title,body,speech,chart=None):
+        beats.append((title,body,speech,chart))
+    groups={}
+    for item in daily:
+        groups.setdefault(symbol(item[2]),[]).append(item)
+    # A real daily contrast is more useful than a recurring lesson about RSI.
+    def news_rank(pair):
+        sym,items=pair
+        mixed=bool(wins(items) and losses(items))
+        elapsed=(items[-1][0]-items[0][0])/60000
+        return (mixed,len(items),-elapsed,max(abs(direction(x[2]) or 0) for x in items))
+    order=sorted(groups.items(),key=news_rank,reverse=True)
+    if order:
+        lead,events=order[0]
+        mixed=bool(wins(events) and losses(events))
+        if mixed:
+            title=f"{lead}: {len(events)} Trades, Two Different Outcomes"
+            thumb="ONE COIN. TWO OUTCOMES"
+            hook=f"One coin. Two very different outcomes. {lead} had both wins and losses in today's trading record."
         else:
-            add("The signal",["Recorded short entry","Exact RSI unavailable"],"The trade qualified for the short strategy. The exact indicator readings are missing from this record. We will not guess them.",chart_for(row,0))
-        if entry:
-            add("At entry",[f"Entry {entry:.7g}","Direction: down"],"The marked line shows the entry level. From here, lower prices favour the short position. Higher prices work against it. Keep that line in mind as the candles appear.",chart_for(row,0))
-        bars=trade_candles(row)
-        valid_chart=chart_for(row,0)
-        if valid_chart:
-            opened_ms=int(row["opened_ms"]); closed_ms=int(row["closed_ms"])
-            prior_count=0
-            for stage,fraction in enumerate((.25,.50,.75,1.0),1):
-                limit=opened_ms+(closed_ms-opened_ms)*fraction
-                visible=[b for b in bars if opened_ms<=b[0]<=limit]
-                new_count=len(visible)-prior_count
-                prior_count=len(visible)
-                label=f"Replay {stage} of 4"
-                if visible and new_count and entry:
-                    change=(visible[-1][4]-entry)/entry*100
-                    direction="above" if change>0 else "below" if change<0 else "at"
-                    phrase=f"The latest full candle closes {direction} the entry level."
-                    distance=f" The distance is {abs(change):.2f} percent." if change else ""
-                    speech=f"{phrase}{distance} This is a recorded candle close, not the final trade result."
-                    if stage==1: speech+=" Watch whether the price moves back across the entry line."
-                    elif stage==2: speech+=" Notice the difference between a candle close and its highest point."
-                    elif stage==3: speech+=" The signal alone cannot explain every move along this path."
-                    else: speech+=" Now compare the last full candle with the actual exit."
-                    body=[f"{direction.capitalize()} entry",f"{len(visible)} full candles"]
-                else:
-                    speech="No additional full candle is recorded in this interval. The missing price movement cannot be reconstructed. We keep the gap visible instead of drawing an invented path."
-                    body=["No new full candles","Gap not estimated"]
-                add(label,body,speech,chart_for(row,fraction))
-        else:
-            add("What is missing",["Full replay unavailable"],"The full candle history is missing for this trade. A smooth animation would hide that gap. We can still compare the recorded entry and exit. We cannot claim to know the entire price path.")
-        if best is not None:
-            add("Best observed move",[f"{best:+.2f}% gross","Before recorded exit"],f"The most favourable recorded move was {best:.2f} percent before fees. This is a historical observation. It does not prove that the bot could exit at that point.",chart_for(row,1))
-        if duration is not None:
-            add("Time in the trade",[f"{duration:.1f} minutes"],f"The position stayed open for {duration:.1f} minutes. The timing matters because the market can change after an entry. We only use the recorded duration.",chart_for(row,1))
-        outcome="Win" if p>0 else "Loss" if p<0 else "Break-even"
-        result_body=[outcome+" after fees"]
-        if actual is not None: result_body.append(f"Price move {actual:+.2f}%")
-        speech=f"Here is the recorded outcome. It was {'a win' if p>0 else 'a loss' if p<0 else 'break-even'}. "
-        if actual is not None: speech+=f"The directional price return was {actual:.2f} percent. "
-        if review.get("had_gross_profit_before_net_loss") and p<0:
-            speech+="The position had an earlier favourable move. Yet it closed negative after fees. This is why an entry signal is not the whole story."
-        else: speech+="The outcome reflects both the entry and the exit. A single trade cannot establish whether the rule works."
-        add("The result",result_body,speech,chart_for(row,1,True))
-        # Only the featured project, no unrelated coin catalogue.
-        instrument=str(row.get("inst") or row.get("instId") or row.get("symbol") or "")
-        for _,body,_,chart in project_sections([instrument]):
+            largest=max(events,key=lambda x:abs(direction(x[2]) or 0))
+            change=direction(largest[2])
+            title=f"{lead} Leads Today's Crypto Trading Journal"
+            thumb="TODAY'S MARKET MOVES"
+            hook=f"What happened to {lead} today? Its recorded trades stand out in the latest market journal."
+            if change is not None:
+                hook=f"{lead} {move_words(change)} during one recorded trade. What happened across the other markets?"
+        add("The last 24 hours",[f"{len(daily)} closed trades",f"{len(groups)} different markets"],hook+f" The bot closed {len(daily)} trades across {len(groups)} markets. Here is what actually happened.")
+        # Fetch project identity and market history for every traded instrument.
+        profiles={}
+        for label,body,speech,chart in project_sections([str(x[2].get("inst") or x[2].get("symbol") or "") for x in daily]):
+            profiles[label.split(" | ")[0]]=(body,speech,chart)
+        # Lead with the distinctive market; continue across all other traded projects.
+        for index,(sym,items) in enumerate(order):
+            profile=profiles.get(sym)
+            body,_,market_chart=profile if profile else ([],None,None)
             summary=next((b for b in body if not b.startswith(("All-time","Source:","CoinGecko","First /","5-minute","Project identity"))),"")
+            market_prices=market_chart.get("prices") if market_chart else None
+            chart=market_chart if market_prices else None
+            intro=f"{sym} appears {len(items)} times in the day's closed trades." if len(items)>1 else f"Next is {sym}, with one closed trade."
+            if index==0:
+                intro=f"The main story today is {sym}."
+                if len(items)>1:
+                    span=(items[-1][0]-items[0][0])/60000
+                    intro+=f" Its {len(items)} trades closed within {duration_words(span)}."
             if summary:
-                sentences=[v.strip() for v in re.split(r"(?<=[.!?])\s+",summary) if v.strip()]
-                # Keep long sourced text out of the short narration; display it as context.
-                spoken=" ".join(v for v in sentences if len(v.split())<=20)
-                add("What is "+sym+"?",[summary],spoken or f"This is the recorded project description for {sym}.",chart)
+                # Use verified source wording, broken into short clauses when practical.
+                spoken=" ".join(v for v in re.split(r"(?<=[.!?])\s+",summary) if len(v.split())<=20)
+                intro+=" "+(spoken or f"The verified project description is shown here.")
+            else:
+                intro+=" The project identity could not be confirmed."
+            add(f"{sym} | Project",([summary] if summary else ["Project identity unverified"])+[f"{len(items)} closed trades"],intro,chart)
+            # Separate actual trade outcome from the market-wide move.
+            for k,(closed,p,row) in enumerate(items,1):
+                change=direction(row)
+                hold=finite_number(row.get("hold_minutes"))
+                rsi=finite_number((row.get("signal_snapshot") or {}).get("rsi14"))
+                entry=finite_number(row.get("open_price"))
+                exit_price=finite_number(row.get("close_price"))
+                result="Win" if p>0 else "Loss" if p<0 else "Break-even"
+                clock=time_label(closed)
+                leadline=f"At {clock} UK time, {sym} closed a short trade."
+                if k>1: leadline=f"At {clock}, another {sym} trade closed."
+                details=[]
+                spoken=leadline
+                if hold is not None and hold>=0:
+                    spoken+=f" It lasted {duration_words(hold)}."
+                    details.append(duration_words(hold))
+                if rsi is not None:
+                    details.append(f"Entry RSI {rsi:.1f}")
+                if entry and exit_price:
+                    details.append(f"{entry:.7g} to {exit_price:.7g}")
+                bars=trade_candles(row)
+                replay=None
+                if bars and entry and exit_price and row.get("opened_ms") and row.get("closed_ms"):
+                    replay={"kind":"replay","row":row,"candles":bars,"fraction":1,"reveal":False}
+                # No replay of a partial five-minute candle is fabricated.
+                add(f"{sym} | Trade {k}",[clock+" UK"]+details[:2],spoken,replay or chart)
+                spoken=f"The price {move_words(change)} during the trade. " if change is not None else "The exact price change is unavailable. "
+                spoken+=f"The recorded result was {'a win' if p>0 else 'a loss' if p<0 else 'break-even'}."
+                if k<len(items):
+                    spoken+=" Another trade followed." 
+                if (row.get("post_trade_review") or {}).get("had_gross_profit_before_net_loss") and p<0:
+                    spoken+=" An earlier favourable move did not last."
+                if replay:
+                    replay=dict(replay,reveal=True)
+                add(f"{sym} | {result}",[result+" after fees"]+([f"Coin move {change:+.2f}%"] if change is not None else []),spoken,replay or chart)
             records=[b for b in body if b.startswith(("All-time high","All-time low"))]
             if records:
-                add("Historical price extremes",records+["Source: CoinGecko"],"These are the recorded historical price extremes. They provide market context, not a prediction.",chart)
-            if chart and chart.get("prices"):
-                add("Market context",[sym,"Five-minute closes"],"This chart shows the market beyond the single trade. The wider price movement is different from the bot's result.",chart)
+                add(f"{sym} | Price history",records+["Source: CoinGecko"],f"These are {sym}'s verified all-time high and low prices. They are historical market records.",chart)
+            if market_prices:
+                market_change=(market_prices[-1][1]/market_prices[0][1]-1)*100
+                add(f"{sym} | Market today",[f"{market_change:+.2f}%","Available 5-minute closes"],f"Across the available daily candles, {sym} {move_words(market_change)}. This is the wider market move, not an individual trade.",chart)
+            else:
+                add(f"{sym} | Market today",["Daily chart unavailable"],"The current market chart could not be retrieved. The trade records remain separate from this missing data.")
     else:
-        title="Why Did the Bot Stay Quiet?"
+        title="Crypto Trading Journal: No New Closes"
         thumb="NO NEW CLOSES"
-        add("Why so quiet?",["No qualifying closes"],"Why did the bot stay quiet? No qualifying trade closed in the last twenty-four hours. That does not mean the market stopped moving.")
-        add("The rule",["RSI 89","Five-minute candles"],"The bot waits for its short entry signal. R S I must cross eighty-nine. Without verified entry data, we cannot claim why individual markets were skipped. Waiting is part of a rule-based approach.")
-        add("Still open",[f"{len(opened)} positions"],f"There are {len(opened)} open positions. Their results are not known yet. An open position is not a completed trade.")
-    def wins(items): return sum(x[1]>0 for x in items)
-    def losses(items): return sum(x[1]<0 for x in items)
-    add("Last 24 hours",[f"{len(daily)} closed",f"{wins(daily)} wins / {losses(daily)} losses"],f"Now put this story in context. The last twenty-four hours had {len(daily)} closed trades. {wins(daily)} were wins and {losses(daily)} were losses. The rest, if any, broke even.")
-    add("Compared with yesterday",[f"Previous: {len(prior)} closed",f"Latest: {len(daily)} closed"],f"The previous twenty-four-hour window had {len(prior)} closed trades. The latest had {len(daily)}. These counts measure activity, not the quality of each signal.")
-    for threshold in (89,92,93):
-        subset=[x for x in sample if (finite_number((x[2].get("signal_snapshot") or {}).get("rsi14")) or 0)>=threshold]
-        if subset:
-            rate=100*wins(subset)/len(subset)
-            add(f"RSI {threshold}",[f"{len(subset)} recorded trades",f"{rate:.1f}% wins"],f"What if we look only at readings of {threshold} or higher? There are {len(subset)} actual recorded entries. The observed win rate is {pct(rate)}. This is a filtered history, not a new strategy test.")
+        add("The last 24 hours",["No qualifying closed trades"],"No qualifying trade closed in the latest twenty-four hours. There is no completed trade to replay today.")
+    w,l=wins(daily),losses(daily)
+    rate=100*w/len(daily) if daily else 0
+    add("Today's results",[f"{w} wins / {l} losses",f"{rate:.1f}% wins" if daily else "No win rate"],f"Today's record contains {w} wins and {l} losses."+ (f" The win rate was {rate:.1f} percent." if daily else " No daily win rate can be calculated.")+f" There are {len(opened)} positions still open.")
+    if prior:
+        prev=100*wins(prior)/len(prior)
+        add("Yesterday compared",[f"Yesterday {len(prior)} trades",f"Today {len(daily)} trades"],f"Yesterday, {len(prior)} trades closed with a {prev:.1f} percent win rate. Today's activity {'increased' if len(daily)>len(prior) else 'decreased' if len(daily)<len(prior) else 'was unchanged'}.")
     if weekly:
-        rate=100*wins(weekly)/len(weekly)
-        add("Seven-day context",[f"{len(weekly)} closed",f"{rate:.1f}% wins"],f"Over seven days, {len(weekly)} trades closed. The win rate was {pct(rate)}. A higher win rate does not automatically imply a better strategy.")
-    rate=100*wins(sample)/len(sample)
-    add("The longer record",[f"{len(sample)} closed",f"{rate:.1f}% wins"],f"Since October twenty-eighth, {len(sample)} qualifying trades have closed. The observed win rate is {pct(rate)}. Earlier strategies are excluded from this comparison.")
-    add("What did we learn?",["Signal is not certainty"],"The indicator is a signal, not a promise. Separate the entry rule from what actually follows. Use recorded outcomes to test the idea. Never assume the next move will repeat the last one.")
-    add("Next episode",["Will the next signal reverse?"],"Next time, we will follow another recorded market event. Will the next signal reverse, or will the move continue? This is a trading journal, not financial advice.")
+        weekrate=100*wins(weekly)/len(weekly)
+        add("Seven-day record",[f"{len(weekly)} closed",f"{weekrate:.1f}% wins"],f"Over the past seven days, {len(weekly)} trades closed. The observed win rate was {weekrate:.1f} percent.")
+    rate_all=100*wins(sample)/len(sample)
+    add("Overall record",[f"{len(sample)} closed",f"{rate_all:.1f}% wins"],f"The current strategy has {len(sample)} recorded closed trades since October twenty-eighth. Its observed win rate is {rate_all:.1f} percent.")
+    add("Tomorrow",["New events. New markets."],"Tomorrow brings another market journal. We will see which projects appear next, and what their prices actually do. Historical results are not a forecast.")
+    print("Daily markets covered:",",".join(sym for sym,_ in order),"Closed trades covered:",len(daily))
     return title,thumb,beats
 
 
@@ -632,7 +642,7 @@ async def render():
                                       capture_output=True,check=True)
                 adjusted=np.frombuffer(paced.stdout,dtype="<f4")
                 if len(adjusted) and np.isfinite(adjusted).all(): spoken=adjusted
-            if title=="The result":
+            if title.endswith((" | Win"," | Loss"," | Break-even")):
                 track.write(np.zeros(sample_rate//2,dtype=np.float32))
             track.write(spoken)
             frame_count = math.ceil((track.tell() - start) / samples_per_frame)
@@ -643,7 +653,7 @@ async def render():
                 stage_chart=chart
                 if isinstance(chart,dict) and chart.get("kind")=="replay":
                     end=chart.get("fraction",1)
-                    stage_chart=dict(chart,fraction=end)
+                    stage_chart=dict(chart,fraction=end if chart.get("reveal") else end*(j+1)/stages)
                 # Hide outcome until the last replay stage; use identical scaling.
                 stage_body=body
                 image=slide(title,stage_body,f"{i:02}-{j}",stage_chart)
@@ -699,6 +709,6 @@ async def render():
     print("Episode duration seconds:",round(total_samples/sample_rate,1))
     if os.environ.get("REPORT_EDITION"):
         date += " | " + os.environ["REPORT_EDITION"]
-    (OUT/"metadata.json").write_text(json.dumps({"title":(headline+" | "+date)[:100],"description":"BloFin Bot Replay | Episode "+now.astimezone(UK).strftime("%Y-%m-%d")+"\nHistorical results for RSI89_SHORT since 28 October 2026 only; excludes earlier strategies. Results are classified after recorded fees. RSI subsets are not backtests. Not financial or any other advice. Capital is at risk.\nSource: https://github.com/Photofiver/Stock-finder","tags":["BloFin","RSI","trading bot","crypto trading","trading journal"]},indent=2))
+    (OUT/"metadata.json").write_text(json.dumps({"title":(headline+" | "+date)[:100],"description":"BloFin Bot Replay | Episode "+now.astimezone(UK).strftime("%Y-%m-%d")+"\nHistorical results for RSI89_SHORT since 28 October 2026 only; excludes earlier strategies. Daily market events and verified project context. Results are classified after recorded fees. Not financial or any other advice. Capital is at risk.\nSource: https://github.com/Photofiver/Stock-finder","tags":["BloFin","RSI","trading bot","crypto trading","trading journal"]},indent=2))
 if __name__=="__main__":
     asyncio.run(render())
