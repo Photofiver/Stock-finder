@@ -300,7 +300,7 @@ def trade_candles(row):
         try:
             t = int(bar["close_ms"])
             o,h,l,c = [float(bar[k]) for k in ("open","high","low","close")]
-            if all(math.isfinite(x) and x > 0 for x in (o,h,l,c)) and l <= min(o,c) <= max(o,c) <= h and bar.get("price_exposure") == "FULL" and t <= int(row["closed_ms"]):
+            if all(math.isfinite(x) and x > 0 for x in (o,h,l,c)) and l <= min(o,c) <= max(o,c) <= h and bar.get("price_exposure") == "FULL" and t - 300000 >= int(row["opened_ms"]) and t <= int(row["closed_ms"]):
                 candles.append((t,o,h,l,c))
         except (KeyError, ValueError, TypeError, OverflowError):
             continue
@@ -468,7 +468,10 @@ def spoken_clock(stamp):
     if local.hour==12 and m==0: return "noon"
     return clock+period
 
-def story_sections(daily, sample, opened, prior, weekly, date):
+def price_text(value):
+    return format(Decimal(format(value,".8g")),"f")
+
+def story_sections(daily, sample, opened, prior, weekly, date, starting_bankroll):
     """Daily market journal: actual events first, every traded project, no cash P&L."""
     def symbol(row):
         return str(row.get("inst") or row.get("instId") or row.get("symbol") or "Market").split("-")[0]
@@ -596,11 +599,19 @@ def story_sections(daily, sample, opened, prior, weekly, date):
                     spoken+=" An earlier favourable move did not last."
                 if replay:
                     replay=dict(replay,reveal=True)
-                add(f"{sym} | {result}",[result+" after fees"]+([f"Coin move {change:+.2f}%"] if change is not None else []),spoken,replay or chart)
-            records=[b for b in body if b.startswith(("All-time high","All-time low"))]
-            if records:
-                source=next((b for b in body if b.startswith(("CoinGecko","Source:"))),"Source: CoinGecko")
-                add(f"{sym} | Price history",records+[source],[f"Where does {sym} sit in its price history?", "For context, consider its highest and lowest recorded prices.", "Past market extremes offer another point of reference.", "Here are the historical price boundaries.", "Compare today's move with its lifetime records.", "The all-time high and low put that move into context."][index%6],chart)
+                result_body=[result+" after fees"]+([f"Coin move {change:+.2f}%"] if change is not None else [])
+                add(f"{sym} | {result}",result_body,spoken,replay or chart)
+                if bars and entry and exit_price:
+                    high=max([entry,exit_price]+[bar[2] for bar in bars])
+                    low=min([entry,exit_price]+[bar[3] for bar in bars])
+                    high_text,low_text=price_text(high),price_text(low)
+                    # Incomplete entry and exit candles are intentionally excluded.
+                    # These are observed extremes, not a claim about unobserved ticks.
+                    extremes=[f"Observed high: {high_text} USDT",f"Observed low: {low_text} USDT","Full candles and fills only"]
+                    phrasing=[f"While that position was open, the recorded high was {spoken_number(high_text)} and the low was {spoken_number(low_text)}.",f"The highest confirmed price during the trade was {spoken_number(high_text)}. The lowest was {spoken_number(low_text)}.",f"Between entry and exit, the observed price range ran from {spoken_number(low_text)} to {spoken_number(high_text)}."][(index+k-1)%3]
+                    add(f"{sym} | Trade {k} high and low",extremes,phrasing,replay)
+                else:
+                    add(f"{sym} | Trade {k} high and low",["Intratrade extremes unavailable","No verified complete candle data"],"The price extremes during this position could not be verified.")
             if market_prices:
                 market_change=(market_prices[-1][1]/market_prices[0][1]-1)*100
                 moves=[direction(x[2]) for x in items]
@@ -638,7 +649,21 @@ def story_sections(daily, sample, opened, prior, weekly, date):
     else:
         verdict="BREAK-EVEN"
         closing="And the final verdict? The last twenty-four hours ended at break-even after trading fees."
-    add("Final verdict | "+verdict,[verdict,"Last 24 hours | Closed positions | After recorded fees"],closing+" These are realized trading results, not a forecast.")
+    result_body=[verdict,"Last 24 hours | Closed positions | After recorded fees"]
+    if starting_bankroll is not None and starting_bankroll>0:
+        daily_return=daily_net/starting_bankroll*100
+        result_body.insert(1,f"{daily_return:+.2f}% of starting bankroll")
+        magnitude=abs(daily_return)
+        pct_words=("less than one hundredth of a percent" if 0<magnitude<Decimal("0.005") else spoken_number(f"{magnitude:.2f}")+" percent")
+        if daily_net:
+            closing=f"The last twenty-four hours ended with a net {'profit' if daily_net>0 else 'loss'} of {pct_words}, relative to the bankroll near the start of the period, after trading fees."
+        elif daily:
+            closing="The net return on the starting bankroll was zero percent, after trading fees."
+        print("Daily return percent:",daily_return,"Reference bankroll USDT:",starting_bankroll)
+    else:
+        result_body.append("Starting bankroll unavailable")
+        closing+=" A percentage return could not be verified because the opening bankroll is unavailable."
+    add("Final verdict | "+verdict,result_body,closing+" These are realized trading results, not a forecast.")
     print("Daily net verdict:",verdict,"Net P&L USDT:",daily_net)
     print("Daily markets covered:",",".join(sym for sym,_ in order),"Closed trades covered:",len(daily))
     for label,_,speech,_ in beats:
@@ -648,9 +673,24 @@ def story_sections(daily, sample, opened, prior, weekly, date):
 
 async def render():
     data=json.loads(Path(os.environ.get("STATE_PATH","blofin_live_state.json")).read_text())
-    now=datetime.now(timezone.utc)
+    wall_now=datetime.now(timezone.utc)
+    window_file=Path("report_window_end.txt")
+    now=datetime.fromtimestamp(int(window_file.read_text().strip()),timezone.utc) if window_file.exists() else wall_now
     last=int(data.get("last_run_ms") or 0)
-    if not last or not -300<now.timestamp()-last/1000<1800: raise RuntimeError("State is stale; refusing to publish")
+    if not last or not -300<wall_now.timestamp()-last/1000<1800: raise RuntimeError("State is stale; refusing to publish")
+    starting_bankroll=None
+    try:
+        old=json.loads(Path("starting_bankroll_state.json").read_text())
+        old_stamp=int(old["last_run_ms"])/1000
+        cutoff=(now-timedelta(hours=24)).timestamp()
+        if not 0<=cutoff-old_stamp<=1200:
+            raise ValueError("No sufficiently recent opening bankroll snapshot")
+        starting_bankroll=max(Decimal(0),min(Decimal(70),Decimal(str(old["bankroll_start_usdt"]))+Decimal(str(old["realized_pnl_usdt"]))-Decimal(str(old["bankroll_pnl_baseline_usdt"]))+Decimal(str(old.get("bankroll_streak_bonus_usdt",0)))))
+        if not starting_bankroll.is_finite() or starting_bankroll<=0: raise ValueError("Invalid bankroll")
+        print("Opening bankroll snapshot age at cutoff (seconds):",round(cutoff-old_stamp))
+    except (OSError,ValueError,KeyError,TypeError,ArithmeticError) as error:
+        starting_bankroll=None
+        print("Opening bankroll unavailable:",error)
     rows=[]
     ids=set()
     for row in data.get("trade_history",[]):
@@ -690,7 +730,7 @@ async def render():
     weekly_pnl = sum((x[1] for x in weekly), Decimal(0))
     def trade_symbol(row):
         return str(row.get("inst") or row.get("instId") or row.get("symbol") or "Unspecified instrument")
-    headline,thumbnail_text,sections=story_sections(daily,sample,opened,prior,weekly,date)
+    headline,thumbnail_text,sections=story_sections(daily,sample,opened,prior,weekly,date,starting_bankroll)
     make_thumbnail(thumbnail_text,date)
     script_words=sum(len(narration.split()) for _,_,narration,_ in sections)
     sentence_lengths=[len(v.split()) for _,_,narration,_ in sections for v in re.split(r"(?<=[.!?])\s+",narration) if v.strip()]
