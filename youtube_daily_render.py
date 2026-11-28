@@ -473,7 +473,7 @@ def story_sections(daily, sample, opened, prior, weekly, date):
         if mixed:
             title=f"{lead}: {len(events)} Trades, Two Different Outcomes"
             thumb="ONE COIN. TWO OUTCOMES"
-            hook=f"One coin. Two very different outcomes. {lead} had both wins and losses in today's trading record."
+            hook=f"{lead}: the same bot, two very different outcomes. What happened between the wins and the losses?"
         else:
             largest=max(events,key=lambda x:abs(direction(x[2]) or 0))
             change=direction(largest[2])
@@ -481,8 +481,8 @@ def story_sections(daily, sample, opened, prior, weekly, date):
             thumb="TODAY'S MARKET MOVES"
             hook=f"What happened to {lead} today? Its recorded trades stand out in the latest market journal."
             if change is not None:
-                hook=f"{lead} {move_words(change)} during one recorded trade. What happened across the other markets?"
-        add("The last 24 hours",[f"{len(daily)} closed trades",f"{len(groups)} different markets"],hook+f" The bot closed {len(daily)} trades across {len(groups)} markets. Here is what actually happened.")
+                hook=f"Watch {lead}. Its price {move_words(change)} during one trade. But that move is only part of the picture."
+        add("The last 24 hours",[f"{len(daily)} closed trades",f"{len(groups)} different markets"],hook+f" Across {len(groups)} markets, {len(daily)} trades closed. Let’s follow the price, then compare the day with yesterday.")
         # Fetch project identity and market history for every traded instrument.
         profiles={}
         for label,body,speech,chart in project_sections([str(x[2].get("inst") or x[2].get("symbol") or "") for x in daily]):
@@ -494,9 +494,9 @@ def story_sections(daily, sample, opened, prior, weekly, date):
             summary=next((b for b in body if not b.startswith(("All-time","Source:","CoinGecko","First /","5-minute","Project identity"))),"")
             market_prices=market_chart.get("prices") if market_chart else None
             chart=market_chart if market_prices else None
-            intro=f"{sym} appears {len(items)} times in the day's closed trades." if len(items)>1 else f"Next is {sym}, with one closed trade."
+            intro=([f"Now switch markets to {sym}.", f"Over on {sym}, the picture changes.", f"Look at {sym} next.", f"That brings us to {sym}."][index%4] if len(items)==1 else f"{sym} deserves a closer look: {len(items)} trades closed.")
             if index==0:
-                intro=f"The main story today is {sym}."
+                intro=f"Start with {sym}. Look at the chart."
                 if len(items)>1:
                     span=(items[-1][0]-items[0][0])/60000
                     intro+=f" Its {len(items)} trades closed within {duration_words(span)}."
@@ -516,12 +516,12 @@ def story_sections(daily, sample, opened, prior, weekly, date):
                 exit_price=finite_number(row.get("close_price"))
                 result="Win" if p>0 else "Loss" if p<0 else "Break-even"
                 clock=time_label(closed)
-                leadline=f"At {clock} UK time, {sym} closed a short trade."
-                if k>1: leadline=f"At {clock}, another {sym} trade closed."
+                leadline=f"By {clock}, the short was over."
+                if k>1: leadline=f"Then came the next close, at {clock}."
                 details=[]
                 spoken=leadline
                 if hold is not None and hold>=0:
-                    spoken+=f" It lasted {duration_words(hold)}."
+                    spoken+=f" The position had been open for {duration_words(hold)}."
                     details.append(duration_words(hold))
                 if rsi is not None:
                     details.append(f"Entry RSI {rsi:.1f}")
@@ -533,10 +533,13 @@ def story_sections(daily, sample, opened, prior, weekly, date):
                     replay={"kind":"replay","row":row,"candles":bars,"fraction":1,"reveal":False}
                 # No replay of a partial five-minute candle is fabricated.
                 add(f"{sym} | Trade {k}",[clock+" UK"]+details[:2],spoken,replay or chart)
-                spoken=f"The price {move_words(change)} during the trade. " if change is not None else "The exact price change is unavailable. "
-                spoken+=f"The recorded result was {'a win' if p>0 else 'a loss' if p<0 else 'break-even'}."
+                spoken=(f"The price {move_words(change)}. " if change is not None else "The exact price move is unavailable. ")
+                alternatives = (["A win for the short.", "That trade finished in profit after fees.", "The short closed with a win."] if p>0 else ["But the short lost.", "That one went against the bot.", "The recorded result: a loss."] if p<0 else ["The result was break-even."])
+                spoken+=alternatives[(index+k)%len(alternatives)]
                 if k<len(items):
-                    spoken+=" Another trade followed." 
+                    next_p=items[k][1]
+                    if (p>0 and next_p<0) or (p<0 and next_p>0):
+                        spoken+=" Now watch what happened on the next trade." 
                 if (row.get("post_trade_review") or {}).get("had_gross_profit_before_net_loss") and p<0:
                     spoken+=" An earlier favourable move did not last."
                 if replay:
@@ -545,10 +548,13 @@ def story_sections(daily, sample, opened, prior, weekly, date):
             records=[b for b in body if b.startswith(("All-time high","All-time low"))]
             if records:
                 source=next((b for b in body if b.startswith(("CoinGecko","Source:"))),"Source: CoinGecko")
-                add(f"{sym} | Price history",records+[source],f"These are {sym}'s recorded all-time high and low prices. They are historical market records.",chart)
+                add(f"{sym} | Price history",records+[source],[f"Zoom out. Here are {sym}'s historical extremes.", "For perspective, check the recorded high and low.", "The price history gives us a wider frame.", "Here is the longer-term price range."][index%4],chart)
             if market_prices:
                 market_change=(market_prices[-1][1]/market_prices[0][1]-1)*100
-                add(f"{sym} | Market today",[f"{market_change:+.2f}%","Available 5-minute closes"],f"Across the available daily candles, {sym} {move_words(market_change)}. This is the wider market move, not an individual trade.",chart)
+                moves=[direction(x[2]) for x in items]
+                contrast=any(m is not None and m*market_change<0 for m in moves)
+                market_speech=(f"Here is the contrast: the wider chart {move_words(market_change)}, in the opposite direction to at least one trade." if contrast else [f"Across the wider chart, {sym} {move_words(market_change)}.",f"Now zoom out to the available daily candles: the price {move_words(market_change)}.",f"The broader market move? It {move_words(market_change)}."][index%3])
+                add(f"{sym} | Market today",[f"{market_change:+.2f}%","Available 5-minute closes (market, not trade return)"],market_speech,chart)
             else:
                 add(f"{sym} | Market today",["Daily chart unavailable"],"The current market chart could not be retrieved. The trade records remain separate from this missing data.")
     else:
@@ -557,7 +563,7 @@ def story_sections(daily, sample, opened, prior, weekly, date):
         add("The last 24 hours",["No qualifying closed trades"],"No qualifying trade closed in the latest twenty-four hours. There is no completed trade to replay today.")
     w,l=wins(daily),losses(daily)
     rate=100*w/len(daily) if daily else 0
-    add("Today's results",[f"{w} wins / {l} losses",f"{rate:.1f}% wins" if daily else "No win rate"],f"Today's record contains {w} wins and {l} losses."+ (f" The win rate was {rate:.1f} percent." if daily else " No daily win rate can be calculated.")+f" There are {len(opened)} positions still open.")
+    add("Today's results",[f"{w} wins / {l} losses",f"{rate:.1f}% wins" if daily else "No win rate"],f"So where did the day finish? {w} wins, {l} losses."+ (f" The win rate was {rate:.1f} percent." if daily else " No daily win rate can be calculated.")+f" There are {len(opened)} positions still open.")
     if prior:
         prev=100*wins(prior)/len(prior)
         add("Yesterday compared",[f"Yesterday {len(prior)} trades",f"Today {len(daily)} trades"],f"Yesterday, {len(prior)} trades closed with a {prev:.1f} percent win rate. Today's activity {'increased' if len(daily)>len(prior) else 'decreased' if len(daily)<len(prior) else 'was unchanged'}.")
@@ -566,7 +572,7 @@ def story_sections(daily, sample, opened, prior, weekly, date):
         add("Seven-day record",[f"{len(weekly)} closed",f"{weekrate:.1f}% wins"],f"Over the past seven days, {len(weekly)} trades closed. The observed win rate was {weekrate:.1f} percent.")
     rate_all=100*wins(sample)/len(sample)
     add("Overall record",[f"{len(sample)} closed",f"{rate_all:.1f}% wins"],f"The current strategy has {len(sample)} recorded closed trades since October twenty-eighth. Its observed win rate is {rate_all:.1f} percent.")
-    add("Tomorrow",["New events. New markets."],"Tomorrow brings another market journal. We will see which projects appear next, and what their prices actually do. Historical results are not a forecast.")
+    add("Tomorrow",["New events. New markets."],"Tomorrow, we will check whether the pattern holds or breaks. These are recorded results, not a forecast.")
     print("Daily markets covered:",",".join(sym for sym,_ in order),"Closed trades covered:",len(daily))
     for label,_,speech,_ in beats:
         print("SCRIPT:",label,"|",speech)
@@ -634,15 +640,17 @@ async def render():
             sentences = [v for v in re.split(r"(?<=[.!?])\s+", narration) if v.strip()]
             chunks=[]
             for sentence in sentences:
-                samples, rate = kokoro.create(sentence, voice="bm_george", speed=1.0, lang="en-gb", trim=False)
+                samples, rate = kokoro.create(sentence, voice="bm_george", speed=(1.04 if sentence.endswith("?") else 1.13 if len(sentence.split())>9 else 1.08), lang="en-gb", trim=True)
                 if rate != sample_rate or not len(samples) or not np.isfinite(samples).all():
                     raise ValueError("Invalid synthesized sentence audio")
                 chunks.append(samples.astype(np.float32))
+                if sentence != sentences[-1]:
+                    chunks.append(np.zeros(int(sample_rate*(.13 if sentence.endswith("?") else .07)),dtype=np.float32))
             spoken=np.concatenate(chunks)
             word_count=len(narration.split())
             wpm=word_count*60*sample_rate/len(spoken)
-            if wpm<150 or wpm>170:
-                factor=max(.8,min(1.25,160/wpm))
+            if wpm<155 or wpm>170:
+                factor=max(.72,min(1.75,162/wpm))
                 paced=subprocess.run([FF,"-v","error","-f","f32le","-ar",str(sample_rate),"-ac","1",
                                       "-i","pipe:0","-af",f"atempo={factor:.5f}",
                                       "-f","f32le","pipe:1"],input=spoken.astype("<f4").tobytes(),
@@ -650,11 +658,11 @@ async def render():
                 adjusted=np.frombuffer(paced.stdout,dtype="<f4")
                 if len(adjusted) and np.isfinite(adjusted).all(): spoken=adjusted
             if title.endswith((" | Win"," | Loss"," | Break-even")):
-                track.write(np.zeros(sample_rate//2,dtype=np.float32))
+                track.write(np.zeros(sample_rate//8,dtype=np.float32))
             track.write(spoken)
             frame_count = math.ceil((track.tell() - start) / samples_per_frame)
             track.write(np.zeros(frame_count * samples_per_frame - (track.tell() - start), dtype=np.float32))
-            stages=max(1,math.ceil(frame_count/(6*frames_per_second)))
+            stages=max(1,math.ceil(frame_count/(3*frames_per_second)))
             for j in range(stages):
                 frames=frame_count*(j+1)//stages-frame_count*j//stages
                 stage_chart=chart
@@ -712,7 +720,10 @@ async def render():
     if not -14.5 <= float(after["input_i"]) <= -11.5 or not float(after["input_tp"]) < 0:
         raise RuntimeError("Final narration loudness or peak outside target")
     print("Rendered verified trades:",len(sample),"report bytes:",(OUT/"report.mp4").stat().st_size)
-    print("Actual narration WPM:",round(script_words/(total_samples/sample_rate/60),1))
+    actual_wpm=script_words/(total_samples/sample_rate/60)
+    print("Actual narration WPM:",round(actual_wpm,1))
+    if not 145 <= actual_wpm <= 175:
+        raise RuntimeError("Episode narration pacing outside acceptable range")
     print("Episode duration seconds:",round(total_samples/sample_rate,1))
     if os.environ.get("REPORT_EDITION"):
         date += " | " + os.environ["REPORT_EDITION"]
