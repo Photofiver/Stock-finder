@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['.github/workflows/youtube_daily_report.yml']
+    paths: ['.github/workflows/youtube_daily_report.yml', 'youtube_daily_render.py', 'youtube_daily_upload.py']
   schedule:
     # Prepare well before 06:00 London, including during British Summer Time.
     - cron: '17 3,4,5,6 * * *'
@@ -33,6 +33,7 @@ jobs:
          contains(github.event.workflow_run.created_at, 'T06:3'))))
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # Story-replay episodes use a date marker to avoid duplicate daily uploads.
     steps:
       - name: Read source and current state
         env:
