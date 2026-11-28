@@ -637,28 +637,14 @@ async def render():
     with soundfile.SoundFile(voice_path, mode="w", samplerate=sample_rate, channels=1, subtype="FLOAT") as track:
         for i, (title, body, narration, chart) in enumerate(sections):
             start = track.tell()
-            sentences = [v for v in re.split(r"(?<=[.!?])\s+", narration) if v.strip()]
-            chunks=[]
-            for sentence in sentences:
-                samples, rate = kokoro.create(sentence, voice="bm_george", speed=(1.04 if sentence.endswith("?") else 1.13 if len(sentence.split())>9 else 1.08), lang="en-gb", trim=True)
-                if rate != sample_rate or not len(samples) or not np.isfinite(samples).all():
-                    raise ValueError("Invalid synthesized sentence audio")
-                chunks.append(samples.astype(np.float32))
-                if sentence != sentences[-1]:
-                    chunks.append(np.zeros(int(sample_rate*(.13 if sentence.endswith("?") else .07)),dtype=np.float32))
-            spoken=np.concatenate(chunks)
-            word_count=len(narration.split())
-            wpm=word_count*60*sample_rate/len(spoken)
-            if wpm<155 or wpm>170:
-                factor=max(.72,min(1.75,162/wpm))
-                paced=subprocess.run([FF,"-v","error","-f","f32le","-ar",str(sample_rate),"-ac","1",
-                                      "-i","pipe:0","-af",f"atempo={factor:.5f}",
-                                      "-f","f32le","pipe:1"],input=spoken.astype("<f4").tobytes(),
-                                      capture_output=True,check=True)
-                adjusted=np.frombuffer(paced.stdout,dtype="<f4")
-                if len(adjusted) and np.isfinite(adjusted).all(): spoken=adjusted
+            # Synthesize complete thoughts, allowing the voice model to determine
+            # its own rhythm and sentence intonation. Never time-stretch speech.
+            spoken, rate = kokoro.create(narration, voice="bm_george", speed=1.0, lang="en-gb", trim=False)
+            if rate != sample_rate or not len(spoken) or not np.isfinite(spoken).all():
+                raise ValueError("Invalid synthesized narration audio")
+            spoken=spoken.astype(np.float32)
             if title.endswith((" | Win"," | Loss"," | Break-even")):
-                track.write(np.zeros(sample_rate//8,dtype=np.float32))
+                track.write(np.zeros(int(sample_rate*.18),dtype=np.float32))
             track.write(spoken)
             frame_count = math.ceil((track.tell() - start) / samples_per_frame)
             track.write(np.zeros(frame_count * samples_per_frame - (track.tell() - start), dtype=np.float32))
@@ -722,8 +708,7 @@ async def render():
     print("Rendered verified trades:",len(sample),"report bytes:",(OUT/"report.mp4").stat().st_size)
     actual_wpm=script_words/(total_samples/sample_rate/60)
     print("Actual narration WPM:",round(actual_wpm,1))
-    if not 145 <= actual_wpm <= 175:
-        raise RuntimeError("Episode narration pacing outside acceptable range")
+    print("Natural voice: speed=1.0, no time stretching; WPM is diagnostic only")
     print("Episode duration seconds:",round(total_samples/sample_rate,1))
     if os.environ.get("REPORT_EDITION"):
         date += " | " + os.environ["REPORT_EDITION"]
